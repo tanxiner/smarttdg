@@ -1,0 +1,29 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.14.36414.22 d17.14
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Roslyn", "Roslyn\Roslyn.csproj", "{6984032A-E570-43EB-8F6A-FC8D61427BC6}"
+EndProject
+Project("{888888A0-9F3D-457C-B088-3A5042F75D52}") = "Flask", "flask\Flask.pyproj", "{0C1A7335-207B-46D4-AE18-65B638455D33}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{6984032A-E570-43EB-8F6A-FC8D61427BC6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6984032A-E570-43EB-8F6A-FC8D61427BC6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6984032A-E570-43EB-8F6A-FC8D61427BC6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6984032A-E570-43EB-8F6A-FC8D61427BC6}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0C1A7335-207B-46D4-AE18-65B638455D33}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0C1A7335-207B-46D4-AE18-65B638455D33}.Release|Any CPU.ActiveCfg = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {DC22639C-D778-4253-A70F-252F910607F5}
+	EndGlobalSection
+EndGlobal
