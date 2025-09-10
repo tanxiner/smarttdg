@@ -4,6 +4,8 @@ from time import sleep
 import tempfile
 import zipfile
 import shutil
+import time
+from pathlib import Path
 
 # Import the analyzer runner
 from services.analyzer.analyzer_runner import analyze_code as run_analyzer
@@ -22,46 +24,57 @@ def analyze_zip(zip_path: str) -> dict:
     temp_dir = tempfile.mkdtemp(prefix="smarttdg_")
     try:
         with zipfile.ZipFile(zip_path, 'r') as z:
+            print("Files in ZIP:", [f.filename for f in z.infolist()])
             z.extractall(temp_dir)
+            print("Extracted files:", list(Path(temp_dir).rglob("*")))
 
-        # Collect C# files
-        cs_files = []
-        for root, _, files in os.walk(temp_dir):
-            for f in files:
-                if f.lower().endswith(".cs"):
-                    cs_files.append(os.path.join(root, f))
 
+        # Recursively collect .cs files
+        all_paths = list(Path(temp_dir).rglob("*"))
+        dirs = [p for p in all_paths if p.is_dir()]
+        cs_files = [
+            p for p in all_paths
+            if p.is_file() and p.suffix.lower() == ".cs"
+        ]
+        cs_files.sort(key=lambda p: str(p.relative_to(temp_dir)).lower())
         if not cs_files:
             return {
                 "status": "ok",
                 "message": "No .cs files found in archive.",
+                "filesDiscovered": 0,
                 "filesAnalyzed": 0,
+                "foldersVisited": len(dirs),
                 "results": []
             }
-
         results = []
-        # Limit to a reasonable number to keep response quick; remove slice to analyze all
-        for f in cs_files[:100]:
+        for p in cs_files:
+            f = str(p)
             rel = os.path.relpath(f, start=temp_dir)
             try:
                 analysis = run_analyzer(f)
                 results.append({"file": rel, "result": analysis})
             except Exception as ex:
                 results.append({"file": rel, "error": str(ex)})
-
+        # Diagnostics
+        discovered_sample = [str(p.relative_to(temp_dir)) for p in cs_files[:10]]
+        folders_with_cs = sorted({str(p.parent.relative_to(temp_dir)) for p in cs_files})[:10]
         return {
             "status": "ok",
             "message": "Analysis complete",
+            "filesDiscovered": len(cs_files),
             "filesAnalyzed": len(results),
+            "foldersVisited": len(dirs),
+            "foldersWithCsSample": folders_with_cs,
+            "discoveredSample": discovered_sample,
             "results": results
         }
     finally:
-        # Clean up the uploaded zip and extracted content
         try:
             os.remove(zip_path)
         except OSError:
             pass
         shutil.rmtree(temp_dir, ignore_errors=True)
+
 
 @app.route("/analyze", methods=["POST"])
 def analyze():
@@ -76,7 +89,19 @@ def analyze():
     file.save(filepath)
 
     try:
+        size_mb = round(os.path.getsize(filepath) / 1024 / 1024, 2)
+    except OSError:
+        size_mb = None
+
+    start = time.perf_counter()
+    try:
         result = analyze_zip(filepath)
+        duration_ms = int((time.perf_counter() - start) * 1000)
+        result.update({
+            "zipFilename": file.filename,
+            "sizeMB": size_mb,
+            "processingMs": duration_ms
+        })
         return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e)}), 500

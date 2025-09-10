@@ -50,36 +50,61 @@ class Program
                     // Get the name of the class
                     Name = cls.Identifier.Text,
                     // For each class, find all method declarations
-                    Methods = cls.Members.OfType<MethodDeclarationSyntax>().Select(m => new {
-                        // Get the name of the method
-                        Name = m.Identifier.Text,
-                        // Get the return type of the method as a string
-                        ReturnType = m.ReturnType.ToString(),
-                        // Get the parameters of the method
-                        Parameters = m.ParameterList.Parameters.Select(p => new {
-                            // Get the name of the parameter
-                            Name = p.Identifier.Text,
-                            // Get the type of the parameter as a string
-                            Type = p.Type?.ToString()
+                    Methods = cls.Members
+                        .OfType<MethodDeclarationSyntax>()
+                        .Select(m => new {
+                            // Get the name of the method
+                            Name = m.Identifier.Text,
+                            // Get the return type of the method as a string
+                            ReturnType = m.ReturnType.ToString(),
+                            // Get the parameters of the method
+                            Parameters = m.ParameterList.Parameters
+                                .Select(p => new {
+                                    // Get the name of the parameter
+                                    Name = p.Identifier.Text,
+                                    // Get the type of the parameter as a string
+                                    Type = p.Type?.ToString()
+                                })
+                                .ToArray()
                         })
-                    })
+                        .ToArray() // materialize to avoid nullable IEnumerable warnings
                 });
+
+            // Capture using directives (handle potential nulls) and namespaces (including file-scoped)
+            var usingNames = root.Usings
+                .Select(u => u.Name?.ToString())
+                .Where(s => !string.IsNullOrEmpty(s))
+                .Cast<string>()
+                .ToArray();
+
+            var namespaceNames = root.DescendantNodes()
+                .OfType<BaseNamespaceDeclarationSyntax>() // covers NamespaceDeclarationSyntax and FileScopedNamespaceDeclarationSyntax
+                .Select(n => n.Name?.ToString())
+                .Where(s => !string.IsNullOrEmpty(s))
+                .Distinct()
+                .Cast<string>()
+                .ToArray();
+
+            // Calculate totals from materialized collections to keep the compiler happy
+            var classList = classes.ToArray();
+            var totalClasses = classList.Length;
+            var totalMethods = classList.Sum(c => c.Methods.Length);
 
             // Create an anonymous object with file, usings, namespaces, totals, and class details
             var result = new {
                 // Get the file name from the file path
                 file = Path.GetFileName(filePath),
                 // Get all using directives in the file
-                usings = root.Usings.Select(u => u.Name.ToString()),
-                // Get all namespace declarations in the file
-                namespaces = root.DescendantNodes().OfType<NamespaceDeclarationSyntax>().Select(n => n.Name.ToString()).Distinct(),
+                usings = usingNames,
+                // Get all namespace declarations in the file (including file-scoped)
+                namespaces = namespaceNames,
                 // Calculate total counts of classes and methods
                 totals = new {
-                    classes = classes.Count(),
-                    methods = classes.Sum(c => c.Methods.Count())
+                    classes = totalClasses,
+                    methods = totalMethods
                 },
                 // Store the list of classes with their methods
-                classes
+                classes = classList
             };
 
             // Serialize the result object to a JSON string without indentation

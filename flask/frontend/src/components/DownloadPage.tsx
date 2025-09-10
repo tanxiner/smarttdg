@@ -62,6 +62,19 @@ function accumulateTotals(analysis?: any): Totals {
   return { filesProcessed, classes, methods };
 }
 
+function formatDuration(ms: number): string {
+  if (!Number.isFinite(ms) || ms < 0) return "—";
+  const sec = Math.floor(ms / 1000);
+  const msR = ms % 1000;
+  if (sec === 0) return `${ms} ms`;
+  const minutes = Math.floor(sec / 60);
+  const seconds = sec % 60;
+  if (minutes > 0) {
+    return `${minutes}m ${seconds}s`;
+  }
+  return `${seconds}s`;
+}
+
 export function DownloadPage({ onStartOver, analysis }: DownloadPageProps) {
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [isDownloading, setIsDownloading] = useState(false);
@@ -73,6 +86,8 @@ export function DownloadPage({ onStartOver, analysis }: DownloadPageProps) {
   const processedAt = new Date().toLocaleString();
   const sizeMB: number | undefined =
     typeof analysis?.sizeMB === "number" ? analysis.sizeMB : undefined;
+  const processingMs: number | undefined =
+    typeof analysis?.processingMs === "number" ? analysis.processingMs : undefined;
 
   const handleDownload = async (format: string) => {
     setIsDownloading(true);
@@ -144,7 +159,7 @@ export function DownloadPage({ onStartOver, analysis }: DownloadPageProps) {
         </div>
       </Card>
 
-          <div className="max-w-4xl mx-auto space-y-6">
+      <div className="max-w-4xl mx-auto space-y-6">
         {/* Download Options */}
         <Card className="p-6">
           <h2 className="text-lg font-medium text-gray-900 mb-4">Download Documentation</h2>
@@ -194,15 +209,7 @@ export function DownloadPage({ onStartOver, analysis }: DownloadPageProps) {
           </div>
 
           <Separator className="my-4" />
-
-          {/*<div className="text-sm text-gray-600">*/}
-          {/*  <p className="flex items-center mb-2">*/}
-          {/*    <Clock className="h-3 w-3 mr-1" />*/}
-          {/*    Generated on {processedAt}*/}
-          {/*  </p>*/}
-          {/*</div>*/}
         </Card>
-
       </div>
 
       {/* Project Info */}
@@ -215,12 +222,14 @@ export function DownloadPage({ onStartOver, analysis }: DownloadPageProps) {
         <div className="grid md:grid-cols-3 gap-4 text-sm">
           <div>
             <div className="font-medium text-gray-900 mb-1">Processing Time</div>
-            <div className="text-gray-600">—</div>
+            <div className="text-gray-600">
+              {typeof processingMs === "number" ? formatDuration(processingMs) : "—"}
+            </div>
           </div>
           <div>
             <div className="font-medium text-gray-900 mb-1">File Size</div>
             <div className="text-gray-600">
-              {typeof sizeMB === "number" ? `${sizeMB} MB` : "—"}
+              {typeof sizeMB === "number" ? `${sizeMB.toFixed(2)} MB` : "—"}
             </div>
           </div>
           <div>
