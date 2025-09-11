@@ -1,121 +1,197 @@
-﻿// Import necessary namespaces for code analysis, C# syntax parsing, JSON serialization, and file operations
-using Microsoft.CodeAnalysis;           // Provides APIs for analyzing .NET code
-using Microsoft.CodeAnalysis.CSharp;    // Provides C# specific APIs for code analysis
-using Microsoft.CodeAnalysis.CSharp.Syntax; // Provides syntax nodes for C# code
-using Newtonsoft.Json;                  // Provides JSON serialization and deserialization
-using System;                           // Provides fundamental classes and base classes
-using System.IO;                        // Provides classes for input and output operations
-using System.Linq;                      // Provides classes and methods for LINQ queries
+﻿// Import necessary namespaces for code analysis, C# & VB syntax parsing, JSON serialization, and file operations
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.VisualBasic;
+using Newtonsoft.Json;
+using System;
+using System.IO;
+using System.Linq;
 
-// Define a class named Program
+// Alias syntax namespaces to avoid type name collisions (e.g., CompilationUnitSyntax)
+using CSS = Microsoft.CodeAnalysis.CSharp.Syntax;
+using VBS = Microsoft.CodeAnalysis.VisualBasic.Syntax;
+
 class Program
 {
-    // Define the Main method, which is the entry point of the application
     static int Main(string[] args)
     {
         try
         {
-            // Check if no command-line arguments are provided
             if (args.Length == 0)
             {
-                // Print a JSON error message to the console
                 Console.WriteLine(JsonConvert.SerializeObject(new { error = "No file path provided" }));
-                return 0; // Return success status code
+                return 0;
             }
 
-            // Store the first command-line argument as the file path
             var filePath = args[0];
-            // Check if the file does not exist at the provided path
             if (!File.Exists(filePath))
             {
-                // Print a JSON error message to the console with file path and current directory
-                Console.WriteLine(JsonConvert.SerializeObject(new {
+                Console.WriteLine(JsonConvert.SerializeObject(new
+                {
                     error = "File not found",
                     filePath,
                     cwd = Environment.CurrentDirectory
                 }));
-                return 0; // Return success status code
+                return 0;
             }
 
-            // Read the entire content of the file into a string variable
             var code = File.ReadAllText(filePath);
-            // Parse the C# code into a syntax tree
-            var tree = CSharpSyntaxTree.ParseText(code);
-            // Get the root node of the syntax tree as a CompilationUnitSyntax
-            var root = tree.GetCompilationUnitRoot();
+            var ext = Path.GetExtension(filePath).ToLowerInvariant();
 
-            // Query to extract class and method information from the syntax tree
-            var classes = root.DescendantNodes().OfType<ClassDeclarationSyntax>()
-                .Select(cls => new {
-                    // Get the name of the class
-                    Name = cls.Identifier.Text,
-                    // For each class, find all method declarations
-                    Methods = cls.Members
-                        .OfType<MethodDeclarationSyntax>()
-                        .Select(m => new {
-                            // Get the name of the method
-                            Name = m.Identifier.Text,
-                            // Get the return type of the method as a string
-                            ReturnType = m.ReturnType.ToString(),
-                            // Get the parameters of the method
-                            Parameters = m.ParameterList.Parameters
-                                .Select(p => new {
-                                    // Get the name of the parameter
-                                    Name = p.Identifier.Text,
-                                    // Get the type of the parameter as a string
-                                    Type = p.Type?.ToString()
-                                })
-                                .ToArray()
-                        })
-                        .ToArray() // materialize to avoid nullable IEnumerable warnings
-                });
-
-            // Capture using directives (handle potential nulls) and namespaces (including file-scoped)
-            var usingNames = root.Usings
-                .Select(u => u.Name?.ToString())
-                .Where(s => !string.IsNullOrEmpty(s))
-                .Cast<string>()
-                .ToArray();
-
-            var namespaceNames = root.DescendantNodes()
-                .OfType<BaseNamespaceDeclarationSyntax>() // covers NamespaceDeclarationSyntax and FileScopedNamespaceDeclarationSyntax
-                .Select(n => n.Name?.ToString())
-                .Where(s => !string.IsNullOrEmpty(s))
-                .Distinct()
-                .Cast<string>()
-                .ToArray();
-
-            // Calculate totals from materialized collections to keep the compiler happy
-            var classList = classes.ToArray();
-            var totalClasses = classList.Length;
-            var totalMethods = classList.Sum(c => c.Methods.Length);
-
-            // Create an anonymous object with file, usings, namespaces, totals, and class details
-            var result = new {
-                // Get the file name from the file path
-                file = Path.GetFileName(filePath),
-                // Get all using directives in the file
-                usings = usingNames,
-                // Get all namespace declarations in the file (including file-scoped)
-                namespaces = namespaceNames,
-                // Calculate total counts of classes and methods
-                totals = new {
-                    classes = totalClasses,
-                    methods = totalMethods
-                },
-                // Store the list of classes with their methods
-                classes = classList
+            object result = ext switch
+            {
+                ".vb" => AnalyzeVisualBasic(code, filePath),
+                _ => AnalyzeCSharp(code, filePath)
             };
 
-            // Serialize the result object to a JSON string without indentation
             Console.WriteLine(JsonConvert.SerializeObject(result, Formatting.None));
-            return 0; // Return success status code
+            return 0;
         }
         catch (Exception ex)
         {
-            // Print a JSON error message to the console in case of an exception
             Console.WriteLine(JsonConvert.SerializeObject(new { error = ex.Message }));
-            return 1; // Return error status code
+            return 1;
         }
+    }
+
+    private static object AnalyzeCSharp(string code, string filePath)
+    {
+        var tree = CSharpSyntaxTree.ParseText(code);
+        var root = tree.GetCompilationUnitRoot(); // Remove explicit cast
+
+        var classes = root.DescendantNodes().OfType<CSS.ClassDeclarationSyntax>()
+            .Select(cls => new
+            {
+                Name = cls.Identifier.Text,
+                Methods = cls.Members
+                    .OfType<CSS.MethodDeclarationSyntax>()
+                    .Select(m => new
+                    {
+                        Name = m.Identifier.Text,
+                        ReturnType = m.ReturnType.ToString(),
+                        Parameters = m.ParameterList.Parameters
+                            .Select(p => new
+                            {
+                                Name = p.Identifier.Text,
+                                Type = p.Type?.ToString()
+                            })
+                            .ToArray()
+                    })
+                    .ToArray()
+            });
+
+        var usingNames = root.Imports
+            .SelectMany(i => i.ImportsClauses)
+            .Select(ic => (ic as VBS.SimpleImportsClauseSyntax)?.Name?.ToString())
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .Distinct()
+            .Cast<string>()
+            .ToArray();
+
+        var namespaceNames = root.DescendantNodes()
+            .OfType<CSS.BaseNamespaceDeclarationSyntax>() // NamespaceDeclarationSyntax, FileScopedNamespaceDeclarationSyntax
+            .Select(n => n.Name?.ToString())
+            .Where(s => !string.IsNullOrEmpty(s))
+            .Distinct()
+            .Cast<string>()
+            .ToArray();
+
+        var classList = classes.ToArray();
+        return new
+        {
+            file = Path.GetFileName(filePath),
+            usings = usingNames,
+            namespaces = namespaceNames,
+            totals = new
+            {
+                classes = classList.Length,
+                methods = classList.Sum(c => c.Methods.Length)
+            },
+            classes = classList
+        };
+    }
+
+    private static object AnalyzeVisualBasic(string code, string filePath)
+    {
+        var tree = VisualBasicSyntaxTree.ParseText(code);
+        var root = (VBS.CompilationUnitSyntax)tree.GetCompilationUnitRoot();
+
+        var usingNames = root.Imports
+            .SelectMany(i => i.ImportsClauses)
+            .Select(ic => (ic as VBS.SimpleImportsClauseSyntax)?.Name?.ToString())
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .Distinct()
+            .Cast<string>()
+            .ToArray();
+
+        var namespaceNames = root.Members
+            .OfType<VBS.NamespaceBlockSyntax>()
+            .Select(n => n.NamespaceStatement.Name?.ToString())
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .Distinct()
+            .Cast<string>()
+            .ToArray();
+
+        var classBlocks = root.DescendantNodes().OfType<VBS.ClassBlockSyntax>().ToArray();
+
+        var classes = classBlocks.Select(cb =>
+        {
+            var methodBlocks = cb.Members.OfType<VBS.MethodBlockSyntax>()
+                .Select(mb =>
+                {
+                    var header = mb.SubOrFunctionStatement;
+                    var name = header.Identifier.Text;
+                    var returnType = header.AsClause?.Type?.ToString() ?? "Void";
+                    var parameters = (header.ParameterList?.Parameters
+                        .Select(p => new
+                        {
+                            Name = p.Identifier?.ToString(),
+                            Type = p.AsClause?.Type?.ToString()
+                        })
+                        .ToArray()) ?? Array.Empty<object>();
+
+                    return new
+                    {
+                        Name = name,
+                        ReturnType = returnType,
+                        Parameters = parameters
+                    };
+                });
+
+            var methodDecls = cb.Members.OfType<VBS.MethodStatementSyntax>()
+                .Select(header => new
+                {
+                    Name = header.Identifier.Text,
+                    ReturnType = header.AsClause?.Type?.ToString() ?? "Void",
+                    Parameters = (header.ParameterList?.Parameters
+                        .Select(p => new
+                        {
+                            Name = p.Identifier?.ToString(),
+                            Type = p.AsClause?.Type?.ToString()
+                        })
+                        .ToArray()) ?? Array.Empty<object>()
+                });
+
+            var methods = methodBlocks.Concat(methodDecls).ToArray();
+
+            return new
+            {
+                Name = cb.ClassStatement.Identifier.Text,
+                Methods = methods
+            };
+        }).ToArray();
+
+        return new
+        {
+            file = Path.GetFileName(filePath),
+            usings = usingNames,
+            namespaces = namespaceNames,
+            totals = new
+            {
+                classes = classes.Length,
+                methods = classes.Sum(c => c.Methods.Length)
+            },
+            classes
+        };
     }
 }

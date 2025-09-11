@@ -75,6 +75,15 @@ function formatDuration(ms: number): string {
   return `${seconds}s`;
 }
 
+function formatFileSizeFromMB(sizeMB?: number): string {
+  if (typeof sizeMB !== "number" || !Number.isFinite(sizeMB) || sizeMB < 0) return "—";
+  if (sizeMB < 1) {
+    const kb = sizeMB * 1024;
+    return `${kb.toFixed(2)} KB`;
+  }
+  return `${sizeMB.toFixed(2)} MB`;
+}
+
 export function DownloadPage({ onStartOver, analysis }: DownloadPageProps) {
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [isDownloading, setIsDownloading] = useState(false);
@@ -229,7 +238,7 @@ export function DownloadPage({ onStartOver, analysis }: DownloadPageProps) {
           <div>
             <div className="font-medium text-gray-900 mb-1">File Size</div>
             <div className="text-gray-600">
-              {typeof sizeMB === "number" ? `${sizeMB.toFixed(2)} MB` : "—"}
+              {typeof sizeMB === "number" ? formatFileSizeFromMB(sizeMB) : "—"}
             </div>
           </div>
           <div>

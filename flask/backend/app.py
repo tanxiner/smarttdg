@@ -28,19 +28,18 @@ def analyze_zip(zip_path: str) -> dict:
             z.extractall(temp_dir)
             print("Extracted files:", list(Path(temp_dir).rglob("*")))
 
-
-        # Recursively collect .cs files
+        # Recursively collect .cs and .vb files
         all_paths = list(Path(temp_dir).rglob("*"))
         dirs = [p for p in all_paths if p.is_dir()]
         cs_files = [
             p for p in all_paths
-            if p.is_file() and p.suffix.lower() == ".cs"
+            if p.is_file() and p.suffix.lower() in (".cs", ".vb")
         ]
         cs_files.sort(key=lambda p: str(p.relative_to(temp_dir)).lower())
         if not cs_files:
             return {
                 "status": "ok",
-                "message": "No .cs files found in archive.",
+                "message": "No .cs or .vb files found in archive.",
                 "filesDiscovered": 0,
                 "filesAnalyzed": 0,
                 "foldersVisited": len(dirs),
