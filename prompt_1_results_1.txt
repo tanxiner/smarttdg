@@ -1,0 +1,807 @@
+Procedure: dbo.EAlertQ_EnQueue
+ Overall Workflow:
+The stored procedure [dbo].[EAlertQ_EnQueue] enqueues an email alert into the database. It receives input parameters for sender, subject, system, greetings, alert message, user ID, recipients (SendTo), CC, and BCC. The procedure checks if the SendTo parameter is not null before proceeding. If it is, the procedure returns without executing further.
+
+The email recipient list is processed by splitting the SendTo, CC, and BCC parameters using a specified separator. Each email address in the lists is then inserted into the corresponding tables (EAlertQTo, EAlertQCC, and EAlertQBCC) along with the alert ID, created and last updated timestamps, and user ID.
+
+Input/Output Parameters:
+- @Sender (nvarchar(100)) - The sender of the email
+- @Subject (nvarchar(500)) - The subject of the email
+- @Sys (nvarchar(100)) - The system associated with the alert
+- @Greetings (ntext) - The greeting message for the email
+- @AlertMsg (nvarchar(max)) - The main content of the email
+- @UserId (nvarchar(50)) - The user ID associated with the alert
+- @SendTo (ntext) - A comma-separated list of recipients (optional, can be null)
+- @CC (ntext) - A comma-separated list of CC recipients (optional)
+- @BCC (ntext) - A comma-separated list of BCC recipients (optional)
+- @Separator (nvarchar(1)) - The separator used to split the recipient lists
+- @AlertID (decimal(18, 0)) output - The generated alert ID for the enqueued email
+- @From (nvarchar(250)) = null - The optional 'From' field for the email (default is null)
+
+Tables Read/Written:
+- EAlertQ
+- EAlertQTo
+- EAlertQCC
+- EAlertQBCC
+
+Important Conditional Logic or Business Rules:
+- If the SendTo parameter is null, the procedure returns without executing further.
+- The email recipient lists (SendTo, CC, and BCC) are processed by splitting them using a specified separator. Each email address in the lists is then inserted into the corresponding tables.
+
+Procedure: dbo.EAlertQ_EnQueue_External
+ Overall Workflow:
+The stored procedure `[dbo].[EAlertQ_EnQueue_External]` enqueues an email alert in the system. It takes input parameters for the sender, subject, body, recipient, CC, BCC, attachment, and greetings. Upon successful insertion of the alert data, it processes the recipients, CC, and BCC lists to add them to their respective tables. The procedure also inserts the alert into the EAlertQ table and its attachments into EAlertQAtt if any.
+
+Input/Output Parameters:
+- @From (nvarchar(250)): Email sender's address
+- @Sender (nvarchar(100)): Name of the email sender
+- @Subject (nvarchar(500)): Subject of the email alert
+- @Sys (nvarchar(100)): System name
+- @Greetings (ntext): Greeting message for the email body
+- @AlertMsg (ntext): Main content of the email alert
+- @UserId (nvarchar(50)): User ID who created and last updated the alert
+- @SendTo (ntext): Comma-separated list of recipient email addresses
+- @CC (ntext): Comma-separated list of CC email addresses
+- @BCC (ntext): Comma-separated list of BCC email addresses
+- @Attachment (nvarchar(500)): Email attachment path if any
+- @Separator (nvarchar(1)): Character used to separate email addresses and attachments in the input parameters
+- @AlertID (decimal(18, 0) output): Unique ID of the inserted alert record
+
+Tables Read/Written:
+- EAlertQ: Email alerts table
+- EAlertQAtt: Attachments table for email alerts
+- EAlertQTo: Table storing recipients of the email alerts
+- EAlertQCC: Table containing CC email addresses for email alerts
+- EAlertQBCC: Table containing BCC email addresses for email alerts
+
+Important Conditional Logic or Business Rules:
+- If the inserted alert record has an ID, it proceeds to process the recipients, CC, and BCC lists.
+- The procedure uses a while loop to iterate through the comma-separated lists of email addresses for SendTo, CC, and BCC, adding each address to their respective tables.
+
+Procedure: dbo.getUserInformationByID
+ Overall Workflow:
+The stored procedure `getUserInformationByID` retrieves detailed information about a user with the given ID from the TAMS_User, TAMS_User_Role, and TAMS_Role tables if such a user exists.
+
+Input/Output Parameters:
+- @UserID (NVARCHAR(100)): The unique identifier of the user whose information is to be retrieved.
+
+Tables Read/Written:
+- TAMS_User: A table containing user data.
+- TAMS_User_Role: A junction table that associates users with their respective roles.
+- TAMS_Role: A table containing role data.
+
+Important Conditional Logic or Business Rules:
+- The procedure checks if a user with the provided ID exists before retrieving and returning the information. If no such user is found, no action is taken.
+
+Procedure: dbo.SMSEAlertQ_EnQueue
+ Overall Workflow:
+The stored procedure `SMSEAlertQ_EnQueue` is designed to enqueue a new SMS alert with multiple recipients (SendTo, CC, and BCC) into the SMSEAlertQ and related tables. The input parameters are used to set the Sender, Subject, System, Greetings, Alert Message, User ID, SendTo list, CC list, BCC list, and Separator. The procedure first checks if the SendTo parameter is not null before proceeding with the insertion. It then creates temporary tables for handling each recipient list (SendTo, CC, and BCC) and performs a loop to split each list using the separator. For each record in the lists, it inserts the corresponding recipient into the SMSEAlertQTo, SMSEAlertQCC, or SMSEAlertQBCC tables respectively. If there are remaining characters after the last separator, they are also inserted as a separate recipient. Finally, the procedure commits the transaction and returns the newly generated AlertID.
+
+Input/Output Parameters:
+- @Sender (nvarchar(100)): Sender of the alert.
+- @Subject (nvarchar(500)): Subject of the alert.
+- @Sys (nvarchar(100)): System of the alert.
+- @Greetings (ntext): Greeting message of the alert.
+- @AlertMsg (ntext): Alert message of the alert.
+- @UserId (nvarchar(50)): User ID who created and last updated the alert.
+- @SendTo (ntext): Recipient list for SendTo.
+- @CC (ntext): Recipient list for CC.
+- @BCC (ntext): Recipient list for BCC.
+- @Separator (nvarchar(1)): Separator used to split the recipient lists.
+- @AlertID (decimal(18, 0) output): Generated Alert ID.
+- @From (nvarchar(250) = null): Optional parameter for the From field of the alert (default is null).
+
+Tables Read/Written:
+- SMSEAlertQ: The main table where the new SMS alerts are enqueued.
+- SMSEAlertQTo, SMSEAlertQCC, and SMSEAlertQBCC: Tables containing the recipients for SendTo, CC, and BCC respectively.
+
+Important Conditional Logic or Business Rules:
+- The procedure checks if the SendTo parameter is not null before proceeding with the insertion. If it is null, the procedure returns without executing any further steps.
+
+Procedure: dbo.SMTP_GET_Email_Attachments
+ Overall Workflow:
+The stored procedure [dbo].[SMTP_GET_Email_Attachments] retrieves a single file path of an active email attachment associated with a specific AlertID from the EAlertQAtt table.
+
+Input/Output Parameters:
+- @AlertID (int): The unique identifier for the alert whose email attachments are to be retrieved.
+
+Tables Read/Written:
+- EAlertQAtt: This table is read to find the active email attachment associated with a specific AlertID. No writes are performed on any tables.
+
+Important Conditional Logic or Business Rules:
+- The query only selects active email attachments (where Active = 1).
+- The selected file path corresponds to the specified AlertID.
+
+Procedure: dbo.SMTP_GET_Email_Lists
+ Overall Workflow:
+The stored procedure `SMTP_GET_Email_Lists` deletes all records from multiple tables (EAlertQBCC, EAlertQCC, EAlertQTo, EAlertQ) where the AlertMsg is null. It then selects and formats email recipients from the EALERTQTO table and joins it with the original EALERTQ table to retrieve greetings, subject, alert message, sender, alert ID, system information, CC recipients, BCC recipients, and recipient list. The query is filtered by status='Q', Active = 1, and matching alert IDs between EALERTQ and the joined recipient data. The result is ordered by ALERTID.
+
+Input/Output Parameters:
+- No input parameters are provided in this stored procedure.
+- The output includes greetings, subject, alert message, sender, alert ID, system information, CC recipients, BCC recipients, and recipient list.
+
+Tables Read/Written:
+- Tables read include EALERTQ, EALERTQTO, EAlertQBCC, EAlertQCC.
+- The stored procedure writes to the EAlertQ table, but not EAlertQBCC, EAlertQCC, or EAlertQTo if there are records with a null AlertMsg.
+
+Important Conditional Logic or Business Rules:
+- Deletes records from multiple tables where AlertMsg is null.
+- Filters the result by status='Q', Active = 1, and matching alert IDs between EALERTQ and the joined recipient data.
+
+Procedure: dbo.SMTP_GET_Email_Lists_Frm
+ Overall Workflow:
+The stored procedure `SMTP_GET_Email_Lists_Frm` retrieves a list of email alerts to be sent, along with their recipients (CC and BCC), from the `EALERTQ` and `EALERTQTO` tables. It filters the alerts based on their status and activity, then sorts them by alert ID.
+
+Input/Output Parameters:
+- None (The procedure doesn't accept any input parameters)
+- The output includes Greetings, Subject, Alert Message, Sender, Alert ID, System details, Recipient, CCRecipient, BCCRecipient, and the email sender's address.
+
+Tables Read/Written:
+- `EALERTQ`: This table contains information about each alert, including status, activity, and other details.
+- `EALERTQTO`: This table stores the recipients (email addresses) for each alert.
+
+Important Conditional Logic or Business Rules:
+- The procedure only considers alerts with a status of 'Q' and active flag set to 1.
+- Empty recipient email addresses are filtered out from the `EALERTQTO` table.
+
+Procedure: dbo.SMTP_Update_Email_Lists
+ Overall Workflow:
+The stored procedure `SMTP_Update_Email_Lists` updates the status of an email alert in the EALERTQ table and records the last updated details. If there's no error during the update process, it doesn't output any error message.
+
+Input/Output Parameters:
+- `@p_AlertID` (int): The ID of the alert to be updated.
+- `@p_SysID` (varchar(50)): The system ID of the user performing the update.
+- `@p_Status` (varchar(1)): The new status for the email alert.
+- `@p_ErrorMsg` (varchar(255) OUTPUT): An output parameter containing an error message, if any, during the execution of the stored procedure.
+
+Tables Read/Written:
+- EALERTQ: This table is updated with the new status and last updated details.
+
+Important Conditional Logic or Business Rules:
+No significant conditional logic or business rules are observed in the provided stored procedure.
+
+Procedure: dbo.sp_api_send_sms
+ Overall Workflow:
+The stored procedure, `sp_api_send_sms`, is designed to send SMS messages using an API. It concatenates a comma-separated list of contact numbers (provided as input) and appends a specific phone number (8368101), then calls another stored procedure (SMSEAlertQ_EnQueue) to queue the SMS messages for sending. The procedure also sets an output parameter, `@ret`, to indicate the success or failure of the operation.
+
+Input/Output Parameters:
+- `@contactno` (nvarchar(MAX)): A comma-separated list of phone numbers to which the SMS message will be sent.
+- `@subject` (nvarchar(500)): The subject of the SMS message.
+- `@msg` (nvarchar(MAX)): The body content of the SMS message.
+- `@ret` (nvarchar(5) output): An output parameter indicating whether the operation was successful or not (default value: '0').
+
+Tables Read/Written:
+- [dbo].[SPLIT]: A user-defined function that splits a comma-separated string into individual values.
+- No other tables are directly accessed or modified in this stored procedure.
+
+Important Conditional Logic or Business Rules:
+- If the input `@contactno` contains only one number, an additional phone number (8368101) is appended to the list.
+- The procedure uses a cursor to iterate through each contact number in the comma-separated list.
+- In case of any errors during execution, the output parameter `@ret` is set to reflect the failure.
+
+Procedure: dbo.SP_Call_SMTP_Send_SMSAlert
+ Overall Workflow:
+The stored procedure, `SP_Call_SMTP_Send_SMSAlert`, retrieves SMS alerts from the `dbo.SMSEAlertQ` table with a status of 'Q', and sends these alerts using SMTP to recipients specified in the `dbo.SMSEAlertQTo` table, updating their status in the `dbo.SMSEAlertQ` table as they are processed.
+
+Input/Output Parameters:
+- @Message (OUTPUT): A message indicating whether there was an error sending SMS alerts. If empty, it means no errors occurred.
+
+Tables Read/Written:
+- `dbo.SMSEAlertQ`: Read to retrieve SMS alerts and update their status.
+- `dbo.SMSEAlertQTo`: Read to obtain recipients for each alert.
+
+Important Conditional Logic or Business Rules:
+- The procedure uses two cursors, `@CurMain` and `@CurDetl`, for iterating through the alerts and their respective recipients.
+- If an error occurs during execution, a transaction is rolled back if it was previously started.
+- The stored procedure calls another procedure, `SP_SMTP_SMS_NetPage`, to send each individual SMS alert.
+
+Procedure: dbo.SP_CheckPagePermission
+ Overall Workflow:
+The stored procedure `SP_CheckPagePermission` checks if a user has permission to access a specific menu based on the user's ID and the menu ID provided. If the user has the necessary permission, the output parameter `@res` is set to 1; otherwise, it is set to 0.
+
+Input/Output Parameters:
+- `@userid` (nvarchar(50)): The user ID of the user whose permissions are being checked.
+- `@menuid` (nvarchar(50)): The ID of the menu that the user's permission for is being checked.
+- `@res` (bit OUTPUT): A boolean value indicating whether the user has access to the specified menu. If set to 1, the user has access; otherwise, they do not.
+
+Tables Read/Written:
+- `TAMS_Menu_Role`: The table containing the relationships between menus and roles.
+- `TAMS_Role`: The table storing role information.
+- `TAMS_User_Role`: The table representing the relationship between users and roles.
+- `TAMS_User`: The table containing user data.
+
+Important Conditional Logic or Business Rules:
+The stored procedure checks if there exists a record in the joined tables that matches the provided user ID and menu ID. If such a record exists, the output parameter is set to 1; otherwise, it is set to 0.
+
+Procedure: dbo.sp_Generate_Ref_Num
+ Overall Workflow:
+The stored procedure `sp_Generate_Ref_Num` generates a reference number for a specified form type, line, and track type. If the requested reference number does not exist for the current year, it inserts a new record into the `TAMS_RefSerialNumber` table. Otherwise, it increments the existing maximum number and updates the table. If the track type is 'Depot', the line is appended with the letter 'D'. The generated reference number is returned as an output parameter.
+
+Input/Output Parameters:
+- `@FormType` (NVARCHAR(20)): The type of form for which the reference number is being generated.
+- `@Line` (NVARCHAR(20)): The line associated with the form.
+- `@TrackType` (NVARCHAR(50)): The track type associated with the form.
+- `@RefNum` (NVARCHAR(20) OUTPUT): The generated reference number for the specified form, line, and track type.
+- `@Message` (NVARCHAR(500) OUTPUT): A message indicating any errors encountered during the generation of the reference number.
+
+Tables Read/Written:
+- `TAMS_RefSerialNumber`: This table is read to check if a reference number exists for the specified form, line, and track type for the current year. If a reference number does not exist, a new record is inserted into this table. Otherwise, the existing maximum number is incremented and updated in the table.
+
+Important Conditional Logic or Business Rules:
+- If the track type is 'Depot', the line is appended with the letter 'D'.
+- If an error occurs during the generation of the reference number, a message is returned as output.
+- If a transaction is active (indicated by @@TRANCOUNT), a new transaction is started before any database operations are performed to ensure data integrity.
+
+Procedure: dbo.sp_Generate_Ref_Num_TOA
+ Overall Workflow:
+The stored procedure `[dbo].[sp_Generate_Ref_Num_TOA]` generates a reference number for a transaction based on the provided parameters. It checks if the reference number already exists in the `TAMS_RefSerialNumber` table, and if not, it inserts a new record. If the reference number already exists, it increments the existing number. The procedure follows certain conditions for generating the reference number format and considers whether the transaction is from a depot or not.
+
+Input/Output Parameters:
+- `@FormType` (NVARCHAR(20)): Type of form associated with the transaction.
+- `@Line` (NVARCHAR(20)): Line of the transaction (DTL, NEL).
+- `@TARID` (Int): ID of the transaction record in TAMS_TAR table.
+- `@OperationDate` (NVARCHAR(20)): Date for the operation.
+- `@TrackType` (NVARCHAR(50)): Type of track, either MainLine or Depot.
+- `@RefNum` (NVARCHAR(20)): Output parameter containing the generated reference number.
+- `@Message` (NVARCHAR(500)): Output parameter containing an error message if any error occurs during the procedure execution.
+
+Tables Read/Written:
+- `TAMS_RefSerialNumber`: A table where the generated reference numbers are stored.
+- `TAMS_TAR`: A table used to get the access date for the transaction.
+
+Important Conditional Logic or Business Rules:
+- If the reference number does not exist in the `TAMS_RefSerialNumber` table, a new record is inserted with an initial value of 1 for the MaxNum column.
+- If the reference number already exists, the MaxNum column is incremented by 1.
+- For Depot transactions, the Line parameter is appended with 'D'.
+- The generated reference number follows a specific format: `Line-FormType-AccessDateInDayMonth-CurrentTime-RunningNumber`.
+
+Procedure: dbo.sp_Get_QRPoints
+ Overall Workflow:
+The stored procedure `sp_Get_QRPoints` retrieves data from the `TAMS_TOA_QRCode` table and organizes it based on the 'Line', 'Type', and 'Station' columns in ascending order for 'Line' and 'Type', and then 'Station'.
+
+Input/Output Parameters:
+There are no input parameters. The output includes the 'Sno', 'Line', 'Station', 'Type', 'URL', and 'QRCode' columns from the `TAMS_TOA_QRCode` table.
+
+Tables Read/Written:
+The stored procedure reads data from the `dbo.TAMS_TOA_QRCode` table and writes no data to any table.
+
+Important Conditional Logic or Business Rules:
+There are no significant branches, conditions, or business rules in this stored procedure. The execution follows a straightforward selection of data from the specified table without any conditional statements.
+
+Procedure: dbo.sp_Get_TypeOfWorkByLine
+ Overall Workflow:
+The stored procedure `[dbo].[sp_Get_TypeOfWorkByLine]` retrieves a list of TypeOfWork records for a specific line and track type. It filters the data based on the provided Line and TrackType parameters, ensuring that the IsActive field is set to 1. The results are sorted in ascending order by the Order column.
+
+Input/Output Parameters:
+- @Line: A nvarchar(10) parameter representing the line for which TypeOfWork records should be retrieved.
+- @TrackType: A nvarchar(50) parameter representing the track type for which TypeOfWork records should be filtered.
+
+Tables Read/Written:
+- TAMS_Type_Of_Work: This table is read to retrieve the data based on the provided parameters and IsActive condition. No data is written to this table.
+
+Important Conditional Logic or Business Rules:
+- The procedure filters records based on the Line, TrackType, and IsActive conditions. Only active records are returned.
+
+Procedure: dbo.SP_SMTP_Send_SMSAlert
+ Overall Workflow:
+The stored procedure `[dbo].[SP_SMTP_Send_SMSAlert]` retrieves SMS alerts from the `dbo.SMSEAlertQ` table where status is 'Q', and sends them using SMTP to recipients stored in the `dbo.SMSEAlertQTo` table for each alert. The procedure maintains a cursor for each alert and iterates through its associated recipients, executing the `[dbo].[SP_SMTP_SMS_NetPage]` stored procedure for each recipient. After sending an SMS to all recipients of an alert, it updates the status of that alert in the `dbo.SMSEAlertQ` table and moves on to the next alert.
+
+Input/Output Parameters:
+- @p_Alertid: The unique identifier of the SMS Alert.
+- @p_from: The sender of the SMS Alert.
+- @p_To: The recipient of the SMS Alert.
+- @p_Alertmsg: The message body of the SMS Alert.
+- @p_sysname: A system name associated with the SMS Alert for auditing purposes.
+
+Tables Read/Written:
+- dbo.SMSEAlertQ: Table read to fetch SMS alerts.
+- dbo.SMSEAlertQTo: Table read to fetch recipients of each SMS alert.
+
+Important Conditional Logic or Business Rules:
+- The procedure maintains two cursors (`@CurMain` and `@CurDetl`) for iterating through alerts and their associated recipients respectively.
+- An SMS Alert is only sent if its status is 'Q'.
+- The procedure uses a WHILE loop to iterate through each recipient of an alert until all have been processed.
+
+Procedure: dbo.SP_SMTP_SMS_NetPage
+ Overall Workflow:
+The stored procedure, `SP_SMTP_SMS_NetPage`, is designed to send an SMS alert using the NetPage application. It first cleans up old records in the SMTP_SMSAlertQ table, then logs the new alert details into the same table. If there are no errors during logging, it executes a command shell script located at `C:\SMS_NetPage\SMS_NetPage.bat` to send the SMS using NetPage.
+
+Input/Output Parameters:
+- @From (varchar(100)): The Sender's number or ID.
+- @To (varchar(max)): The recipient's mobile number.
+- @ActualMsg (varchar(max)): The content of the SMS message.
+- @AlertiD (int): Unknown purpose, possibly an identifier for the alert.
+- @SysName (varchar(100)): The system name.
+
+Tables Read/Written:
+- SMTP_SMSAlertQ: A table where the alert log is stored and old records are cleaned up.
+
+Important Conditional Logic or Business Rules:
+The procedure checks for errors during logging and raises an error if any occur. There's also a condition that deletes old records from the SMTP_SMSAlertQ table if they are more than 60 days old.
+
+Procedure: dbo.sp_TAMS_Applicant_List_Child_OnLoad
+ Overall Workflow:
+The stored procedure `sp_TAMS_Applicant_List_Child_OnLoad` retrieves a list of applications for a specific sector and line, filtered by track type, access date range, and TAR type. It creates a temporary table #TmpAppList to store the results, sorts the data based on the specified sector ID, and returns the final result set after dropping the temporary table.
+
+Input/Output Parameters:
+- @Line: Line for which sectors are being fetched.
+- @TrackType: Track type filter for applications.
+- @ToAccessDate: The latest access date for the applications to be filtered.
+- @FromAccessDate: The earliest access date for the applications to be filtered.
+- @TARType: TAR type filter for applications.
+- @SectorID: ID of the sector for which the applications are being fetched.
+
+Tables Read/Written:
+- TAMS_TAR: Table containing application data.
+- TAMS_TAR_Sector: Table linking applications to sectors.
+- TAMS_WFStatus: Workflow status table.
+- TAMS_Sector: Sector table.
+- #TmpAppList (temporary): Created and dropped for storing the final result set.
+
+Important Conditional Logic or Business Rules:
+- The stored procedure checks if the sector is active within its effective date range.
+- Only applications with a status other than 0 are considered.
+- The access date of an application should be between the provided access date range.
+- If either the TAR type or the track type filter is empty, no filtering is applied for those parameters.
+
+Procedure: dbo.sp_TAMS_Applicant_List_Child_OnLoad_20220303
+ Overall Workflow:
+The stored procedure `sp_TAMS_Applicant_List_Child_OnLoad_20220303` retrieves a list of applications based on the provided parameters for a specific sector. It first initializes two temporary tables, #TmpSector and #TmpAppList, then populates them with data from various tables. The #TmpSector table stores sector information, while the #TmpAppList table stores application details along with sector information. The procedure filters the applications based on the provided parameters such as line, access date range, TAR type, and sector ID. Finally, it returns a list of applications that match the specified criteria sorted by their IDs.
+
+Input/Output Parameters:
+- @Line (NVARCHAR(10)): The line for which the application list should be retrieved.
+- @ToAccessDate (NVARCHAR(20)): The access date to filter applications up to (inclusive).
+- @FromAccessDate (NVARCHAR(20)): The access date to filter applications from (inclusive).
+- @TARType (NVARCHAR(20)): The type of TAR to filter applications.
+- @SectorID (INT): The ID of the sector for which the application list should be retrieved.
+
+Tables Read/Written:
+- TAMS_Sector: Reads sector information.
+- TAMS_TAR: Reads application details.
+- TAMS_TAR_Sector: Reads the relationship between applications and sectors.
+- TAMS_WFStatus: Reads workflow statuses for applications.
+- #TmpSector: A temporary table that stores sector information.
+- #TmpAppList: A temporary table that stores application details along with sector information.
+
+Important Conditional Logic or Business Rules:
+- The procedure checks if the current date is between the effective and expiry dates of the specified sector.
+- The procedure filters applications based on the provided parameters such as line, access date range, TAR type, and sector ID.
+- The procedure includes a conditional to handle NULL values for certain parameters by treating an empty string as a valid input.
+
+Procedure: dbo.sp_TAMS_Applicant_List_Child_OnLoad_20220303_M
+ Overall Workflow:
+The stored procedure `sp_TAMS_Applicant_List_Child_OnLoad_20220303_M` retrieves a list of TARs (Technical Assessment Reports) based on the provided parameters, sorts them by sector, and filters them according to the specified date range and TAR type. It also handles the sectors based on their direction ('BB' or 'NB'). The data is temporarily stored in two temporary tables before being returned as the final output.
+
+Input/Output Parameters:
+- @Line (AS NVARCHAR(10)): Line identifier for the sector.
+- @ToAccessDate (AS NVARCHAR(20)): Date to filter TARs with an access date equal to or later than this value.
+- @FromAccessDate (AS NVARCHAR(20)): Date to filter TARs with an access date equal to or earlier than this value.
+- @TARType (AS NVARCHAR(20)): Type of the TAR.
+- @SectorID (AS INT): ID of the sector to filter the TAR list by.
+
+Tables Read/Written:
+- TAMS_Sector: Read to get sector information.
+- TAMS_TAR: Read to get TAR information.
+- TAMS_WFStatus: Read to get TAR status information.
+- #TmpSector: A temporary table created to store sector data for sorting and filtering purposes.
+- #TmpAppList: A temporary table created to store the final list of TARs after filtering based on the provided parameters.
+
+Important Conditional Logic or Business Rules:
+- The procedure checks if the current date is between the effective date and expiry date for the line and sector.
+- The direction of the sector (BB or NB) determines the order in which the TARs are sorted in the temporary table.
+- Only active sectors and TARs with a non-zero status are considered in the final output.
+- The procedure handles null values for some parameters by checking if they are empty strings instead of throwing an error.
+
+Procedure: dbo.sp_TAMS_Applicant_List_Child_OnLoad_Hnin
+ Overall Workflow:
+The stored procedure [dbo].[sp_TAMS_Applicant_List_Child_OnLoad_Hnin] retrieves a list of applications based on the provided parameters and organizes them by sector. It creates a temporary table #TmpAppList to store the application data, filters the data based on the provided parameters, sorts the data by TARID, and finally returns the sorted list. The temporary table is truncated before each operation to ensure fresh results.
+
+Input/Output Parameters:
+- @Line: Line number of the sector (optional)
+- @TrackType: Type of track for the application (optional)
+- @ToAccessDate: Date from which to access applications (optional)
+- @FromAccessDate: Date up to which to access applications (optional)
+- @TARType: Type of TAR (optional)
+- @SectorID: ID of the sector (required)
+
+Tables Read/Written:
+- TAMS_TAR: Accessed and data is selected from this table.
+- TAMS_TAR_Sector: Accessed and data is joined with from this table.
+- TAMS_WFStatus: Accessed and data is joined with from this table.
+- TAMS_Sector: Accessed and data is joined with from this table.
+- #TmpAppList: A temporary table created, populated, sorted, and then dropped.
+
+Important Conditional Logic or Business Rules:
+- The procedure filters the application data based on the provided parameters such as line number, track type, access date range, TAR type, and sector ID.
+- The procedure only returns active sectors (SectorIsActive = 1) that are effective and not expired (EffectiveDate <= @CurrDate AND ExpiryDate >= @CurrDate).
+- The procedure sorts the application data by TARID.
+- The procedure truncates the temporary table #TmpAppList before each operation to ensure fresh results.
+
+Procedure: dbo.sp_TAMS_Applicant_List_Master_OnLoad
+ Overall Workflow:
+The stored procedure `sp_TAMS_Applicant_List_Master_OnLoad` retrieves sectors based on the provided line and track type, filters them by effective and expiry dates, and orders them. It then creates a temporary table to hold applicant data, though this part is commented out. Instead, it generates two lists of sectors sorted by direction (1 for 'BB' or 'NB', and 2 for everything else), and finally drops the temporary sector table.
+
+Input/Output Parameters:
+- `@Line`: A line identifying a specific sector to retrieve data for.
+- `@TrackType`: The track type associated with the sectors to retrieve data for.
+- `@ToAccessDate`: The date from which applications should be retrieved, inclusive.
+- `@FromAccessDate`: The date up to which applications should be retrieved, inclusive.
+- `@TARType`: An optional parameter to filter applicant data by TAR type.
+
+Tables Read/Written:
+- Tables read: `TAMS_Sector`, potentially others based on the commented-out portion of the code.
+- Tables written: A temporary table named `#TmpSector`. The commented-out section suggests that a similar temporary table, `#TmpAppList`, may also be used for storing applicant data.
+
+Important Conditional Logic or Business Rules:
+- The procedure checks if the provided sector and track type are active and within the effective and expiry date range.
+- If the direction of a sector is either 'BB' or 'NB', it is marked as 1; otherwise, it is marked as 2. This is used to sort the sectors by direction in two separate lists.
+
+Procedure: dbo.sp_TAMS_Applicant_List_OnLoad
+ Overall Workflow:
+The stored procedure `sp_TAMS_Applicant_List_OnLoad` retrieves a list of applicants based on the provided line, sector, and date range. It creates temporary tables to store sector data and applicant data, populates them with data from various tables, performs filtering and sorting operations, and then joins these temporary tables to generate the final output.
+
+Input/Output Parameters:
+- @Line (NVARCHAR(10)): Represents the line for which the applicants are to be retrieved.
+- @ToAccessDate (NVARCHAR(20)): Represents the date up to which the accessed applicants are to be considered.
+- @FromAccessDate (NVARCHAR(20)): Represents the date from which the accessed applicants are to be considered.
+- @TARType (NVARCHAR(20)): Not used in this stored procedure.
+
+Tables Read/Written:
+- Tables read: TAMS_Sector, TAMS_TAR, TAMS_TAR_Sector, TAMS_WFStatus, TAMS_Sector (read for effective and expiry dates).
+- Temporary tables created and written to: #TmpSector and #TmpAppList.
+
+Important Conditional Logic or Business Rules:
+- The stored procedure filters the sector data based on the line, track type, activity status, effective date, expiry date, and direction.
+- The applicant data is filtered based on the line, track type, workflow type, workflow status ID, sector ID, activity status, activity date range, and sector direction.
+- The final output is generated by joining the temporary tables based on the sector ID.
+- The order of the sectors and the applicants within each sector is determined by the SectorOrder and Direction fields in the TAMS_Sector table.
+
+Procedure: dbo.sp_TAMS_Approval_Add_BufferZone
+ Overall Workflow:
+The stored procedure `[dbo].[sp_TAMS_Approval_Add_BufferZone]` adds a buffer zone to the specified TAR and sector. It first checks if the TAR and sector combination already exists in the `TAMS_TAR_Sector` table. If not, it retrieves the color code of the buffer zone type from the `TAMS_Type_Of_Work` table using the line associated with the TAR ID. Then, it inserts a new row into the `TAMS_TAR_Sector` table with the provided TAR ID, sector ID, isBuffer set to 1, the retrieved color code, and isAddedBuffer set to 1. If an error occurs during execution, it either commits or rolls back the transaction and sets an error message accordingly.
+
+Input/Output Parameters:
+- `@TARID` (BIGINT): The unique identifier of the TAR.
+- `@SectorID` (BIGINT): The unique identifier of the sector.
+- `@Message` (NVARCHAR(500)): An output parameter to store an error message, if any.
+
+Tables Read/Written:
+- `TAMS_TAR_Sector`: Read and written for inserting a new row.
+- `TAMS_Type_Of_Work`: Read for retrieving the color code of the buffer zone type.
+- `TAMS_TAR`: Read for obtaining the line associated with the TAR ID.
+- `TAMS_Sector`: Read for selecting the sector data to insert into the `TAMS_TAR_Sector` table.
+
+Important Conditional Logic or Business Rules:
+- If the TAR and sector combination does not exist in the `TAMS_TAR_Sector` table, it will be inserted.
+- The stored procedure begins a transaction when no transactions are currently active.
+- An error occurs if there is an issue while inserting data into the `TAMS_TAR_Sector` table.
+
+Procedure: dbo.sp_TAMS_Approval_Add_TVFStation
+ Overall Workflow:
+The stored procedure `[dbo].[sp_TAMS_Approval_Add_TVFStation]` inserts a new record into the `[dbo].[TAMS_TAR_TVF]` table if the provided TARID, StationID, and Direction do not already exist. If an error occurs during insertion, it rolls back the transaction and returns an error message.
+
+Input/Output Parameters:
+- `@TARID` (BIGINT): The ID of the Transportation Asset Request.
+- `@StationID` (BIGINT): The ID of the TVF Station.
+- `@Direction` (NVARCHAR(20)): The direction of the TVF Station.
+- `@Message` (NVARCHAR(500) OUTPUT): A message that contains an error if one occurs during the execution of the stored procedure.
+
+Tables Read/Written:
+- `[dbo].[TAMS_TAR_TVF]`: This table is read to check for existing records and written to insert a new record when necessary.
+
+Important Conditional Logic or Business Rules:
+- If there's no active transaction, a new one begins before checking if the provided TARID, StationID, and Direction combination already exists in the `[dbo].[TAMS_TAR_TVF]` table. If it does not exist, a new record is inserted; otherwise, an error message is returned.
+- If an error occurs during insertion, the transaction is rolled back and the error message is returned. Otherwise, the transaction is committed upon successful execution.
+
+Procedure: dbo.sp_TAMS_Approval_Del_BufferZone
+ Overall Workflow:
+The stored procedure `sp_TAMS_Approval_Del_BufferZone` deletes a specific record from the `TAMS_TAR_Sector` table based on provided TARID and SectorID. It also manages transactions to ensure data integrity.
+
+Input/Output Parameters:
+- @TARID (BIGINT): The unique identifier of the TAR record.
+- @SectorID (BIGINT): The identifier of the sector associated with the TAR record.
+- @Message (NVARCHAR(500)): An output parameter to store any error messages that might occur during the execution.
+
+Tables Read/Written:
+- `TAMS_TAR_Sector`: This table is deleted based on the provided conditions.
+
+Important Conditional Logic or Business Rules:
+- The procedure starts a transaction (BEGIN TRAN) if there are no active transactions (@@TRANCOUNT = 0).
+- If an error occurs during the deletion, it sets the output message and jumps to the TRAP_ERROR label.
+- After successful execution, it commits the transaction if one was started earlier (@IntrnlTrans = 1).
+- If an error occurs during the execution and a transaction is active, it rolls back the transaction before setting the output message and jumping to the TRAP_ERROR label.
+
+Procedure: dbo.sp_TAMS_Approval_Del_TVFStation
+ Overall Workflow:
+The stored procedure `sp_TAMS_Approval_Del_TVFStation` deletes a TVF (Technical Assistance Request - TVF) record from the `dbo.TAMS_TAR_TVF` table given a specific TARID and TVFID. If an error occurs during execution, it either commits or rolls back the transaction, setting an error message to be returned as output.
+
+Input/Output Parameters:
+- @TARID (BIGINT): The Technical Assistance Request ID for the TVF record to delete.
+- @TVFID (BIGINT): The ID of the TVF record in the TAMS_TAR_TVF table to be deleted.
+- @Message (NVARCHAR(500)): An output parameter that contains an error message if an error occurs during execution. If no errors occur, this parameter remains empty.
+
+Tables Read/Written:
+- The `dbo.TAMS_TAR_TVF` table is written to by the DELETE statement.
+
+Important Conditional Logic or Business Rules:
+- Before starting the delete operation, it checks if there is an active transaction ongoing using @@TRANCOUNT. If there is none, it starts a new one (transactional control).
+- If an error occurs during the delete operation, it sets an error message and jumps to TRAP_ERROR label. Otherwise, it commits the transaction and returns with no errors. In case of an error, it rolls back the transaction before returning the error message.
+
+Procedure: dbo.sp_TAMS_Approval_Endorse
+ This is a SQL stored procedure named `sp_TAMS_Approval_Endorse_20220930`. It appears to be used for handling the approval process of TAR (Technical Assistance Request) forms within a system. The procedure includes several steps such as:
+
+1. Checking if the current user has already approved the TAR form.
+2. Calculating the total number of approvals needed and the number of approvals received so far.
+3. Updating the TAR form status based on the number of approvals received, and sending emails to relevant parties involved in the approval process.
+4. Inserting an action log for tracking purposes.
+5. Handling any errors that may occur during the execution.
+
+The procedure seems to be designed to support a multi-level approval system, as indicated by the `@ELevel` parameter, which represents the current level of the approval process. The `@InvPow` parameter determines if power invoicing is involved.
+
+Here's an overview of the steps executed within the procedure:
+
+1. Initialization: Variables are set and the transaction begins (if `@IntrnlTrans = 1`).
+2. Check if the user has already approved the TAR form: If the current user has already approved the form, it returns an error message.
+3. Calculate approval requirements and progress: Determine the total number of approvals needed and the number of approvals received so far.
+4. Update TAR form status: Based on the number of approvals received, update the TAR form status.
+5. Send emails to relevant parties: If the current user is the last person in the approval chain (`@ELevel = @TotalLevels`), send an email notifying that the form has been approved. Otherwise, if there are still more approvals needed, continue the approval process by executing the same stored procedure recursively for the next level.
+6. Insert action log: Record the action in the TAMS_Action_Log table.
+7. Error handling: If an error occurs during execution, roll back the transaction and return an error message. Otherwise, if everything goes well, commit the transaction and return a success message.
+
+Procedure: dbo.sp_TAMS_Approval_Endorse_20220930
+ Overall Workflow:
+The stored procedure `sp_TAMS_Approval_Endorse_20220930` is designed to approve or endorse a TAR (Time and Attendance Request) form, update its status, and send relevant emails based on the form's type and current level of the endorser. The procedure also logs the action and checks for certain conditions.
+
+Input/Output Parameters:
+- `@TARID`: ID of the TAR to be approved or endorsed.
+- `@TARWFID`: Current Workflow ID of the TAR.
+- `@EID`: Current Endorser ID.
+- `@ELevel`: Current Endorser Level.
+- `@Remarks`: Remarks to be added to the form (mandatory for reject, optional for approved/endorse).
+- `@TVFRunMode`: New column to be confirmed with Adeline.
+- `@TVFRunModeUpdInd`: Indicator to update TVF Run Mode or not.
+- `@UserLI`: User Login ID.
+- `@Message`: Output parameter to return error messages.
+
+Tables Read/Written:
+- TAMS_TAR: Time and Attendance Request table.
+- TAMS_TAR_Workflow: Workflow information of TARs.
+- TAMS_Endorser: Endorser information for each workflow.
+- TAMS_Action_Log: Action log for TARs.
+- TAMS_User: User information table.
+- TAMS_User_Role: User roles association table.
+
+Important Conditional Logic or Business Rules:
+- The procedure starts a transaction when there are no existing transactions.
+- If the next level endorser is not found, it updates the TAR status and sends an email for approved Late forms.
+- If a new row doesn't exist for the next workflow and endorser, a new row is inserted into the TAMS_TAR_Workflow table.
+- The procedure checks if the WorkflowType is 'LateAfter' and InvolvePower is 1, then it sends an email to specific roles (OCC) for that type of form.
+
+Procedure: dbo.sp_TAMS_Approval_Endorse_20230410
+ Overall Workflow:
+The stored procedure `sp_TAMS_Approval_Endorse_20230410` is designed to handle TAR approvals and endorsements. It updates the workflow status, assigns new workflows (if necessary), sends emails, logs actions, and optionally updates TVF Run Mode.
+
+Input/Output Parameters:
+- `@TARID`: TAR ID
+- `@TARWFID`: Current Workflow ID
+- `@EID`: Current Endorser ID
+- `@ELevel`: Current Endorser Level
+- `@Remarks`: Remarks (mandatory for Reject, optional for Approve/Endorse)
+- `@TVFRunMode`: New Column to be confirmed with Adeline
+- `@TVFRunModeUpdInd`: Indicator to Update TVF Run Mode or Not.
+- `@UserLI`: User Login ID
+- `@Message`: Output parameter for error messages
+
+Tables Read/Written:
+- TAMS_TAR
+- TAMS_TAR_Workflow
+- TAMS_Action_Log
+- TAMS_Endorser
+- TAMS_User
+- TAMS_User_Role
+- TAMS_Workflow
+
+Important Conditional Logic or Business Rules:
+- If the current endorser is at the last level, the TAR status is updated to 'Approved' or 'Rejected', and an email is sent.
+- If the next endorser doesn't have a workflow associated with the TAR, a new workflow is created for them.
+- If the current TAR is urgent, specific emails are sent based on the current level and role.
+- If the TAR type is 'Urgent', additional emails are sent to other departments after approval.
+- If an error occurs during execution, it is stored in the `@Message` output parameter and the transaction is rolled back. Otherwise, if successful, the transaction is committed.
+
+Procedure: dbo.sp_TAMS_Approval_Endorse20250120
+ This is a SQL stored procedure written in the Transact-SQL language for Microsoft SQL Server. The stored procedure `sp_TAMS_Approval` seems to be designed for managing TAR (Technical Assistance Request) forms, possibly within an organization.
+
+Here's a brief overview of its functionality:
+
+1. It checks if a user has already approved the TAR form. If not, it continues with the approval process.
+2. It determines the level (DTL, PFR, or Mainline) of the TAR form based on the input parameter `@Line`.
+3. Based on the level, it sends an email to specific users (determined by parameters such as `@OCCEmail` and `@SDSEmailForUrgent`) using a stored procedure called `sp_TAMS_Email_Apply_Urgent_TAR`.
+4. It logs the approval action in the `TAMS_Action_Log` table.
+5. If there's an error during execution, it either commits or rolls back the transaction and returns an error message.
+
+The stored procedure uses other procedures such as `sp_TAMS_Email_Urgent_TAR`, `sp_TAMS_Email_Urgent_TAR_OCC`, and potentially others that handle email sending. It also interacts with several tables like `TAMS_Action_Log` for logging actions, `TAMS_User`, `TAMS_User_Role`, `TAMS_Role`, and possibly other tables for user and role management. Additionally, it uses parameters from the `TAMS_Parameters` table to determine email recipients.
+
+Procedure: dbo.sp_TAMS_Approval_Get_Add_BufferZone
+ Overall Workflow:
+The stored procedure `sp_TAMS_Approval_Get_Add_BufferZone` retrieves sectors that have the IsBuffer flag set to 1 for a given TARID from the TAMS_Sector and TAMS_TAR_Sector tables. The results are ordered by sector ID.
+
+Input/Output Parameters:
+- `@TARID`: A BIGINT input parameter representing the TAR ID.
+
+Tables Read/Written:
+- `TAMS_Sector`: This table is read to fetch sector data.
+- `TAMS_TAR_Sector`: This table is read to get the relationship between TARs and sectors, specifically looking for buffer zones.
+
+Important Conditional Logic or Business Rules:
+- The procedure filters the sectors based on the IsBuffer flag being 1 (indicating a buffer zone) in the TAMS_TAR_Sector table.
+
+Procedure: dbo.sp_TAMS_Approval_Get_Add_TVFStation
+ Overall Workflow:
+The stored procedure [dbo].[sp_TAMS_Approval_Get_Add_TVFStation] retrieves the name and ID of a TVF station associated with a given TAR ID, along with the TVF run mode for that TAR ID.
+
+Input/Output Parameters:
+- @TARID (BIGINT): Identifier of the TAR record.
+
+Tables Read/Written:
+- TAMS_Station: Fetched to get the station name and ID associated with a TVF station.
+- TAMS_TAR_TVF: Fetched to get the TVF direction and ID associated with a given TAR ID.
+- TAMS_TAR: Fetched to get the TVF run mode for a given TAMS_TAR record.
+
+Important Conditional Logic or Business Rules:
+There are no significant conditional logic or business rules in this stored procedure. It performs simple SELECT statements based on the input parameter and joins tables as necessary.
+
+Procedure: dbo.sp_TAMS_Approval_OnLoad
+ The provided SQL script is a stored procedure named `sp_TAMS_Approval_OnLoad_bak20230531`. This stored procedure appears to be used for managing access and sector conflicts in a railway system. Here's a brief overview of what it does:
+
+1. It retrieves the sectors based on the provided line and track type, and checks if they are active.
+
+2. It then queries all TAMS Access Requirements for the specified line and track type, and filters results where `IsPowerReq = 1` and `OperationRequirement <> 'Traction Power ON'`. The order of these requirements is maintained.
+
+3. After that, it checks for sector conflicts by comparing the current TAMS access with other TAMS access records that have the same line, track type, and protection or operation status. If a conflict is found, it stores the conflicting TAMS access in a temporary table named `#TmpExc`.
+
+4. Finally, it returns the exception list containing sector conflicts, if any, as well as the operational requirements for the specified line and track type.
+
+This stored procedure seems to be part of a larger system, possibly a database used by a railway company or similar organization to manage access and conflicts in their operations.
+
+Procedure: dbo.sp_TAMS_Approval_OnLoad_bak20230531
+ This SQL script appears to be a stored procedure named `sp_TAMS_Approval_Proceed_To_App` which is designed for managing approvals in a railway system. It seems to perform the following tasks:
+
+1. Retrieves data related to an approval process, including the TAR ID, TAR number, TAR type, access date, access type, and isolation mode.
+2. Queries multiple tables such as `TAMS_Endorser`, `TAMS_Endorser_Level`, `TAMS_Endorser_Level_Operation`, `TAMS_Station`, `TAMS_Line`, `TAMS_Station_Location`, and `TAMS_Access_Requirement` to gather necessary information.
+3. Checks for exceptions such as Non-Electric Line (NEL) conflicts, protection versus possession conflicts, and sector conflicts based on the access type, operation requirement, and isolation mode.
+4. Performs operations like updating approval status, inserting data into temporary tables, and outputting messages related to the approval process.
+5. Finally, it outputs a message describing the approval process result, including any potential conflicts found.
+
+Procedure: dbo.sp_TAMS_Approval_Proceed_To_App
+ This is a stored procedure named `sp_TAMS_Approval_Proceed_To_App` written in SQL Server. It appears to be designed for handling the approval process of a TAR (Transfer at Risk) form within a system called TAMS (Technical and Management Support System).
+
+The stored procedure takes several parameters:
+
+1. `@TARID`: The unique identifier of the TAR form.
+2. `@ELevel`: The current level of approval in the process, which seems to start from 1 and can go up to at least 4 (indicating four levels of approvers).
+3. `@Line`: Possibly the type or role of the current approver, such as DTR (Director of Technical Resources) or OCC (Operations Control Centre).
+4. `@TARDate`: The date associated with the TAR form.
+5. `@Remarks`: Any remarks or comments added during the approval process.
+6. `@UserName`: The username of the person performing the current approval step.
+7. `@EMCompany`: An email company, possibly used for sending notifications.
+8. `@IntrnlTrans`: A flag indicating whether this is an internal transaction or not (1 for internal, 0 for external).
+9. `@Message`: This variable is used to store any error messages that might occur during the execution of the stored procedure.
+
+The stored procedure starts by initializing the `@Message` variable with an empty string. It then calls another stored procedure named `sp_TAMS_Approval_Proceed_To_App_20220930`, which is responsible for performing the actual approval process based on the provided parameters.
+
+After executing the other stored procedure, it checks if there were any errors by checking the value of `@@ERROR`. If an error occurred, it either commits or rolls back the transaction (depending on the value of `@IntrnlTrans`) and sets the `@Message` variable with an error message before returning.
+
+The stored procedure seems to have multiple parts for handling different levels of approvers and potentially different types of TAR forms or processes, as indicated by the conditions inside the stored procedure and the call to another stored procedure named `sp_TAMS_Approval_Proceed_To_App_20220930`.
+
+Procedure: dbo.sp_TAMS_Approval_Proceed_To_App_20220930
+ This SQL script appears to be a stored procedure in Microsoft SQL Server for handling TAR (Time-Limited Agreement) approvals. It includes several steps:
+
+1. The stored procedure `sp_TAMS_Approval_Proceed_To_App` is defined, taking various parameters such as TAR ID, Line number, and Endorser ID.
+
+2. Inside the stored procedure, it checks for errors during execution. If an error occurs, it either commits or rolls back the transaction depending on its internal status.
+
+3. It then proceeds to check if the TAR is a protection or possession type. If it's a protection type, it will compare the TAR date with the endorser's validity period to ensure they are within the same timeframe. If the protection can kick out the possession (meaning the protection TAR date is earlier than the possession TAR date), it updates the TAR status and sends an email to relevant parties.
+
+4. If the TAR is not a protection type, it will check if there are any workflow records for the TAR. If there are none, it inserts a new record into the `TAMS_TAR_Workflow` table with the status as "Pending." Then, it updates the TAR status and sends an email based on the next role ID.
+
+5. The stored procedure also includes logic for handling Late After workflows, where it will send an email to relevant parties if certain conditions are met.
+
+6. Finally, the stored procedure returns a message indicating whether the execution was successful or not. It can be called from other SQL scripts by passing the required parameters.
+
+Procedure: dbo.sp_TAMS_Approval_Proceed_To_App_20231009
+ This is a SQL stored procedure named `sp_TAMS_Approval_Proceed_To_App`. It appears to be used for processing TAR (Trust Application) forms through an approval workflow. The workflow includes multiple lines (steps), each representing a different stage in the process, and each line may have specific roles involved.
+
+The procedure performs various tasks such as:
+
+1. Updating the TAR form's status based on the current line and the action being taken (approve or reject).
+2. Sending emails to relevant parties depending on the line, the TAR type, and the workflow configuration.
+3. Recording a log of actions related to the TAR form.
+4. Handling errors and committing or rolling back the transaction as needed.
+
+The procedure is called with parameters specifying the TAR ID, the current line number, the role performing the action, additional remarks (if any), the email address of the user performing the action, and an output parameter for error messages.
+
+Some parts of the code seem to have been modified by a user named "Hnin" on October 2nd, 2023, to handle conflicts that arise when a NEL (Negotiation of Executed Lease) form is approved and there are already approved TAR forms with the same sectors. The modification changes the approval status for NEL forms in such cases so they can be rejected or re-evaluated.
+
+Procedure: dbo.sp_TAMS_Approval_Proceed_To_App_20240920
+ This is a stored procedure written in SQL Server. It seems to be designed for managing TAR (Technical Assistance Request) forms approvals and rejections. The procedure handles multiple functionalities such as saving access requests, processing form approvals or rejections, sending email notifications, and recording actions in a log table.
+
+The stored procedure has several sections:
+
+1. `sp_TAMS_Form_Save_Access_Reqs` - Saves access requests for Technical Assistance Requests (TAR) forms. The function accepts the line (NEL, SDN, OCC), required sectors (comma-separated values), TAR date, applicant name, TAR number, and InvolvePower (a flag to determine whether or not to involve power in the process).
+
+2. `sp_TAMS_Approval_Reject` - Processes TAR form approvals or rejections. This function accepts the line (NEL, SDN, OCC), the ID of the TAR form to be approved or rejected, and a message to record in the log table. If the form is approved, it also sends an email notification.
+
+3. `sp_TAMS_Email_Apply_Urgent_TAR` - Sends email notifications for urgent TAR forms based on specified roles (e.g., PFR).
+
+4. `sp_TAMS_Email_Apply_Urgent_TAR_OCC` - Sends email notifications for urgent TAR forms to the Occupational Health and Safety department.
+
+The stored procedure uses a transaction, which means that if any error occurs during the process, it will be rolled back, ensuring data integrity. If an internal transaction is in progress when an error happens, the stored procedure commits the transaction before returning an error message.
+
+Procedure: dbo.sp_TAMS_Approval_Reject
+ Overall Workflow:
+The stored procedure [dbo].[sp_TAMS_Approval_Reject] is designed to handle the rejection or approval of a TAR (Transaction Approval Request) form. It updates the status of the form and endorsers, sends email notifications, logs actions, and optionally triggers additional email notifications based on workflow type and level.
+
+Input/Output Parameters:
+- @TARID (INTEGER): TAR ID
+- @TARWFID (INTEGER): Current WF ID
+- @EID (INTEGER): Current Endorser ID
+- @ELevel (INTEGER): Current Endorser Level
+- @Remarks (NVARCHAR(1000)): Remarks for the rejection
+- @UserLI (NVARCHAR(100)): User Login ID
+- @Message (NVARCHAR(500) = NULL OUTPUT): Error message, if any
+
+Tables Read/Written:
+- TAMS_User: Reads user details based on the provided login ID.
+- TAMS_TAR_Workflow: Writes the status of a TAR form and logs actions.
+- TAMS_Endorser: Retrieves title of the current endorser.
+- TAMS_TAR: Reads TAR details, updates TAR status, and sends email notifications if necessary.
+- TAMS_Workflow: Retrieves workflow type and involvement power.
+- TAMS_Action_Log: Writes action log.
+
+Important Conditional Logic or Business Rules:
+- If the current level endorser is a department lead (Level 2) and the workflow type is 'UrgentAfter' with involvement power set to 1, an additional email notification is triggered.
+- The stored procedure checks for errors during execution and returns an error message if any occur.
+
+Procedure: dbo.sp_TAMS_Approval_Reject_20220930
+ Overall Workflow:
+The stored procedure `sp_TAMS_Approval_Reject_20220930` is designed to handle the approval or rejection of a TAR form. It updates the workflow status, endorser information, and TAR status based on the provided parameters. If the form is rejected, it sends an email notification to relevant parties.
+
+Input/Output Parameters:
+- `@TARID` (INTEGER): TAR ID
+- `@TARWFID` (INTEGER): Current WF ID
+- `@EID` (INTEGER): Current Endorser ID
+- `@ELevel` (INTEGER): Current Endorser Level
+- `@Remarks` (NVARCHAR(1000)): Remarks (mandatory for reject, optional for approval/endorse)
+- `@UserLI` (NVARCHAR(50)): User Login ID
+- `@Message` (NVARCHAR(500)): Error message (output parameter)
+
+Tables Read/Written:
+- TAMS_TAR_Workflow: Updated with new status, remark, action by, and action on
+- TAMS_TAR: Updated with new status and other relevant information
+- TAMS_Action_Log: Inserted with action log details
+- TAMS_Endorser: Read to get endorser title
+- TAMS_User: Read to get user name and ID
+- TAMS_Workflow: Read to get workflow type and involve power
+- (Possibly other tables involved in email sending procedures)
+
+Important Conditional Logic or Business Rules:
+- If the transaction count is zero, it begins a new internal transaction.
+- If the form is rejected, it sends an email notification to relevant parties based on the TAR type.
+- If the workflow type is 'LateAfter' and involve power is 1, and the current endorser level is 2, it sends an additional email notification to OCC role members.
+- If any error occurs during the execution, it rolls back the transaction and sets the output message accordingly.
+
+Procedure: dbo.sp_TAMS_Batch_DeActivate_UserAccount
+ Overall Workflow:
+The stored procedure, `sp_TAMS_Batch_DeActivate_UserAccount`, deactivates user accounts in the TAMS_User table based on a specified period and parameter from the TAMS_Parameters table. The activation period is defined by the 'EffectiveDate' and 'ExpiryDate' parameters of the TAMS_Parameters row with ParaCode equals to 'DeActivateAcct'. User accounts that have not been active for a number of months equal to the value specified in the '@DeAct' variable are deactivated.
+
+Input/Output Parameters:
+- @DeAct (BIGINT): The number of months after which user accounts will be deactivated, provided from TAMS_Parameters table.
+
+Tables Read/Written:
+- TAMS_Parameters: Read to get the deactivation period.
+- TAMS_User: Updated to set IsActive as 0 (deactivate), UpdatedBy as 1, and UpdatedOn as the current date-time for those users that have not logged in for the specified number of months.
+
+Important Conditional Logic or Business Rules:
+- The '@DeAct' variable is only populated if the GETDATE() falls within the effective and expiry dates of the TAMS_Parameters row with ParaCode equals to 'DeActivateAcct'. If the current date-time is outside this range, @DeAct remains 0.
+- User accounts are deactivated only if they have not been active for a number of months equal to the value in '@DeAct'. This is checked by comparing the difference between the current date and time and the user's last login date using DATEDIFF function.
+

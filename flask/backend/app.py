@@ -36,6 +36,7 @@ def analyze_zip(zip_path: str) -> dict:
             if p.is_file() and p.suffix.lower() in (".cs", ".vb")
         ]
         cs_files.sort(key=lambda p: str(p.relative_to(temp_dir)).lower())
+        
         if not cs_files:
             return {
                 "status": "ok",
@@ -45,18 +46,37 @@ def analyze_zip(zip_path: str) -> dict:
                 "foldersVisited": len(dirs),
                 "results": []
             }
-        results = []
-        for p in cs_files:
-            f = str(p)
-            rel = os.path.relpath(f, start=temp_dir)
-            try:
-                analysis = run_analyzer(f)
-                results.append({"file": rel, "result": analysis})
-            except Exception as ex:
-                results.append({"file": rel, "error": str(ex)})
+        
+        # Collect all file paths as strings
+        file_paths = [str(p) for p in cs_files]
+        
+        # Call analyzer ONCE with ALL files
+        try:
+            analysis_result = run_analyzer(*file_paths)  # Pass all files as separate arguments
+            
+            # Build results array with relative paths
+            results = []
+            for p in cs_files:
+                rel = str(p.relative_to(temp_dir))
+                results.append({
+                    "file": rel,
+                    "result": "analyzed"  # or extract individual result if available
+                })
+            
+        except Exception as ex:
+            return {
+                "status": "error",
+                "message": f"Analysis failed: {str(ex)}",
+                "filesDiscovered": len(cs_files),
+                "filesAnalyzed": 0,
+                "foldersVisited": len(dirs),
+                "results": []
+            }
+        
         # Diagnostics
         discovered_sample = [str(p.relative_to(temp_dir)) for p in cs_files[:10]]
         folders_with_cs = sorted({str(p.parent.relative_to(temp_dir)) for p in cs_files})[:10]
+        
         return {
             "status": "ok",
             "message": "Analysis complete",
@@ -65,7 +85,8 @@ def analyze_zip(zip_path: str) -> dict:
             "foldersVisited": len(dirs),
             "foldersWithCsSample": folders_with_cs,
             "discoveredSample": discovered_sample,
-            "results": results
+            "results": results,
+            "analysisOutput": analysis_result  # Include the actual analysis result
         }
     finally:
         try:

@@ -1,12 +1,16 @@
 import subprocess
 import json
 import os
+from typing import Any
 
-def analyze_code(file_path: str):
+def analyze_code(*file_paths: str) -> Any:
     """
-    Runs the Roslyn Analyzer C# project on the given file.
-    Returns JSON output as a Python dictionary.
+    Runs the Roslyn Analyzer C# project on the given file(s).
+    Accepts one or more file paths and returns JSON output as a Python object.
     """
+    if len(file_paths) == 0:
+        raise ValueError("analyze_code requires at least one file path")
+
     # Resolve the analyzer project directory relative to this file
     this_dir = os.path.dirname(__file__)
     analyzer_project_dir = os.path.abspath(os.path.join(this_dir, "../../../../Roslyn"))
@@ -14,14 +18,14 @@ def analyze_code(file_path: str):
     cmd = [
         "dotnet", "run",
         "--project", analyzer_project_dir,
-        "--",  # ensure following arg is passed to the app, not dotnet
-        file_path
-    ]
+        "--",  # ensure following args are passed to the app, not dotnet
+    ] + list(file_paths)
 
     result = subprocess.run(cmd, capture_output=True, text=True)
 
     if result.returncode != 0:
-        raise RuntimeError(f"Analyzer failed: {result.stderr}")
+        # Include both stdout and stderr for diagnostics
+        raise RuntimeError(f"Analyzer failed:\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}")
 
     stdout = result.stdout.strip()
 

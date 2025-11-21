@@ -1,15 +1,5 @@
-﻿// Import necessary namespaces for code analysis, C# & VB syntax parsing, JSON serialization, and file operations
-using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp;
-using Microsoft.CodeAnalysis.VisualBasic;
-using Newtonsoft.Json;
-using System;
-using System.IO;
-using System.Linq;
-
-// Alias syntax namespaces to avoid type name collisions (e.g., CompilationUnitSyntax)
-using CSS = Microsoft.CodeAnalysis.CSharp.Syntax;
-using VBS = Microsoft.CodeAnalysis.VisualBasic.Syntax;
+﻿using Newtonsoft.Json;
+using Roslyn.Analyzers;
 
 class Program
 {
@@ -23,175 +13,95 @@ class Program
                 return 0;
             }
 
-            var filePath = args[0];
-            if (!File.Exists(filePath))
+            // Accumulate ALL results in memory first
+            List<object> allResults = new List<object>();
+
+            // Process each file
+            foreach (var filePath in args)
             {
-                Console.WriteLine(JsonConvert.SerializeObject(new
+                if (!File.Exists(filePath))
                 {
-                    error = "File not found",
-                    filePath,
-                    cwd = Environment.CurrentDirectory
-                }));
-                return 0;
+                    Console.WriteLine(JsonConvert.SerializeObject(new
+                    {
+                        error = "File not found",
+                        filePath,
+                        cwd = Environment.CurrentDirectory
+                    }));
+                    continue; // Skip this file but continue with others
+                }
+
+                var code = File.ReadAllText(filePath);
+                var ext = Path.GetExtension(filePath).ToLowerInvariant();
+                object result = null;
+
+                try
+                {
+                    Console.WriteLine(JsonConvert.SerializeObject(new { debug = "Analyzing file", filePath, ext }));
+
+                    if (ext == ".cs")
+                    {
+                        Console.WriteLine(JsonConvert.SerializeObject(new { debug = "Calling AnalyzeCSharp", filePath }));
+                        result = CSharpAnalyzer.Analyze(code, filePath);
+                    }
+                    else if (ext == ".vb")
+                    {
+                        Console.WriteLine(JsonConvert.SerializeObject(new { debug = "Calling AnalyzeVisualBasic", filePath }));
+                        result = VisualBasicAnalyzer.Analyze(code, filePath);
+                    }
+                    else
+                    {
+                        Console.WriteLine(JsonConvert.SerializeObject(new { debug = "Skipping unsupported file", filePath, ext }));
+                    }
+                }
+                catch (Exception innerEx)
+                {
+                    Console.WriteLine(JsonConvert.SerializeObject(new
+                    {
+                        error = "Exception in analysis dispatch",
+                        filePath,
+                        ext,
+                        exceptionType = innerEx.GetType().FullName,
+                        message = innerEx.Message,
+                        stackTrace = innerEx.StackTrace
+                    }));
+                    continue; // Skip this file but continue with others
+                }
+
+                if (result != null)
+                {
+                    allResults.Add(result);
+                }
             }
 
-            var code = File.ReadAllText(filePath);
-            var ext = Path.GetExtension(filePath).ToLowerInvariant();
-
-            object result = ext switch
+            // Write ALL results ONCE at the end
+            if (allResults.Count > 0)
             {
-                ".vb" => AnalyzeVisualBasic(code, filePath),
-                _ => AnalyzeCSharp(code, filePath)
-            };
+                var outputPath = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+                    "all_analysis_results1.json"
+                );
 
-            Console.WriteLine(JsonConvert.SerializeObject(result, Formatting.None));
+                File.WriteAllText(outputPath, JsonConvert.SerializeObject(allResults, Formatting.Indented));
+                Console.WriteLine(JsonConvert.SerializeObject(new
+                {
+                    savedTo = outputPath,
+                    totalFiles = args.Length,
+                    successfulAnalyses = allResults.Count
+                }));
+            }
+
             return 0;
         }
         catch (Exception ex)
         {
-            Console.WriteLine(JsonConvert.SerializeObject(new { error = ex.Message }));
+            Console.WriteLine(JsonConvert.SerializeObject(new
+            {
+                error = "Exception in Main",
+                exceptionType = ex.GetType().FullName,
+                message = ex.Message,
+                stackTrace = ex.StackTrace
+            }));
             return 1;
         }
-    }
-
-    private static object AnalyzeCSharp(string code, string filePath)
-    {
-        var tree = CSharpSyntaxTree.ParseText(code);
-        var root = tree.GetCompilationUnitRoot(); // Remove explicit cast
-
-        var classes = root.DescendantNodes().OfType<CSS.ClassDeclarationSyntax>()
-            .Select(cls => new
-            {
-                Name = cls.Identifier.Text,
-                Methods = cls.Members
-                    .OfType<CSS.MethodDeclarationSyntax>()
-                    .Select(m => new
-                    {
-                        Name = m.Identifier.Text,
-                        ReturnType = m.ReturnType.ToString(),
-                        Parameters = m.ParameterList.Parameters
-                            .Select(p => new
-                            {
-                                Name = p.Identifier.Text,
-                                Type = p.Type?.ToString()
-                            })
-                            .ToArray()
-                    })
-                    .ToArray()
-            });
-
-        var usingNames = root.Imports
-            .SelectMany(i => i.ImportsClauses)
-            .Select(ic => (ic as VBS.SimpleImportsClauseSyntax)?.Name?.ToString())
-            .Where(s => !string.IsNullOrWhiteSpace(s))
-            .Distinct()
-            .Cast<string>()
-            .ToArray();
-
-        var namespaceNames = root.DescendantNodes()
-            .OfType<CSS.BaseNamespaceDeclarationSyntax>() // NamespaceDeclarationSyntax, FileScopedNamespaceDeclarationSyntax
-            .Select(n => n.Name?.ToString())
-            .Where(s => !string.IsNullOrEmpty(s))
-            .Distinct()
-            .Cast<string>()
-            .ToArray();
-
-        var classList = classes.ToArray();
-        return new
-        {
-            file = Path.GetFileName(filePath),
-            usings = usingNames,
-            namespaces = namespaceNames,
-            totals = new
-            {
-                classes = classList.Length,
-                methods = classList.Sum(c => c.Methods.Length)
-            },
-            classes = classList
-        };
-    }
-
-    private static object AnalyzeVisualBasic(string code, string filePath)
-    {
-        var tree = VisualBasicSyntaxTree.ParseText(code);
-        var root = (VBS.CompilationUnitSyntax)tree.GetCompilationUnitRoot();
-
-        var usingNames = root.Imports
-            .SelectMany(i => i.ImportsClauses)
-            .Select(ic => (ic as VBS.SimpleImportsClauseSyntax)?.Name?.ToString())
-            .Where(s => !string.IsNullOrWhiteSpace(s))
-            .Distinct()
-            .Cast<string>()
-            .ToArray();
-
-        var namespaceNames = root.Members
-            .OfType<VBS.NamespaceBlockSyntax>()
-            .Select(n => n.NamespaceStatement.Name?.ToString())
-            .Where(s => !string.IsNullOrWhiteSpace(s))
-            .Distinct()
-            .Cast<string>()
-            .ToArray();
-
-        var classBlocks = root.DescendantNodes().OfType<VBS.ClassBlockSyntax>().ToArray();
-
-        var classes = classBlocks.Select(cb =>
-        {
-            var methodBlocks = cb.Members.OfType<VBS.MethodBlockSyntax>()
-                .Select(mb =>
-                {
-                    var header = mb.SubOrFunctionStatement;
-                    var name = header.Identifier.Text;
-                    var returnType = header.AsClause?.Type?.ToString() ?? "Void";
-                    var parameters = (header.ParameterList?.Parameters
-                        .Select(p => new
-                        {
-                            Name = p.Identifier?.ToString(),
-                            Type = p.AsClause?.Type?.ToString()
-                        })
-                        .ToArray()) ?? Array.Empty<object>();
-
-                    return new
-                    {
-                        Name = name,
-                        ReturnType = returnType,
-                        Parameters = parameters
-                    };
-                });
-
-            var methodDecls = cb.Members.OfType<VBS.MethodStatementSyntax>()
-                .Select(header => new
-                {
-                    Name = header.Identifier.Text,
-                    ReturnType = header.AsClause?.Type?.ToString() ?? "Void",
-                    Parameters = (header.ParameterList?.Parameters
-                        .Select(p => new
-                        {
-                            Name = p.Identifier?.ToString(),
-                            Type = p.AsClause?.Type?.ToString()
-                        })
-                        .ToArray()) ?? Array.Empty<object>()
-                });
-
-            var methods = methodBlocks.Concat(methodDecls).ToArray();
-
-            return new
-            {
-                Name = cb.ClassStatement.Identifier.Text,
-                Methods = methods
-            };
-        }).ToArray();
-
-        return new
-        {
-            file = Path.GetFileName(filePath),
-            usings = usingNames,
-            namespaces = namespaceNames,
-            totals = new
-            {
-                classes = classes.Length,
-                methods = classes.Sum(c => c.Methods.Length)
-            },
-            classes
-        };
     }
 }

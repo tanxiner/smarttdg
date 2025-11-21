@@ -190,7 +190,7 @@ export function DownloadPage({ onStartOver, analysis }: DownloadPageProps) {
               disabled={isDownloading}
             >
               <Globe className="h-4 w-4 mr-2" />
-              HTML Website
+              Word Document
               <span className="ml-auto text-xs text-gray-500">Recommended</span>
             </Button>
 
@@ -212,7 +212,7 @@ export function DownloadPage({ onStartOver, analysis }: DownloadPageProps) {
               disabled={isDownloading}
             >
               <FileArchive className="h-4 w-4 mr-2" />
-              Markdown Files
+              Markdown Document
               <span className="ml-auto text-xs text-gray-500">—</span>
             </Button>
           </div>

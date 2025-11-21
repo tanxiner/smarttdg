@@ -1,0 +1,319 @@
+@startuml
+class assign {
+  + Dispose()
+  + InitializeComponent()
+}
+
+class assign {
+  + assign_Load()
+  + load_data()
+  + DataGridView3_CellClick()
+  + BTNASSIGN_Click()
+  + Button1_Click()
+}
+
+class client {
+  + Dispose()
+  + InitializeComponent()
+}
+
+class client {
+  + client_Load()
+  + LOAD_CLIENT()
+  + txtClinetName_TextChanged()
+  + btnClientsave_Click()
+  + DataGridView2_CellClick()
+  + btnUpdateClient_Click()
+  + Button1_Click()
+  + txtrate_TextChanged()
+  + DataGridView2_CellContentClick()
+}
+
+class employee {
+  + Dispose()
+  + InitializeComponent()
+}
+
+class employee {
+  + employee_Load()
+  + load_basic_info()
+  + BTNNEW_Click()
+  + dtgEmplist_DoubleClick()
+  + Timer1_Tick()
+  + Button3_Click()
+  + TXTSEARCH_TextChanged()
+  + Panel1_Paint()
+  + DataGridView1_CellContentClick()
+  + DataGridView1_CellDoubleClick()
+  + DataGridView1_Click()
+}
+
+class EmployeeInfo {
+  
+}
+
+class CachedEmployeeInfo {
+  + CreateReport()
+  + GetCustomizedCacheKey()
+}
+
+class Form1 {
+  + Dispose()
+  + InitializeComponent()
+}
+
+class Form1 {
+  + Button2_Click()
+  + Button1_Click()
+  + Button4_Click()
+  + Button5_Click()
+  + Button3_Click()
+  + Button6_Click()
+  + Button7_Click()
+}
+
+class frmCamera {
+  + Dispose()
+  + InitializeComponent()
+}
+
+class frmCamera {
+  + OpenPreviewWindow()
+  + ClosePreviewWindow()
+  + Button2_Click_1()
+  + Button4_Click_1()
+}
+
+class frmIndividualprofile {
+  + Dispose()
+  + InitializeComponent()
+}
+
+class frmIndividualprofile {
+  + Button4_Click()
+  + Button6_Click()
+  + Button1_Click()
+  + Button2_Click()
+  + txtHeight_TextChanged()
+  + txtweight_TextChanged()
+  + txtmname_TextChanged()
+  + frmIndividualprofile_Load()
+  + dtpbdate_TextChanged()
+  + dtpbdate_ValueChanged()
+}
+
+class frmlogin {
+  + Dispose()
+  + InitializeComponent()
+}
+
+class frmlogin {
+  + Button1_Click()
+  + Button2_Click()
+}
+
+class frmUserAccountsProfile {
+  + Dispose()
+  + InitializeComponent()
+}
+
+class frmUserAccountsProfile {
+  + displaymember()
+  + itemdatagrid_CellClick()
+  + Form1_Load()
+  + Label6_Click()
+  + Button3_Click()
+  + Button1_Click()
+  + btndel_Click()
+  + btnedit_Click()
+  + Button2_Click()
+}
+
+class newemployee {
+  + Dispose()
+  + InitializeComponent()
+}
+
+class newemployee {
+  + btnadd_Click()
+  + newemployee_Load()
+  + cbocivil_TextChanged()
+  + Button1_Click()
+  + dtpbdate_TextChanged()
+  + txtContact_TextChanged()
+  + txtHeight_TextChanged()
+  + txtweight_TextChanged()
+  + txtmname_TextChanged()
+  + txtnbic_TextChanged()
+  + txtothers_TextChanged()
+  + txtgl_TextChanged()
+  + txtPHIC_TextChanged()
+  + txtHDMF_TextChanged()
+  + dtpbdate_ValueChanged()
+}
+
+class payroll {
+  + Dispose()
+  + InitializeComponent()
+}
+
+class payroll {
+  + txtClientRate_TextChanged()
+  + Button2_Click()
+  + txtNoHoursWork_TextChanged()
+  + txtAllowances_TextChanged()
+  + txtAdjustments_TextChanged()
+  + Button1_Click()
+  + GrossSalary_TextChanged()
+  + Button3_Click()
+  + txtGrossPay_TextChanged()
+  + Button4_Click()
+  + txtSSS_TextChanged()
+  + txtPagibig_TextChanged()
+  + txtPhilhealth_TextChanged()
+  + txtWtax_TextChanged()
+  + txtSSSLoans_TextChanged()
+  + txtOtherLoans_TextChanged()
+  + btnsave_Click()
+  + Button5_Click()
+  + btncancel_Click()
+  + txtPagibigLoans_TextChanged()
+  + payroll_Load()
+  + dtpPeriodStart_TextChanged()
+}
+
+class popup {
+  + Dispose()
+  + InitializeComponent()
+}
+
+class popup {
+  + txtsearch_TextChanged()
+  + Button1_Click()
+}
+
+class report {
+  + Dispose()
+  + InitializeComponent()
+}
+
+class report {
+  + report_Load()
+  + report()
+  + Button1_Click()
+  + Button2_Click()
+  + Button3_Click()
+  + Button4_Click()
+  + Button5_Click()
+  + Button6_Click()
+}
+
+class Utilities {
+  + Dispose()
+  + InitializeComponent()
+}
+
+class Utilities {
+  + Button1_Click()
+  + Button2_Click()
+}
+
+class MyApplication {
+  + OnCreateMainForm()
+}
+
+class MySettings {
+  
+}
+
+class clientDetails {
+  
+}
+
+class CachedclientDetails {
+  + CreateReport()
+  + GetCustomizedCacheKey()
+}
+
+class clientguard {
+  
+}
+
+class Cachedclientguard {
+  + CreateReport()
+  + GetCustomizedCacheKey()
+}
+
+class detailed {
+  
+}
+
+class Cacheddetailed {
+  + CreateReport()
+  + GetCustomizedCacheKey()
+}
+
+class Payslip {
+  
+}
+
+class CachedPayslip {
+  + CreateReport()
+  + GetCustomizedCacheKey()
+}
+
+class PaySlipVer1 {
+  
+}
+
+class CachedPaySlipVer1 {
+  + CreateReport()
+  + GetCustomizedCacheKey()
+}
+
+class clientDetails {
+  
+}
+
+class CachedclientDetails {
+  + CreateReport()
+  + GetCustomizedCacheKey()
+}
+
+class clientguard {
+  
+}
+
+class Cachedclientguard {
+  + CreateReport()
+  + GetCustomizedCacheKey()
+}
+
+class detailed {
+  
+}
+
+class Cacheddetailed {
+  + CreateReport()
+  + GetCustomizedCacheKey()
+}
+
+class EmployeeInfo {
+  
+}
+
+class CachedEmployeeInfo {
+  + CreateReport()
+  + GetCustomizedCacheKey()
+}
+
+class Payslip {
+  
+}
+
+class CachedPayslip {
+  + CreateReport()
+  + GetCustomizedCacheKey()
+}
+
+@enduml
