@@ -1,0 +1,141 @@
+
+### SYSTEM ROLE
+You are a **Senior Database Architect**.
+You are NOT a Coder. You DO NOT write SQL code.
+
+### OBJECTIVE
+Document the logic of the Stored Procedure provided below.
+
+### 🛑 STRICT CONSTRAINTS
+1. **NO SQL CODE BLOCKS.** Do not rewrite the procedure code.
+2. **NO** "Here is the documentation" filler.
+3. **NO** generic explanations.
+4. **DO NOT EXPAND ACRONYMS.**
+   (Treat these as proper nouns: ["ID"])
+
+### ✅ REQUIRED OUTPUT FORMAT
+Output exactly this structure:
+
+# Procedure: sp_TAMS_Get_UserAccessStatusInfo_by_LoginID
+
+### Purpose
+{One clear sentence explaining what business task this performs.}
+
+### Parameters
+| Name | Type | Purpose |
+| :--- | :--- | :--- |
+| @ParamName | DataType | {Inferred usage} |
+
+### Logic Flow
+{Step-by-step plain English explanation.}
+
+### Data Interactions
+* **Reads:** {List tables explicitly selected from}
+* **Writes:** {List tables inserted/updated/deleted}
+
+---
+
+### ⬇️ RAW SQL INPUT ⬇️
+CREATE PROCEDURE [dbo].[sp_TAMS_Get_UserAccessStatusInfo_by_LoginID] 
+	@LoginID NVARCHAR(100) = NULL
+AS
+BEGIN
+	
+	CREATE TABLE #AccessStatus
+	(
+		Line NVARCHAR(10),
+		TrackType NVARCHAR(50),
+		Module NVARCHAR(10),
+		Status NVARCHAR(100)
+	)
+	
+	DECLARE @Line NVARCHAR(10);
+	DECLARE @TrackType NVARCHAR(50);
+	DECLARE @Module NVARCHAR(10);
+	DECLARE @UserID NVARCHAR(200);
+
+	IF EXISTS (SELECT * FROM TAMS_User WHERE LoginID = @LoginID)
+	BEGIN
+		SELECT @UserID = UserID FROM TAMS_User WHERE LoginID = @LoginID
+
+		DECLARE cur CURSOR FOR 
+			SELECT DISTINCT(Line),TrackType, Module FROM TAMS_Role WHERE Line NOT IN ('All') AND IsActive = 1
+		
+		OPEN cur;
+
+		FETCH NEXT FROM cur INTO @Line,@TrackType, @Module;
+
+		WHILE @@FETCH_STATUS = 0
+		BEGIN
+			IF EXISTS(SELECT * FROM TAMS_User_Role WHERE UserID = @UserID AND RoleID IN (
+				SELECT ID FROM TAMS_Role WHERE Line = @Line AND Module = @Module))
+			BEGIN
+				INSERT INTO #AccessStatus VALUES (@Line, @TrackType,@Module, 'Approved')
+			END
+			ELSE
+			BEGIN
+				IF EXISTS(SELECT * FROM TAMS_Registration r, TAMS_Reg_Module rm 
+					WHERE r.ID = rm.RegID
+					AND r.LoginID = @LoginID
+					AND rm.Line = @Line
+					AND rm.TrackType = @TrackType
+					AND rm.Module = @Module
+					AND rm.RegStatus IN (SELECT ID FROM TAMS_WFStatus
+										WHERE Line = @Line
+										and TrackType = @TrackType
+										AND WFType = 'UserRegStatus'
+										AND IsActive = 1
+										AND WFStatus NOT IN ('Approved', 'Rejected')))
+				BEGIN
+					INSERT INTO #AccessStatus VALUES (@Line,@TrackType, @Module, 'Pending Approval')
+				END
+			END;
+
+			FETCH NEXT FROM cur INTO @Line, @TrackType,@Module;
+		END;
+
+		CLOSE cur;
+		DEALLOCATE cur;
+
+	END
+	ELSE
+	BEGIN
+		DECLARE cur CURSOR FOR 
+			SELECT DISTINCT(Line),TrackType, Module FROM TAMS_Role WHERE Line NOT IN ('All') AND IsActive = 1
+		
+		OPEN cur;
+
+		FETCH NEXT FROM cur INTO @Line,@TrackType, @Module;
+
+		WHILE @@FETCH_STATUS = 0
+		BEGIN
+			IF EXISTS(SELECT * FROM TAMS_Registration r, TAMS_Reg_Module rm 
+				WHERE r.ID = rm.RegID
+				AND r.LoginID = @LoginID
+				AND rm.Line = @Line
+				and rm.TrackType = @TrackType
+				AND rm.Module = @Module
+				AND rm.RegStatus IN (SELECT ID FROM TAMS_WFStatus
+									WHERE Line = @Line
+									and TrackType = @TrackType
+									AND WFType = 'UserRegStatus'
+									AND IsActive = 1
+									AND WFStatus NOT IN ('Approved', 'Rejected')))
+			BEGIN
+				INSERT INTO #AccessStatus VALUES (@Line,@TrackType, @Module, 'Pending Approval')
+			END
+			ELSE
+
+			FETCH NEXT FROM cur INTO @Line,@TrackType, @Module;
+		END;
+
+		CLOSE cur;
+		DEALLOCATE cur;
+	END;
+
+	SELECT * FROM #AccessStatus;
+	DROP TABLE #AccessStatus;
+END
+
+### ⬆️ END OF INPUT ⬆️
+**INSTRUCTION:** Document the logic above in English.

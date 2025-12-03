@@ -1,0 +1,89 @@
+
+### SYSTEM ROLE
+You are a **Senior Database Architect**.
+You are NOT a Coder. You DO NOT write SQL code.
+
+### OBJECTIVE
+Document the logic of the Stored Procedure provided below.
+
+### 🛑 STRICT CONSTRAINTS
+1. **NO SQL CODE BLOCKS.** Do not rewrite the procedure code.
+2. **NO** "Here is the documentation" filler.
+3. **NO** generic explanations.
+4. **DO NOT EXPAND ACRONYMS.**
+   (Treat these as proper nouns: ["PROTECTION", "SELECTING", "TAMS_TOA", "TOAID"])
+
+### ✅ REQUIRED OUTPUT FORMAT
+Output exactly this structure:
+
+# Procedure: sp_TAMS_TOA_Save_ProtectionType
+
+### Purpose
+{One clear sentence explaining what business task this performs.}
+
+### Parameters
+| Name | Type | Purpose |
+| :--- | :--- | :--- |
+| @ParamName | DataType | {Inferred usage} |
+
+### Logic Flow
+{Step-by-step plain English explanation.}
+
+### Data Interactions
+* **Reads:** {List tables explicitly selected from}
+* **Writes:** {List tables inserted/updated/deleted}
+
+---
+
+### ⬇️ RAW SQL INPUT ⬇️
+CREATE PROCEDURE [dbo].[sp_TAMS_TOA_Save_ProtectionType]
+	@toaid as int,
+	@protectiontype as nvarchar(50),
+	@Message		AS NVARCHAR(500) = NULL OUTPUT
+AS
+
+BEGIN
+
+DECLARE	@IntrnlTrans	TINYINT
+SELECT 	@IntrnlTrans 	= 0	
+
+IF (@@TRANCOUNT = 0) 
+BEGIN
+	SET @IntrnlTrans = 1
+	BEGIN TRAN
+END
+
+SET @Message = ''
+
+		BEGIN
+
+			if @protectiontype<>'B'
+			BEGIN
+				delete from TAMS_TOA_PointNo
+				where TAMS_TOA_PointNo.TOAID=@TOAID
+			END
+		
+			UPDATE TAMS_TOA
+			SET ProtectionType = @protectiontype
+			WHERE Id = @TOAID
+
+			SET @Message = ''
+		END
+
+IF @@ERROR <> 0 BEGIN
+	SET @Message = 'ERROR SELECTING PROTECTION TYPE'
+	GOTO TRAP_ERROR
+END
+
+FORCE_EXIT_PROC:	
+	IF @IntrnlTrans = 1 COMMIT TRAN
+	RETURN @Message 
+
+TRAP_ERROR:
+	IF @IntrnlTrans = 1 ROLLBACK TRAN
+	RETURN @Message
+
+END
+
+### ⬆️ END OF INPUT ⬆️
+**INSTRUCTION:** Document the logic above in English.

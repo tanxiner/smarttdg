@@ -1,0 +1,425 @@
+
+### SYSTEM ROLE
+You are a **Senior Database Architect**.
+You are NOT a Coder. You DO NOT write SQL code.
+
+### OBJECTIVE
+Document the logic of the Stored Procedure provided below.
+
+### 🛑 STRICT CONSTRAINTS
+1. **NO SQL CODE BLOCKS.** Do not rewrite the procedure code.
+2. **NO** "Here is the documentation" filler.
+3. **NO** generic explanations.
+4. **DO NOT EXPAND ACRONYMS.**
+   (Treat these as proper nouns: ["ID", "NEL", "SNO", "TC", "TIME", "TMP", "TP", "TPD"])
+
+### ✅ REQUIRED OUTPUT FORMAT
+Output exactly this structure:
+
+# Procedure: sp_TAMS_OCC_GetOCCAuthPreviewByParameters_NEL_bak20230728
+
+### Purpose
+{One clear sentence explaining what business task this performs.}
+
+### Parameters
+| Name | Type | Purpose |
+| :--- | :--- | :--- |
+| @ParamName | DataType | {Inferred usage} |
+
+### Logic Flow
+{Step-by-step plain English explanation.}
+
+### Data Interactions
+* **Reads:** {List tables explicitly selected from}
+* **Writes:** {List tables inserted/updated/deleted}
+
+---
+
+### ⬇️ RAW SQL INPUT ⬇️
+CREATE PROCEDURE  [dbo].[sp_TAMS_OCC_GetOCCAuthPreviewByParameters_NEL_bak20230728]
+	@Line AS nvarchar(10) = NULL,
+	@OperationDate as date,
+	@AccessDate as date
+
+AS
+
+DECLARE @OCCAuthID as int,
+		@OCCAuthEndorserID as int,
+		@ActionBy as int,
+		@WFStatus as nvarchar(50),
+		@ActionOn as datetime
+
+--CREATE TABLE #TMP
+--(
+--	TractionPowerId int not null,	
+--	StationName nvarchar(50)
+--);
+
+
+CREATE TABLE #TMP_OCCAuthPreview
+(
+	SNO int not null,
+	ID int not null,	
+	OCCAuthID int not null,
+	Line nvarchar(10),
+	TractionPowerSection nvarchar(100),
+	HSCBName nvarchar(100),
+	Train nvarchar(50),
+	TrainClearCert_TC_Time nvarchar(8),
+	TrainClearCert_TC_Name nvarchar(500),
+	TrainClearCert_CC_Time nvarchar(8),
+	TrainClearCert_CC_Name nvarchar(500),
+	MT_Traction_Current_Off_Req_CC_Time nvarchar(8),
+	MT_Traction_Current_Off_Req_CC_Name nvarchar(500),
+	MT_Traction_Current_Off_PFR_Time nvarchar(8),
+	MT_Traction_Current_Off_PFR_Name nvarchar(500),
+	MT_Traction_Current_Off_RackOut_PFR_Time nvarchar(8),
+	MT_Traction_Current_Off_RackOut_PFR_Name nvarchar(500),
+	AuthForTrackAccess_CC_Time nvarchar(8),
+	AuthForTrackAccess_CC_Name nvarchar(500),
+	AuthForTrackAccess_TC_Time nvarchar(8),
+	AuthForTrackAccess_TC_Name nvarchar(500),
+	LineClearCert_TOA_TC_Time nvarchar(8),
+	LineClearCert_TOA_TC_Name nvarchar(500),
+	LineClearCert_SCD_TC_Time nvarchar(8),
+	LineClearCert_SCD_TC_Name nvarchar(500),
+	LineClearCert_CC_Time nvarchar(8),
+	LineClearCert_CC_Name nvarchar(500),
+	MT_Traction_Current_On_Req_CC_Time nvarchar(8),
+	MT_Traction_Current_On_Req_CC_Name nvarchar(500),
+	MT_Traction_Current_On_RackIn_PFR_Time nvarchar(8),
+	MT_Traction_Current_On_RackIn_PFR_Name nvarchar(500),
+	MT_Traction_Current_On_PFR_Time nvarchar(8),
+	MT_Traction_Current_On_PFR_Name nvarchar(500),
+	AuthForTrainInsert_CC_Time nvarchar(8),
+	AuthForTrainInsert_CC_Name nvarchar(500),
+	AuthForTrainInsert_TC_Time nvarchar(8),
+	AuthForTrainInsert_TC_Name nvarchar(500),
+	Remark nvarchar(1000),
+);
+
+IF @Line = 'NEL'
+BEGIN
+
+	--INSERT INTO #TMP(TractionPowerId, StationName)
+	--SELECT 
+	--   Id,
+	--   STUFF((SELECT ';' + S.StationName
+	--		  FROM [TAMS_Traction_Power_Detail] TPD, [TAMS_Station] S
+	--		  WHERE TPD.TractionPowerId = TP.ID
+	--		  AND TPD.StationId = S.ID
+	--		  AND  TPD.TractionPowerType = 'Station'
+	--		  FOR XML PATH('')), 1, 1, '') [StationName]
+	--FROM [TAMS_Traction_Power] TP
+	--WHERE TP.Line = 'NEL'
+	--GROUP BY TP.ID
+
+	INSERT INTO #TMP_OCCAuthPreview(
+	SNO, 
+	ID, 
+	OCCAuthID,
+	Line, 
+	TractionPowerSection,  
+	HSCBName,
+	Train,
+	TrainClearCert_TC_Time,
+	TrainClearCert_TC_Name,
+	TrainClearCert_CC_Time,
+	TrainClearCert_CC_Name,
+	MT_Traction_Current_Off_Req_CC_Time,
+	MT_Traction_Current_Off_Req_CC_Name,
+	MT_Traction_Current_Off_PFR_Time,
+	MT_Traction_Current_Off_PFR_Name,
+	MT_Traction_Current_Off_RackOut_PFR_Time,
+	MT_Traction_Current_Off_RackOut_PFR_Name,
+	AuthForTrackAccess_CC_Time,
+	AuthForTrackAccess_CC_Name,
+	AuthForTrackAccess_TC_Time,
+	AuthForTrackAccess_TC_Name,
+	LineClearCert_TOA_TC_Time,
+	LineClearCert_TOA_TC_Name,
+	LineClearCert_SCD_TC_Time,
+	LineClearCert_SCD_TC_Name,
+	LineClearCert_CC_Time,
+	LineClearCert_CC_Name,
+	MT_Traction_Current_On_Req_CC_Time,
+	MT_Traction_Current_On_Req_CC_Name,
+	MT_Traction_Current_On_RackIn_PFR_Time,
+	MT_Traction_Current_On_RackIn_PFR_Name,
+	MT_Traction_Current_On_PFR_Time,
+	MT_Traction_Current_On_PFR_Name,
+	AuthForTrainInsert_CC_Time,
+	AuthForTrainInsert_CC_Name,
+	AuthForTrainInsert_TC_Time,
+	AuthForTrainInsert_TC_Name,
+	Remark
+	)
+	SELECT ROW_NUMBER() OVER(ORDER BY tp.ID ASC) AS SNO
+		  ,tp.[ID]
+		  ,oa.[ID]
+		  ,tp.[Line]
+		  ,[TractionPowerSection]
+		  ,[HSCBName]
+		  ,[Train]
+		  ,'' AS TrainClearCert_TC_Time
+		  ,'' AS TrainClearCert_TC_Name
+		  ,'' AS TrainClearCert_CC_Time
+		  ,'' AS TrainClearCert_CC_Name 
+		  ,'' AS MT_Traction_Current_Off_Req_CC_Time 
+		  ,'' AS MT_Traction_Current_Off_Req_CC_Name 
+		  ,'' AS MT_Traction_Current_Off_PFR_Time 
+		  ,'' AS MT_Traction_Current_Off_PFR_Name 
+		  ,'' AS MT_Traction_Current_Off_RackOut_PFR_Time 
+		  ,'' AS MT_Traction_Current_Off_RackOut_PFR_Name 
+		  ,'' AS AuthForTrackAccess_CC_Time
+		  ,'' AS AuthForTrackAccess_CC_Name
+		  ,'' AS AuthForTrackAccess_TC_Time
+		  ,'' AS AuthForTrackAccess_TC_Name
+		  ,'' AS LineClearCert_TOA_TC_Time
+		  ,'' AS LineClearCert_TOA_TC_Name
+		  ,'' AS LineClearCert_SCD_TC_Time
+		  ,'' AS LineClearCert_SCD_TC_Name
+		  ,'' AS LineClearCert_CC_Time
+		  ,'' AS LineClearCert_CC_Name
+		  ,'' AS MT_Traction_Current_On_Req_CC_Time 
+		  ,'' AS MT_Traction_Current_On_Req_CC_Name 
+		  ,'' AS MT_Traction_Current_On_RackIn_PFR_Time 
+		  ,'' AS MT_Traction_Current_On_RackIn_PFR_Name
+		  ,'' AS MT_Traction_Current_On_PFR_Time 
+		  ,'' AS MT_Traction_Current_On_PFR_Name 
+		  ,'' AS AuthForTrainInsert_CC_Time
+		  ,'' AS AuthForTrainInsert_CC_Name
+		  ,'' AS AuthForTrainInsert_TC_Time
+		  ,'' AS AuthForTrainInsert_TC_Name
+		  ,oa.[Remark]
+	  FROM [TAMS_Traction_Power] tp, [TAMS_OCC_Auth] oa
+	  WHERE tp.ID = oa.TractionPowerId
+	  AND EffectiveDate <= GETDATE() and ExpiryDate >= GETDATE()
+	  AND IsActive = 1
+	  AND oa.OperationDate = @OperationDate
+	  AND oa.AccessDate = @AccessDate
+	  AND oa.Line = @Line
+	  --AND TC in 
+	  --(SELECT RosterCode FROM TAMS_OCC_Duty_Roster 
+	  -- WHERE OperationDate = CAST(@OperationDate as DATE)
+	  -- and [shift] = 3
+	  -- and [IsActive] = 1
+	  -- and [DutyStaffId] = @UserID
+	  -- )
+
+
+	DECLARE cur CURSOR FOR
+	SELECT OCCAuthID FROM #TMP_OCCAuthPreview
+
+
+	OPEN cur;
+
+	FETCH NEXT FROM cur INTO @OCCAuthID
+	WHILE @@FETCH_STATUS = 0
+	BEGIN
+
+		DECLARE cur1 CURSOR FOR
+		SELECT OCCAuthEndorserId, WFStatus, ActionOn, ActionBy FROM TAMS_OCC_Auth_Workflow WHERE OCCAuthId = @OCCAuthID AND ActionBy <> 1;
+
+		OPEN Cur1;
+
+		FETCH NEXT FROM Cur1 INTO @OCCAuthEndorserID, @WFStatus, @ActionOn, @ActionBy;
+		WHILE @@FETCH_STATUS = 0
+		BEGIN
+			IF @OCCAuthEndorserID = 117	--1
+				BEGIN
+					UPDATE #TMP_OCCAuthPreview
+					SET TrainClearCert_TC_Time = CONVERT(TIME, @ActionOn), 
+					TrainClearCert_TC_Name = (SELECT Name FROM TAMS_User WHERE Userid = @ActionBy)
+					WHERE OCCAuthID = @OCCAuthID
+				END;
+
+			IF @OCCAuthEndorserID = 118	--2
+				BEGIN
+					UPDATE #TMP_OCCAuthPreview
+					SET TrainClearCert_CC_Time = CONVERT(TIME, @ActionOn), 
+					TrainClearCert_CC_Name = (SELECT Name FROM TAMS_User WHERE Userid = @ActionBy)
+					WHERE OCCAuthID = @OCCAuthID
+				END;
+
+			IF @OCCAuthEndorserID = 119 --3
+				BEGIN
+					UPDATE #TMP_OCCAuthPreview
+					SET MT_Traction_Current_Off_Req_CC_Time = CONVERT(TIME, @ActionOn), 
+					MT_Traction_Current_Off_Req_CC_Name = (SELECT Name FROM TAMS_User WHERE Userid = @ActionBy)
+					WHERE OCCAuthID = @OCCAuthID
+				END;
+
+			IF @OCCAuthEndorserID = 120	--4
+				BEGIN
+					--UPDATE #TMP_OCCAuthPreview
+					--SET MT_Traction_Current_Off_PFR_Time = CONVERT(TIME, @ActionOn), 
+					--MT_Traction_Current_Off_PFR_Name = (SELECT Name FROM TAMS_User WHERE Userid = @ActionBy)
+					--WHERE OCCAuthID = @OCCAuthID
+
+					IF @WFStatus = 'Completed'
+						BEGIN
+							UPDATE #TMP_OCCAuthPreview
+							SET MT_Traction_Current_Off_PFR_Time = CONVERT(TIME, @ActionOn), 
+							MT_Traction_Current_Off_PFR_Name = (SELECT Name FROM TAMS_User WHERE Userid = @ActionBy)
+							WHERE OCCAuthID = @OCCAuthID
+						END;
+					ELSE IF @WFStatus = 'N.A.'
+						BEGIN
+							UPDATE #TMP_OCCAuthPreview
+							SET MT_Traction_Current_Off_PFR_Time = 'N.A.', 
+							MT_Traction_Current_Off_PFR_Name = (SELECT Name FROM TAMS_User WHERE Userid = @ActionBy)
+							WHERE OCCAuthID = @OCCAuthID
+						END;
+				END;
+
+			IF @OCCAuthEndorserID = 121	--5
+				BEGIN
+					IF @WFStatus = 'Completed'
+						BEGIN
+							UPDATE #TMP_OCCAuthPreview
+							SET MT_Traction_Current_Off_RackOut_PFR_Time = CONVERT(TIME, @ActionOn), 
+							MT_Traction_Current_Off_RackOut_PFR_Name = (SELECT Name FROM TAMS_User WHERE Userid = @ActionBy)
+							WHERE OCCAuthID = @OCCAuthID
+						END;
+					ELSE IF @WFStatus = 'N.A.'
+						BEGIN
+							UPDATE #TMP_OCCAuthPreview
+							SET MT_Traction_Current_Off_RackOut_PFR_Time = 'N.A.', 
+							MT_Traction_Current_Off_RackOut_PFR_Name = (SELECT Name FROM TAMS_User WHERE Userid = @ActionBy)
+							WHERE OCCAuthID = @OCCAuthID
+						END;
+				END;
+
+			IF @OCCAuthEndorserID = 122	--6
+				BEGIN
+					UPDATE #TMP_OCCAuthPreview
+					SET AuthForTrackAccess_CC_Time = CONVERT(TIME, @ActionOn), 
+					AuthForTrackAccess_CC_Name = (SELECT Name FROM TAMS_User WHERE Userid = @ActionBy)
+					WHERE OCCAuthID = @OCCAuthID
+				END;
+
+			IF @OCCAuthEndorserID = 123	--7
+				BEGIN
+					UPDATE #TMP_OCCAuthPreview
+					SET AuthForTrackAccess_TC_Time = CONVERT(TIME, @ActionOn), 
+					AuthForTrackAccess_TC_Name = (SELECT Name FROM TAMS_User WHERE Userid = @ActionBy)
+					WHERE OCCAuthID = @OCCAuthID
+				END;
+
+			IF @OCCAuthEndorserID = 124	--8
+				BEGIN
+					UPDATE #TMP_OCCAuthPreview
+					SET LineClearCert_TOA_TC_Time = CONVERT(TIME, @ActionOn), 
+					LineClearCert_TOA_TC_Name = (SELECT Name FROM TAMS_User WHERE Userid = @ActionBy)
+					WHERE OCCAuthID = @OCCAuthID
+				END;
+
+			IF @OCCAuthEndorserID = 125	--9
+				BEGIN
+					UPDATE #TMP_OCCAuthPreview
+					SET LineClearCert_SCD_TC_Time = CONVERT(TIME, @ActionOn), 
+					LineClearCert_SCD_TC_Name = (SELECT Name FROM TAMS_User WHERE Userid = @ActionBy)
+					WHERE OCCAuthID = @OCCAuthID
+				END;
+
+			IF @OCCAuthEndorserID = 126	--10
+				BEGIN
+					UPDATE #TMP_OCCAuthPreview
+					SET LineClearCert_CC_Time = CONVERT(TIME, @ActionOn), 
+					LineClearCert_CC_Name = (SELECT Name FROM TAMS_User WHERE Userid = @ActionBy)
+					WHERE OCCAuthID = @OCCAuthID
+				END;
+
+			IF @OCCAuthEndorserID = 127	--11
+				BEGIN
+					UPDATE #TMP_OCCAuthPreview
+					SET MT_Traction_Current_On_Req_CC_Time = CONVERT(TIME, @ActionOn), 
+					MT_Traction_Current_On_Req_CC_Name = (SELECT Name FROM TAMS_User WHERE Userid = @ActionBy)
+					WHERE OCCAuthID = @OCCAuthID
+				END;
+
+			IF @OCCAuthEndorserID = 128	--12
+				BEGIN
+					IF @WFStatus = 'Completed'
+						BEGIN
+							UPDATE #TMP_OCCAuthPreview
+							SET MT_Traction_Current_On_RackIn_PFR_Time = CONVERT(TIME, @ActionOn), 
+							MT_Traction_Current_On_RackIn_PFR_Name = (SELECT Name FROM TAMS_User WHERE Userid = @ActionBy)
+							WHERE OCCAuthID = @OCCAuthID
+						END;
+					ELSE IF @WFStatus = 'N.A.'
+						BEGIN
+							UPDATE #TMP_OCCAuthPreview
+							SET MT_Traction_Current_On_RackIn_PFR_Time = 'N.A.', 
+							MT_Traction_Current_On_RackIn_PFR_Name = (SELECT Name FROM TAMS_User WHERE Userid = @ActionBy)
+							WHERE OCCAuthID = @OCCAuthID
+						END;
+				END;
+
+			IF @OCCAuthEndorserID = 129	--13
+				BEGIN
+					----UPDATE #TMP_OCCAuthPreview
+					----SET MT_Traction_Current_On_PFR_Time = CONVERT(TIME, @ActionOn), 
+					----MT_Traction_Current_On_PFR_Name = (SELECT Name FROM TAMS_User WHERE Userid = @ActionBy)
+					----WHERE OCCAuthID = @OCCAuthID
+
+					IF @WFStatus = 'Completed'
+						BEGIN
+							UPDATE #TMP_OCCAuthPreview
+							SET MT_Traction_Current_On_PFR_Time = CONVERT(TIME, @ActionOn), 
+							MT_Traction_Current_On_PFR_Name = (SELECT Name FROM TAMS_User WHERE Userid = @ActionBy)
+							WHERE OCCAuthID = @OCCAuthID
+						END;
+					ELSE IF @WFStatus = 'N.A.'
+						BEGIN
+							UPDATE #TMP_OCCAuthPreview
+							SET MT_Traction_Current_On_PFR_Time = 'N.A.', 
+							MT_Traction_Current_On_PFR_Name = (SELECT Name FROM TAMS_User WHERE Userid = @ActionBy)
+							WHERE OCCAuthID = @OCCAuthID
+						END;
+				END;
+
+			IF @OCCAuthEndorserID = 130	--14
+				BEGIN
+					UPDATE #TMP_OCCAuthPreview
+					SET AuthForTrainInsert_CC_Time = CONVERT(TIME, @ActionOn), 
+					AuthForTrainInsert_CC_Name = (SELECT Name FROM TAMS_User WHERE Userid = @ActionBy)
+					WHERE OCCAuthID = @OCCAuthID
+				END;
+
+			IF @OCCAuthEndorserID = 131	--15
+				BEGIN
+					UPDATE #TMP_OCCAuthPreview
+					SET AuthForTrainInsert_TC_Time = CONVERT(TIME, @ActionOn), 
+					AuthForTrainInsert_TC_Name = (SELECT Name FROM TAMS_User WHERE Userid = @ActionBy)
+					WHERE OCCAuthID = @OCCAuthID
+				END;
+
+			FETCH NEXT FROM Cur1 INTO @OCCAuthEndorserID, @WFStatus, @ActionOn, @ActionBy;
+		END
+
+		CLOSE Cur1;
+		DEALLOCATE Cur1;
+
+		FETCH NEXT FROM cur INTO @OCCAuthID;
+
+	END;
+
+	CLOSE cur;
+	DEALLOCATE cur;
+
+
+	SELECT * FROM #TMP_OCCAuthPreview;
+	--SELECT * FROM #TMP;
+
+END
+
+--DROP TABLE #TMP;
+
+--DROP TABLE #TMP_Endorser;
+
+DROP TABLE #TMP_OCCAuthPreview;
+
+### ⬆️ END OF INPUT ⬆️
+**INSTRUCTION:** Document the logic above in English.

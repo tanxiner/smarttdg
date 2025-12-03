@@ -1,0 +1,84 @@
+
+### SYSTEM ROLE
+You are a **Senior Database Architect**.
+You are NOT a Coder. You DO NOT write SQL code.
+
+### OBJECTIVE
+Document the logic of the Stored Procedure provided below.
+
+### 🛑 STRICT CONSTRAINTS
+1. **NO SQL CODE BLOCKS.** Do not rewrite the procedure code.
+2. **NO** "Here is the documentation" filler.
+3. **NO** generic explanations.
+4. **DO NOT EXPAND ACRONYMS.**
+   (Treat these as proper nouns: [])
+
+### ✅ REQUIRED OUTPUT FORMAT
+Output exactly this structure:
+
+# Procedure: sp_TAMS_Check_UserExist
+
+### Purpose
+{One clear sentence explaining what business task this performs.}
+
+### Parameters
+| Name | Type | Purpose |
+| :--- | :--- | :--- |
+| @ParamName | DataType | {Inferred usage} |
+
+### Logic Flow
+{Step-by-step plain English explanation.}
+
+### Data Interactions
+* **Reads:** {List tables explicitly selected from}
+* **Writes:** {List tables inserted/updated/deleted}
+
+---
+
+### ⬇️ RAW SQL INPUT ⬇️
+CREATE PROCEDURE [dbo].[sp_TAMS_Check_UserExist] 
+	@SapNo		NVARCHAR(100) = NULL,
+	@LoginID	NVARCHAR(200) = NULL
+
+AS
+BEGIN
+
+	IF NOT @LoginID = '' AND NOT @SapNo = ''
+	BEGIN
+		IF EXISTS (SELECT * FROM TAMS_User WHERE LoginID = @LoginID AND SAPNo = @SapNo)
+		BEGIN
+			SELECT 1
+
+		END
+	END
+	IF @SapNo = ''
+	BEGIN
+		IF EXISTS(SELECT * FROM TAMS_User WHERE LoginID = @LoginID)
+		BEGIN
+			SELECT 1
+		END
+	END
+
+
+	--IF NOT @LoginID = ''
+	--BEGIN
+	--	IF EXISTS (SELECT * FROM TAMS_User WHERE LoginID = @LoginID)
+	--	BEGIN
+	--		SELECT 1
+
+	--	END
+	--END
+
+	--IF NOT @SapNo = ''
+	--BEGIN
+	
+	--	IF EXISTS(SELECT * FROM TAMS_User WHERE SAPNo = @SapNo)
+	--	BEGIN
+	--		SELECT 1
+	--	END
+	--END
+	
+END
+
+### ⬆️ END OF INPUT ⬆️
+**INSTRUCTION:** Document the logic above in English.

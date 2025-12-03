@@ -1,0 +1,574 @@
+
+### SYSTEM ROLE
+You are a **Senior Database Architect**.
+You are NOT a Coder. You DO NOT write SQL code.
+
+### OBJECTIVE
+Document the logic of the Stored Procedures provided below.
+
+### 🛑 STRICT CONSTRAINTS
+1. **NO SQL CODE BLOCKS.** Do not rewrite the procedure code.
+2. **NO** "Here is the documentation" filler.
+3. **NO** generic explanations (e.g. don't explain what a JOIN is).
+
+### ✅ REQUIRED OUTPUT FORMAT
+For each procedure, output exactly this structure:
+
+# Procedure: {ProcedureName}
+**Type:** Stored Procedure
+
+### Purpose
+{One clear sentence explaining what business task this performs.}
+
+### Parameters
+| Name | Type | Purpose |
+| :--- | :--- | :--- |
+| @ParamName | DataType | {Inferred usage} |
+
+### Logic Flow
+{Step-by-step plain English explanation. E.g., "1. Checks if user exists. 2. Inserts into Audit table. 3. Returns ID."}
+
+### Data Interactions
+* **Reads:** {List tables explicitly selected from}
+* **Writes:** {List tables inserted/updated/deleted}
+
+---
+
+### ⬇️ RAW SQL INPUT ⬇️
+CREATE   procedure  [dbo].[sp_TAMS_Approval_Proceed_To_App]
+	@TARID		AS INTEGER,						-- >> TAR ID
+	@TARWFID	AS INTEGER,						-- >> Current WF ID
+	@EID		AS INTEGER,						-- >> Current Endorser ID
+	@ELevel		AS INTEGER,						-- >> Current Endorser Level
+	@Remarks	AS NVARCHAR(1000) = NULL,		-- >> Remarks -- Mandatory for Reject / Optional for Approved / Endorse
+	@TVFRunMode			AS NVARCHAR(50) = NULL,	-- >> New Column to be confirmed with Adeline
+	@TVFRunModeUpdInd	AS NVARCHAR(5) = NULL,	-- >> Indicator to Update TVF Run Mode or Not.
+	@UserLI		AS NVARCHAR(100) = NULL,			-- >> User Login ID	
+	@Message	AS NVARCHAR(500) = NULL OUTPUT
+AS
+
+BEGIN
+
+DECLARE	@IntrnlTrans	TINYINT
+SELECT 	@IntrnlTrans 	= 0	
+
+IF (@@TRANCOUNT = 0) 
+BEGIN
+	SET @IntrnlTrans = 1
+	BEGIN TRAN
+END
+
+-- >>
+SET @Message = ''
+DECLARE @UserID		INTEGER
+DECLARE @UserName NVARCHAR(500)
+
+DECLARE @EMTARID		INTEGER
+DECLARE @EMTARStatus	NVARCHAR(20)
+DECLARE @EMTARNo		NVARCHAR(50)
+DECLARE @EMRemarks		NVARCHAR(1000)
+DECLARE @EMActor		NVARCHAR(100)
+DECLARE @EMToSend		NVARCHAR(1000)
+DECLARE @EMCCSend		NVARCHAR(1000)
+DECLARE @EMCompany		NVARCHAR(100)
+DECLARE @EMMsg			NVARCHAR(500)
+
+DECLARE @TARDate		DATE
+
+SELECT @UserID = Userid, @UserName = [Name]
+FROM TAMS_User
+	WHERE LoginId = @UserLI
+
+DECLARE @CurEndID		INTEGER
+DECLARE @CurEndTitle	NVARCHAR(100)
+DECLARE @CurWFID		INTEGER
+DECLARE @CurWFStatID	INTEGER
+DECLARE @CurRoleID		INTEGER
+DECLARE @CurReqVal		INTEGER
+DECLARE @CurReqTVF		INTEGER
+
+DECLARE @WFID		INTEGER
+
+DECLARE @Line			NVARCHAR(10)
+DECLARE @AccessDate		DATE
+DECLARE @AccessTimeSlot	NVARCHAR(50)
+DECLARE @TARType		NVARCHAR(50)
+DECLARE @AccessType		NVARCHAR(50)
+DECLARE @IsExclusive	BIT
+
+-- >>>
+DECLARE @TARWFCtr	INTEGER
+SET @TARWFCtr = 0
+
+SELECT @TARWFCtr = COUNT(*) 
+	FROM TAMS_TAR_Workflow
+		WHERE TARId = @TARID
+			AND ActionBy = @UserID
+			AND WFStatus = 'Approved'
+
+IF @TARWFCtr > 0
+	BEGIN
+		--SET @Message = 'Error! User ID have already approved this TAR.'
+		SET @Message = '1001'
+		GOTO FORCE_EXIT_PROC
+	END
+-- >>>
+
+IF @TVFRunModeUpdInd = 1
+	BEGIN
+		UPDATE TAMS_TAR
+			SET TVFMode = @TVFRunMode
+		WHERE ID = @TARID
+	END
+
+SELECT @Line		= Line,
+		@AccessDate		= AccessDate,
+		@AccessTimeSlot = isnull(AccessTimeSlot,''),
+		@TARType		= TARType,
+		@AccessType		= AccessType,
+		@IsExclusive	= IsExclusive,
+		@EMToSend = Email,		-- >> ToSendEmail
+		@EMCCSend = Email,
+		@EMTARID = Id,
+		@EMTARNo = TARNo,
+		@EMRemarks = ARRemark,
+		@EMCompany = Company
+	FROM TAMS_TAR
+		WHERE ID = @TARID
+
+SELECT @WFID = WorkflowId 
+	FROM TAMS_TAR_Workflow
+		WHERE ID = @TARWFID
+
+-- >> Current Level Endorser
+SELECT @CurEndID = ID, 
+		@CurEndTitle = Title,
+		@CurWFID = WorkflowId,
+		@CurWFStatID = WFStatusId,
+		@CurRoleID = RoleId,
+		@CurReqVal = RequireValidation,
+		@CurReqTVF = RequireTVF
+	FROM TAMS_Endorser
+		WHERE WorkflowId = @WFID
+			AND [Level] = @ELevel
+
+	-- >> Get Exception TARs - Sector Conflict
+
+	CREATE TABLE #TmpExc 
+	(TARID			BIGINT,
+	TARNo			NVARCHAR(20),
+	TARType			NVARCHAR(10),
+	AccessDate		NVARCHAR(20),
+	AccessTimeSlot  NVARCHAR(50),
+	AccessType		NVARCHAR(20),
+	IsExclusive		INT,
+	EmailAdd		NVARCHAR(200))
+
+	CREATE TABLE #TmpExcSector 
+	(TARID			BIGINT,
+	TARNo			NVARCHAR(20),
+	TARType			NVARCHAR(10),
+	AccessDate		NVARCHAR(20),
+	AccessTimeSlot  NVARCHAR(50),
+	AccessType		NVARCHAR(20),
+	IsExclusive		INT,
+	SectorID		INT,
+	SectorStr		NVARCHAR(50),
+	IsBuffer		INT,
+	EmailAdd		NVARCHAR(200))
+	
+	TRUNCATE TABLE #TmpExc
+	TRUNCATE TABLE #TmpExcSector
+
+	DECLARE @Cur01 CURSOR;
+
+	DECLARE @CID			INTEGER
+	DECLARE @CSectorID		INTEGER
+	DECLARE @CIsBuffer		BIT
+	DECLARE @CColourCode	NVARCHAR(20)
+	DECLARE @CIsAddBuffer	BIT
+
+	DECLARE @Cur02 CURSOR;
+
+	DECLARE @C2TARID		INTEGER 
+	DECLARE @C2TARNo		NVARCHAR(20) 
+	DECLARE @C2TARType		NVARCHAR(20)
+	DECLARE @C2AccessDate	DATE
+	DECLARE @C2AccessTimeSlot NVARCHAR(50)
+	DECLARE @C2AccessType	NVARCHAR(20) 
+	DECLARE @C2IsExclusive	BIT
+	DECLARE @C2SectorID		INTEGER 
+	DECLARE @C2SectorStr	NVARCHAR(20) 
+	DECLARE @C2IsBuffer		BIT 
+	DECLARE @C2EmailAdd		NVARCHAR(200) 
+
+	SET @Cur01 = CURSOR FAST_FORWARD 
+	FOR
+		SELECT ID, SectorId, IsBuffer, ColourCode, IsAddedBuffer FROM TAMS_TAR_Sector
+			WHERE TARId = @TARID
+				ORDER BY SectorId
+
+	OPEN @Cur01
+	
+	FETCH NEXT FROM @Cur01 INTO @CID, @CSectorID, @CIsBuffer, @CColourCode, @CIsAddBuffer
+	
+	WHILE @@FETCH_STATUS = 0 
+	
+		BEGIN
+
+			IF @CIsBuffer = 1
+				BEGIN
+					-- >> Is Buffer
+					-- PRINT 1
+					INSERT INTO #TmpExcSector
+						(TARID, TARNo, TARType, AccessDate, AccessTimeSlot,AccessType, IsExclusive, SectorID, SectorStr, IsBuffer, EmailAdd)
+					SELECT t.Id, t.TARNo, t.TARType, t.AccessDate,t.AccessTimeSlot, t.AccessType, t.IsExclusive,
+							ts.SectorId, s.Sector, ts.IsBuffer, t.Email 
+						FROM TAMS_TAR t, TAMS_TAR_Sector ts, TAMS_Sector s
+							WHERE t.Id = ts.TARId
+								AND s.ID = ts.SectorId
+								AND t.AccessDate = @AccessDate
+								AND isnull(t.AccessTimeSlot,'') = @AccessTimeSlot
+								AND ts.IsBuffer = 0
+								AND t.TARStatusId =   CASE WHEN @Line = 'NEL' THEN 9 ELSE 8 END   --Updated by HNin to include NEL approval status
+								AND ts.SectorId = @CSectorID
+								AND t.Id <> @TARID
+								AND s.IsActive = 1
+								AND @AccessDate BETWEEN s.EffectiveDate and S.ExpiryDate
+				END
+			ELSE
+				BEGIN
+					-- >> Not Buffer
+					-- PRINT 2
+					INSERT INTO #TmpExcSector
+						(TARID, TARNo, TARType, AccessDate,AccessTimeSlot, AccessType, IsExclusive, SectorID, SectorStr, IsBuffer, EmailAdd)
+					SELECT t.Id, t.TARNo, t.TARType, t.AccessDate,t.AccessTimeSlot, t.AccessType, t.IsExclusive,
+							ts.SectorId, s.Sector, ts.IsBuffer, t.Email 
+						FROM TAMS_TAR t, TAMS_TAR_Sector ts, TAMS_Sector s
+							WHERE t.Id = ts.TARId
+								AND s.ID = ts.SectorId
+								AND t.AccessDate = @AccessDate
+								AND isnull(t.AccessTimeSlot,'') = @AccessTimeSlot
+								-- >> AND ts.IsBuffer = 0
+								AND t.TARStatusId =  CASE WHEN @Line = 'NEL' THEN 9 ELSE 8 END   --Updated by HNin to include NEL approval status
+								AND ts.SectorId = @CSectorID
+								AND t.Id <> @TARID
+								AND s.IsActive = 1
+								AND @AccessDate BETWEEN s.EffectiveDate and S.ExpiryDate
+				END
+				
+			-- >> #TmpExcSector
+			SET @Cur02 = CURSOR FAST_FORWARD 
+			FOR
+				SELECT TARID, TARNo, TARType, AccessDate, AccessTimeSlot,AccessType, IsExclusive, SectorID, SectorStr, IsBuffer, EmailAdd 
+					FROM #TmpExcSector
+							ORDER BY TARID, SectorID
+
+			OPEN @Cur02
+	
+			FETCH NEXT FROM @Cur02 INTO @C2TARID, @C2TARNo, @C2TARType, @C2AccessDate, @C2AccessTimeSlot, @C2AccessType, @C2IsExclusive, @C2SectorID, @C2SectorStr, @C2IsBuffer, @C2EmailAdd
+	
+			WHILE @@FETCH_STATUS = 0 
+	
+				BEGIN
+					IF @AccessType = 'Protection' AND @IsExclusive = 0
+						BEGIN
+							print 1
+							IF @C2AccessType = 'Protection' AND @C2IsExclusive = 0
+								BEGIN
+									PRINT 'DO NOTHING'
+								END
+							ELSE
+								BEGIN
+									IF (SELECT COUNT(*) FROM #TmpExc WHERE TARID = @C2TARID) = 0
+										BEGIN
+											INSERT INTO #TmpExc
+												(TARID, TARNo, TARType, AccessDate,AccessTimeSlot, AccessType, IsExclusive, EmailAdd)
+											VALUES 
+												(@C2TARID, @C2TARNo, @C2TARType, @C2AccessDate,@C2AccessTimeSlot, @C2AccessType, @C2IsExclusive, @C2EmailAdd)
+										END
+								END
+						END
+					ELSE
+						BEGIN
+							IF (SELECT COUNT(*) FROM #TmpExc WHERE TARID = @C2TARID) = 0
+								BEGIN
+									INSERT INTO #TmpExc
+										(TARID, TARNo, TARType, AccessDate,AccessTimeSlot, AccessType, IsExclusive, EmailAdd)
+									VALUES 
+										(@C2TARID, @C2TARNo, @C2TARType, @C2AccessDate,@C2AccessTimeSlot, @C2AccessType, @C2IsExclusive, @C2EmailAdd)
+								END
+						END
+
+					FETCH NEXT FROM @Cur02 INTO @C2TARID, @C2TARNo, @C2TARType, @C2AccessDate,@C2AccessTimeSlot, @C2AccessType, @C2IsExclusive, @C2SectorID, @C2SectorStr, @C2IsBuffer, @C2EmailAdd
+				END 	
+
+			CLOSE @Cur02
+	
+			DEALLOCATE @Cur02
+			-- >> #TmpExcSector
+
+			FETCH NEXT FROM @Cur01 INTO @CID, @CSectorID, @CIsBuffer, @CColourCode, @CIsAddBuffer
+		END 	
+
+	CLOSE @Cur01
+	
+	DEALLOCATE @Cur01
+
+	-- >> Exception List. Sector Conflict, to show only if RequireValidation = True for current Level Endorser
+
+DECLARE @Cur03 CURSOR;
+
+DECLARE @C3TARID		INTEGER 
+DECLARE @C3TARNo		NVARCHAR(20) 
+DECLARE @C3TARType		NVARCHAR(20)
+DECLARE @C3AccessDate	DATE
+DECLARE @C3AccessTimeSlot NVARCHAR(20)
+DECLARE @C3AccessType	NVARCHAR(20) 
+DECLARE @C3IsExclusive	BIT
+DECLARE @C3EmailAdd		NVARCHAR(200) 
+
+-- >> Action Log
+DECLARE @LogMsg	NVARCHAR(100)
+
+
+-- >> #TmpExcSector
+SET @Cur03 = CURSOR FAST_FORWARD 
+FOR
+	SELECT TARID, TARNo, TARType, AccessDate,AccessTimeSlot, AccessType, IsExclusive, EmailAdd 
+		FROM #TmpExc
+			ORDER BY TARID
+
+OPEN @Cur03
+	
+FETCH NEXT FROM @Cur03 INTO @C3TARID, @C3TARNo, @C3TARType, @C3AccessDate, @C3AccessTimeSlot,@C3AccessType, @C3IsExclusive, @C3EmailAdd
+	
+WHILE @@FETCH_STATUS = 0 
+	
+	BEGIN
+		
+		-- >> NEL Cancel = 10 Else DTL or LRt = 9
+		UPDATE TAMS_TAR
+			SET TARStatusId = CASE WHEN @Line = 'NEL' THEN 10 ELSE 9 END,
+				UpdatedOn = GETDATE(),
+				UpdatedBy = @UserID
+		WHERE Id = @C3TARID
+
+		SET @LogMsg = 'TAR Form Cancelled by : ' + CAST(@UserName AS NVARCHAR(500)) + ' On ' + CAST(CONVERT(NVARCHAR(20), GETDATE(), 103) AS NVARCHAR(20)) + ' ' + CAST(CONVERT(NVARCHAR(20), GETDATE(), 108) AS NVARCHAR(20))
+		INSERT INTO [dbo].[TAMS_Action_Log]
+			([Line], [Module], [Function], [TransactionID], [LogMessage], [CreatedOn], [CreatedBy])
+		VALUES 
+			(@Line, 'TAR', 'Approval - Cancel', @C3TARID, @LogMsg, GETDATE(), @UserID)
+
+		IF @TARType = 'Urgent' -- >> If Current TAR Type is Urgent then send Email
+			BEGIN
+				-- >> Cancel Urgent TAR
+				SET @EMTARStatus = 'Cancelled'
+				SET @EMMsg = ''
+
+				EXEC sp_TAMS_Email_Cancel_TAR @C3TARID, @EMTARStatus, @C3TARNo, @C3EmailAdd, @EMMsg OUTPUT
+
+			END
+		
+		FETCH NEXT FROM @Cur03 INTO @C3TARID, @C3TARNo, @C3TARType, @C3AccessDate,@C3AccessTimeSlot, @C3AccessType, @C3IsExclusive, @C3EmailAdd
+	END 	
+
+CLOSE @Cur03
+	
+DEALLOCATE @Cur03
+-- >> #TmpExcSector
+
+	-- >> Get Exception TARs - Sector Conflict
+
+UPDATE TAMS_TAR_Workflow
+	SET WFStatus = 'Approved',
+		ActionBy = @UserID,
+		ActionOn = GETDATE()
+	WHERE ID =  @TARWFID
+
+DECLARE @NextEndID		INTEGER
+DECLARE @NextEndTitle	NVARCHAR(100)
+DECLARE @NextWFID		INTEGER
+DECLARE @NextWFStatID	INTEGER
+DECLARE @NextRoleID		INTEGER
+
+-- >> Next Level Endorser
+SELECT @NextEndID = ID, 
+		@NextEndTitle = Title,
+		@NextWFID = WorkflowId,
+		@NextWFStatID = WFStatusId,
+		@NextRoleID = RoleId
+	FROM TAMS_Endorser
+		WHERE WorkflowId = @WFID
+			AND [Level] = @ELevel + 1
+
+IF ISNULL(@NextEndTitle, '') = ''
+	BEGIN
+		-- >> If NEL Approved = 9 Else DTL or LRT = 8
+		UPDATE TAMS_TAR
+			SET TARStatusId = CASE WHEN @Line = 'NEL' THEN 9 ELSE 8 END,
+				UpdatedOn = GETDATE(),
+				UpdatedBy = @UserID
+			WHERE ID = @TARID
+
+		IF @TARType = 'Urgent'
+			BEGIN
+				SET @EMTARStatus = 'Approved'
+				SET @EMMsg = ''
+
+				EXEC sp_TAMS_Email_Urgent_TAR @EMTARID, @EMTARStatus, @EMTARNo, @EMRemarks, @EMActor, @EMToSend, @EMMsg OUTPUT
+			END
+
+	END
+ELSE
+	BEGIN
+
+		IF (SELECT COUNT(*) FROM TAMS_TAR_Workflow
+			WHERE TARId = @TARID
+				AND WorkflowId = @NextWFID
+				AND EndorserId = @NextEndID) = 0
+			BEGIN	
+				INSERT INTO [dbo].[TAMS_TAR_Workflow]
+					([TARId], [WorkflowId], [EndorserId], [UserId], [WFStatus], [Remark], [ActionOn], [ActionBy])
+				VALUES
+					(@TARID, @NextWFID, @NextEndID, NULL, 'Pending', '', GETDATE(), @UserID)
+			END
+
+		UPDATE TAMS_TAR
+			SET TARStatusId = @NextWFStatID,
+				UpdatedOn = GETDATE(),
+				UpdatedBy = @UserID
+			WHERE Id = @TARID
+
+		IF @TARType = 'Urgent'
+			BEGIN
+				-- >> NEXT ROLE ID EMAIL ALERT
+				-- >> PRINT 'Urgent Email'
+				DECLARE @RoleEmail	NVARCHAR(1000)
+				SET @RoleEmail = ''
+				SET @EMMsg = ''
+
+				SELECT @RoleEmail = @RoleEmail + ISNULL(a.Email + ', ', '') 
+					FROM TAMS_User a, TAMS_User_Role b
+						WHERE a.Userid = b.UserID
+							AND a.IsActive = 1
+							AND @TARDate BETWEEN a.ValidFrom AND a.ValidTo
+							AND b.RoleID = @NextEndID
+
+				IF LEN(LTRIM(RTRIM(@RoleEmail))) > 0
+					BEGIN
+						SET @RoleEmail = LEFT(LTRIM(RTRIM(@RoleEmail)), LEN(LTRIM(RTRIM(@RoleEmail))) - 1)
+					END
+
+				-- >> Select all email where role id = next role id
+				SET @EMToSend = @RoleEmail
+
+				-- >> 2024-01-31 Changes to add nelocc email to the recipient list for Urgent After and if next level is OCC Approval
+				DECLARE @WFTypeChk	NVARCHAR(50)
+
+				SELECT @WFTypeChk = WorkflowType
+					FROM TAMS_Workflow
+						WHERE ID = @WFID
+
+				IF @WFTypeChk = 'UrgentAfter' AND @NextEndTitle = 'SDS Approval'
+					BEGIN 
+						declare @SDSEmailForUrgent as nvarchar(100);
+						set @SDSEmailForUrgent = '';
+						
+						SELECT @SDSEmailForUrgent = ParaValue3 
+							FROM TAMS_Parameters
+								WHERE ParaCode = 'SDSContact'
+									AND ParaValue1 = @Line
+									AND LTRIM(RTRIM(ISNULL(ParaValue3, ''))) <> ''
+
+						IF LEN(LTRIM(RTRIM(@EMToSend))) > 0
+							BEGIN
+								-- >> 2024-01-16 Changes to add nelocc email to the recipient list 
+						 		SET @EMToSend = @EMToSend + ', ' + @SDSEmailForUrgent
+							END
+					END;
+				-- >> 2024-01-31 Changes to add nelocc email to the recipient list for Urgent After and if next level is OCC Approval
+
+				EXEC sp_TAMS_Email_Apply_Urgent_TAR 2, @EMCompany, @EMTARNo, @NextEndTitle, @EMToSend, @EMCCSend, @EMMsg OUTPUT
+			END
+	END
+
+	-- >> SET @LogMsg = 'TAR Form has approved by : ' + '' + ' On ' + GETDATE()	
+	SET @LogMsg = 'TAR Form Approved by : ' + CAST(@UserName AS NVARCHAR(500)) + ' On ' + CAST(CONVERT(NVARCHAR(20), GETDATE(), 103) AS NVARCHAR(20)) + ' ' + CAST(CONVERT(NVARCHAR(20), GETDATE(), 108) AS NVARCHAR(20))
+		
+	INSERT INTO [dbo].[TAMS_Action_Log]
+		([Line], [Module], [Function], [TransactionID], [LogMessage], [CreatedOn], [CreatedBy])
+	VALUES 
+		(@Line, 'TAR', 'Approved TAR', @TARID, @LogMsg, GETDATE(), @UserID)
+
+DECLARE @WFType	NVARCHAR(50)
+DECLARE @InvPow	BIT
+
+SELECT @WFType = WorkflowType,
+		@InvPow = InvolvePower 
+	FROM TAMS_Workflow
+		WHERE ID = @WFID
+
+IF @WFType = 'UrgentAfter' AND @InvPow = 1 AND @ELevel = 2
+	BEGIN
+		-- >> TAMS_DTL_PFR
+		-- >> PRINT 'EMAIL'
+
+		DECLARE @SDSEmail	NVARCHAR(1000)
+		DECLARE @SDSRole	NVARCHAR(50)
+		DECLARE @SDSEmailAdd	NVARCHAR(100)
+
+		SET @SDSEmail = ''
+		SET @SDSEmailAdd = ''
+		SET @SDSRole = @Line + '_PFR'
+		SET @EMTARStatus = 'Approved'
+		SET @EMMsg = ''
+
+		SELECT @SDSEmail = @SDSEmail + ISNULL(a.Email + ', ', '') 
+			FROM TAMS_User a, TAMS_User_Role b, TAMS_Role c
+				WHERE a.Userid = b.UserID
+					AND b.RoleID = c.ID
+					AND a.IsActive = 1
+					AND @TARDate BETWEEN a.ValidFrom AND a.ValidTo
+					AND c.Role = @SDSRole
+
+		-- >> 2024-01-16 Changes to add nelocc email to the recipient list 
+		SELECT @SDSEmailAdd = ParaValue3 
+			FROM TAMS_Parameters
+				WHERE ParaCode = 'SDSContact'
+					AND ParaValue1 = @Line
+					AND LTRIM(RTRIM(ISNULL(ParaValue3, ''))) <> ''
+
+		IF LEN(LTRIM(RTRIM(@SDSEmail))) > 0
+			BEGIN
+				-- >> 2024-01-16 Changes to add nelocc email to the recipient list 
+				SET @SDSEmail = LEFT(LTRIM(RTRIM(@SDSEmail)), LEN(LTRIM(RTRIM(@SDSEmail))) - 1)
+				SET @SDSEmail = @SDSEmail + ', ' + @SDSEmailAdd
+			END
+
+		EXEC sp_TAMS_Email_Urgent_TAR_OCC @TARID, @EMTARStatus, @EMTARNo, @Remarks, @SDSEmail, @EMMsg OUTPUT
+	END
+
+-- >>
+
+IF @@ERROR <> 0 BEGIN
+	SET @Message = 'ERROR INSERTING INTO TAMS_TAR'
+	GOTO TRAP_ERROR
+END
+
+FORCE_EXIT_PROC:	
+	IF @IntrnlTrans = 1 COMMIT TRAN
+	RETURN @Message 
+
+TRAP_ERROR:
+	IF @IntrnlTrans = 1 ROLLBACK TRAN
+	RETURN @Message
+
+END
+
+---
+
+
+
+### ⬆️ END OF INPUT ⬆️
+**INSTRUCTION:** Document the logic above in English.

@@ -1,0 +1,431 @@
+
+### SYSTEM ROLE
+You are a **Senior Database Architect**.
+You are NOT a Coder. You DO NOT write SQL code.
+
+### OBJECTIVE
+Document the logic of the Stored Procedures provided below.
+
+### 🛑 STRICT CONSTRAINTS
+1. **NO SQL CODE BLOCKS.** Do not rewrite the procedure code.
+2. **NO** "Here is the documentation" filler.
+3. **NO** generic explanations (e.g. don't explain what a JOIN is).
+
+### ✅ REQUIRED OUTPUT FORMAT
+For each procedure, output exactly this structure:
+
+# Procedure: {ProcedureName}
+**Type:** Stored Procedure
+
+### Purpose
+{One clear sentence explaining what business task this performs.}
+
+### Parameters
+| Name | Type | Purpose |
+| :--- | :--- | :--- |
+| @ParamName | DataType | {Inferred usage} |
+
+### Logic Flow
+{Step-by-step plain English explanation. E.g., "1. Checks if user exists. 2. Inserts into Audit table. 3. Returns ID."}
+
+### Data Interactions
+* **Reads:** {List tables explicitly selected from}
+* **Writes:** {List tables inserted/updated/deleted}
+
+---
+
+### ⬇️ RAW SQL INPUT ⬇️
+CREATE PROCEDURE [dbo].[sp_TAMS_GetTarSectorsByAccessDateAndLineAndDirection_SameSector]
+	@AccessDate as date,
+	@Line AS nvarchar(10) = NULL,
+	@Direction AS nvarchar(10) = NULL
+AS
+
+CREATE TABLE #TMP
+(
+	ID int not null,	
+	Line nvarchar(10),	
+	SameSector int,
+	IsSpecialSector bit,
+	Direction nvarchar(10),
+	Sector nvarchar(50),
+	TarNo nvarchar(50),
+	AccessDate date,
+	AccessType nvarchar(50),
+	SectorId int,
+	IsBuffer bit,
+	ColourCode nvarchar(50),
+	IsGap bit
+
+);
+IF @Line = 'DTL'
+BEGIN
+	insert into #TMP(ID, Line, SameSector, IsSpecialSector, Direction, Sector, TarNo, AccessDate, AccessType, SectorId, IsBuffer, ColourCode, IsGap)
+	SELECT a.ID, a.Line, a.SameSector, a.IsSpecialSector, Direction, Sector, TarNo, AccessDate, AccessType, SectorId, IsBuffer, ColourCode, IsGap
+	FROM TAMS_Sector a
+	LEFT JOIN TAMS_TAR_Sector c
+	LEFT JOIN TAMS_TAR b
+	on b.Id = c.TarId
+	on a.id = c.SectorId 
+	AND AccessDate = @AccessDate
+	AND TARStatusId = 8
+	AND (AccessType = 'Possession' OR (AccessType = 'Possession' OR isExclusive = 1))
+	WHERE a.Line = @Line
+	AND Direction = @Direction
+	AND IsActive = 1 
+	AND EffectiveDate <= GETDATE() AND ExpiryDate >= GETDATE()
+	ORDER BY [Order] ASC
+END
+ELSE IF @Line = 'NEL'
+BEGIN
+	insert into #TMP(ID, Line, SameSector, IsSpecialSector, Direction, Sector, TarNo, AccessDate, AccessType, SectorId, IsBuffer, ColourCode, IsGap)
+	SELECT a.ID, a.Line, a.SameSector, a.IsSpecialSector, Direction, Sector, TarNo, AccessDate, AccessType, SectorId, IsBuffer, ColourCode, IsGap
+	FROM TAMS_Sector a
+	LEFT JOIN TAMS_TAR_Sector c
+	LEFT JOIN TAMS_TAR b
+	on b.Id = c.TarId
+	on a.id = c.SectorId 
+	AND AccessDate = @AccessDate
+	AND TARStatusId = 9
+	AND (AccessType = 'Possession' OR (AccessType = 'Possession' OR isExclusive = 1))
+	WHERE a.Line = @Line
+	AND Direction = @Direction
+	AND IsActive = 1 
+	AND EffectiveDate <= GETDATE() AND ExpiryDate >= GETDATE()
+	ORDER BY [Order] ASC
+--IF @Line = 'DTL'
+--BEGIN
+--	SELECT a.ID, a.Line, Direction, Sector, TarNo, AccessDate, AccessType, SectorId, IsBuffer, ColourCode
+--	FROM TAMS_Sector a
+--	LEFT JOIN TAMS_TAR_Sector_Test c
+--	LEFT JOIN TAMS_TAR_Test b
+--	on b.Id = c.TarId
+--	on a.id = c.SectorId 
+--	AND AccessDate = @AccessDate
+--	AND TARStatusId = 8
+--	AND (AccessType = 'Protection' OR (AccessType = 'Protection' OR isExclusive = 1))
+--	WHERE a.Line = @Line
+--	AND Direction = @Direction
+--	AND IsActive = 1 
+--	AND EffectiveDate <= GETDATE() AND ExpiryDate >= GETDATE()
+--	ORDER BY [Order] ASC
+--END
+--ELSE IF @Line = 'NEL'
+--BEGIN
+--	SELECT a.ID, a.Line, Direction, Sector, TarNo, AccessDate, AccessType, SectorId, IsBuffer, ColourCode
+--	FROM TAMS_Sector a
+--	LEFT JOIN TAMS_TAR_Sector_Test c
+--	LEFT JOIN TAMS_TAR_Test b
+--	on b.Id = c.TarId
+--	on a.id = c.SectorId 
+--	AND AccessDate = @AccessDate
+--	AND TARStatusId = 8
+--	AND (AccessType = 'Protection' OR (AccessType = 'Protection' OR isExclusive = 1))
+--	WHERE a.Line = @Line
+--	AND Direction = @Direction
+--	AND IsActive = 1 
+--	AND (ElectricalSector <> '')
+--	AND EffectiveDate <= GETDATE() AND ExpiryDate >= GETDATE()
+--	ORDER BY [Order] ASC
+END
+
+update #TMP
+set ColourCode = (select ColourCode from #TMP where SameSector is not null and TarNo is not null and ColourCode is not null)
+where SameSector is not null
+
+SELECT * FROM #TMP;
+
+--select ColourCode from #TMP where SameSector is not null and TarNo is not null and ColourCode is not null
+DROP TABLE #TMP;
+
+---
+
+CREATE PROCEDURE [dbo].[sp_TAMS_GetTarSectorsByTarId]
+	@TarId as integer = 0
+
+AS
+BEGIN
+	SELECT a.ID, a.Line, Direction, Sector, TARNo, AccessDate, AccessType, SectorId, IsBuffer, ColourCode, IsGap
+	FROM TAMS_Sector a
+	INNER JOIN TAMS_TAR_Sector c
+	on a.id = c.SectorId 
+	INNER JOIN TAMS_TAR b
+	on b.Id = c.TARId
+	AND c.TARId = @TarId
+	AND c.IsBuffer <> 1
+	ORDER BY [Order], Sector ASC
+END
+
+---
+
+CREATE PROCEDURE [dbo].[sp_TAMS_GetTarStationsByTarId]
+	@TarId as integer = 0
+
+AS
+BEGIN
+	SELECT a.ID, a.Line, b.TarId, a.StationCode, a.StationName, a.StationLongName
+	FROM TAMS_Station a
+	INNER JOIN TAMS_TAR_Station b
+	on a.id = b.StationId
+	AND b.TARId = @TarId
+	ORDER BY [Order] ASC
+END
+
+---
+
+CREATE PROCEDURE [dbo].[sp_TAMS_GetTarWorkingLimitByPossessionId]
+	@PossessionId AS integer = 0
+AS
+BEGIN
+  select id, possessionid, redflashinglampsloc
+  from TAMS_Possession_WorkingLimit 
+  where possessionid = @PossessionId
+  order by id asc
+END
+
+---
+
+CREATE PROCEDURE [dbo].[sp_TAMS_GetWFStatusByLine]
+	@Line AS nvarchar(10) = NULL
+AS
+BEGIN
+	SELECT ID, Line, WFType, WFDescription, WFStatus, WFStatusId, [Order]
+	FROM TAMS_WFStatus 
+	WHERE Line = @Line
+	AND IsActive = 1 
+	ORDER BY [Order] ASC
+END
+
+---
+
+CREATE PROCEDURE  [dbo].[sp_TAMS_GetWFStatusByLineAndType]
+	@Line AS nvarchar(10) = NULL,
+	@TrackType as nvarchar(50) = NULL,
+	@Type AS nvarchar(50) = NULL
+AS
+BEGIN
+	SELECT ID, Line, WFType, WFDescription, WFStatus, WFStatusId, [Order]
+	FROM TAMS_WFStatus 
+	WHERE Line = @Line
+	and TrackType = @TrackType
+	AND WFType = @Type
+	AND IsActive = 1 
+	ORDER BY [Order] ASC
+END
+
+---
+
+CREATE PROCEDURE [dbo].[sp_TAMS_Get_All_Roles] 
+	@IsExternal	BIT
+AS
+BEGIN
+
+	SELECT * FROM TAMS_Role WHERE Line = 'DTL' AND Module = 'TAR' and TrackType = 'Mainline'
+	IF @IsExternal = 0
+	BEGIN
+		SELECT * FROM TAMS_Role WHERE Line = 'DTL' AND Module = 'OCC' and TrackType = 'Mainline'
+	END
+	SELECT * FROM TAMS_Role WHERE Line = 'NEL' AND Module = 'TAR' and TrackType = 'Mainline'
+	IF @IsExternal = 0
+	BEGIN
+	SELECT * FROM TAMS_Role WHERE Line = 'NEL' AND Module = 'OCC'  and TrackType = 'Mainline'
+	END
+	SELECT * FROM TAMS_Role WHERE Line = 'SPLRT' AND Module = 'TAR'  and TrackType = 'Mainline'
+	IF @IsExternal = 0
+	BEGIN
+	SELECT * FROM TAMS_Role WHERE Line = 'SPLRT' AND Module = 'OCC'  and TrackType = 'Mainline'
+	END
+	SELECT * FROM TAMS_Role WHERE Line = 'DTL' AND Module = 'TAR' and TrackType = 'Depot'
+	SELECT * FROM TAMS_Role WHERE Line = 'NEL' AND Module = 'TAR' and TrackType = 'Depot'
+	SELECT * FROM TAMS_Role WHERE Line = 'SPLRT' AND Module = 'TAR' and TrackType = 'Depot'
+	SELECT * FROM TAMS_Role WHERE Line = 'NEL' AND Module = 'DCC' and TrackType = 'Depot'
+	 
+	
+END
+
+---
+
+CREATE PROCEDURE [dbo].[sp_TAMS_Get_ChildMenuByUserRole] 
+	@UserID AS NVARCHAR(100) = null,
+	@MenuID AS NVARCHAR(100) = null,
+	@IsInternet AS NVARCHAR(1) = null
+AS
+BEGIN
+
+	DECLARE @urole AS NVARCHAR(2000);
+	DECLARE @rc2 AS INT;
+	DECLARE @loop2 AS INT;
+	SET @urole = '';
+
+	--To Keep Role ID List	
+	CREATE TABLE #RoleTbl
+	(
+		ROWID [int] IDENTITY(1,1),
+		RoleCode VARCHAR(50)
+	);	
+
+	INSERT INTO #RoleTbl
+	SELECT Distinct(ur.RoleID) 
+	FROM [TAMS_User_Role] ur , [TAMS_User] u, [TAMS_Role] r
+	WHERE  ur.UserID = u.UserID
+	AND r.ID = ur.RoleID
+	AND u.LoginID = @UserID
+	--AND u.userid IN (SELECT UserID FROM [TAMS_User] WHERE LoginID = @UserID AND IsActive = 1);
+
+
+	SELECT  @urole = @urole + '''' +  RoleCode  + '''' + ','
+	FROM #RoleTbl;
+
+    SET @urole = LEFT(@urole, NULLIF(LEN(@urole) - 1, -1));
+    PRINT('role: ' + @urole); 
+		
+	IF @urole IS NOT NULL AND @urole != '' 
+	  BEGIN
+		DECLARE @rsql AS NVARCHAR(2000);
+		if @IsInternet = 1 
+		begin 
+			 SET @rsql = 'SELECT MenuID, MenuLevel, DispText,ToolTip, ProgURL, ParentMenuID '+
+			'FROM TAMS_Menu ' +
+			'WHERE Active = 1  ' +
+			 ' AND IsInternet = ' + @IsInternet +
+			'AND MenuLevel = 2  ' +
+			'AND ParentMenuID = ''' + @MenuID +''' ' +
+			'AND MenuID IN(	 ' +	
+			'SELECT DISTINCT(MenuID) ' +
+			'FROM TAMS_Menu_Role ' +
+			'WHERE RoleId IN (' + @urole + '))' +
+			'AND ModuleID IN(	 ' +	
+			'SELECT DISTINCT(ModuleID) ' +
+			'FROM TAMS_Menu_Role ' +
+			'WHERE RoleId IN (' + @urole + ')) ORDER BY ID';
+		end;
+		else 
+		begin 
+		
+			SET @rsql = 'SELECT MenuID, MenuLevel, DispText,ToolTip, ProgURL, ParentMenuID '+
+			'FROM TAMS_Menu ' +
+			'WHERE Active = 1  ' +
+			--' AND IsInternet = ' + @IsInternet +
+			'AND MenuLevel = 2  ' +
+			'AND ParentMenuID = ''' + @MenuID +''' ' +
+			'AND MenuID IN(	 ' +	
+			'SELECT DISTINCT(MenuID) ' +
+			'FROM TAMS_Menu_Role ' +
+			'WHERE RoleId IN (' + @urole + '))' +
+			'AND ModuleID IN(	 ' +	
+			'SELECT DISTINCT(ModuleID) ' +
+			'FROM TAMS_Menu_Role ' +
+			'WHERE RoleId IN (' + @urole + ')) ORDER BY ID';
+		end;	
+		PRINT @rsql;
+		EXEC (@rsql);
+		
+		DROP TABLE #RoleTbl;
+	  END;
+	  ELSE 
+	  BEGIN 
+			SELECT MenuID, MenuLevel, DispText, ToolTip, ProgURL, ParentMenuID 
+				FROM Menu WHERE Active =1 AND MenuLevel = 2
+				AND ParentMenuID = @MenuID
+				AND ( @IsInternet = 0 or IsInternet = @IsInternet)
+				AND MenuID IN ('Application','Apply TRF','Logout')
+	  END; 
+    
+END
+
+---
+
+CREATE PROCEDURE [dbo].[sp_TAMS_Get_ChildMenuByUserRoleID] 
+	@UserID AS NVARCHAR(100) = null,
+	@MenuID AS NVARCHAR(100) = null,
+	@IsInternet AS NVARCHAR(1) = null
+AS
+BEGIN
+
+	DECLARE @urole AS NVARCHAR(2000);
+	DECLARE @rc2 AS INT;
+	DECLARE @loop2 AS INT;
+	SET @urole = '';
+
+	--To Keep Role ID List	
+	CREATE TABLE #RoleTbl
+	(
+		ROWID [int] IDENTITY(1,1),
+		RoleCode VARCHAR(50)
+	);	
+
+	INSERT INTO #RoleTbl
+	SELECT Distinct(ur.RoleID) 
+	FROM [TAMS_User_Role] ur , [TAMS_User] u, [TAMS_Role] r
+	WHERE  ur.UserID = u.UserID
+	AND r.ID = ur.RoleID
+	AND u.LoginID = @UserID
+	--AND u.userid IN (SELECT UserID FROM [TAMS_User] WHERE LoginID = @UserID AND IsActive = 1);
+
+
+	SELECT  @urole = @urole + '''' +  RoleCode  + '''' + ','
+	FROM #RoleTbl;
+
+    SET @urole = LEFT(@urole, NULLIF(LEN(@urole) - 1, -1));
+    PRINT('role: ' + @urole); 
+		
+	IF @urole IS NOT NULL AND @urole != '' 
+	  BEGIN
+		DECLARE @rsql AS NVARCHAR(2000);
+		if @IsInternet = 1 
+		begin 
+			 SET @rsql = 'SELECT MenuID, MenuLevel, DispText,ToolTip, ProgURL, ParentMenuID '+
+			'FROM TAMS_Menu ' +
+			'WHERE Active = 1  ' +
+			 ' AND IsInternet = ' + @IsInternet +
+			'AND MenuLevel = 2  ' +
+			'AND ParentMenuID = ''' + @MenuID +''' ' +
+			'AND MenuID IN(	 ' +	
+			'SELECT DISTINCT(MenuID) ' +
+			'FROM TAMS_Menu_Role ' +
+			'WHERE RoleId IN (' + @urole + '))' +
+			'AND ModuleID IN(	 ' +	
+			'SELECT DISTINCT(ModuleID) ' +
+			'FROM TAMS_Menu_Role ' +
+			'WHERE RoleId IN (' + @urole + ')) ORDER BY ID';
+		end;
+		else 
+		begin 
+		
+			SET @rsql = 'SELECT MenuID, MenuLevel, DispText,ToolTip, ProgURL, ParentMenuID '+
+			'FROM TAMS_Menu ' +
+			'WHERE Active = 1  ' +
+			--' AND IsInternet = ' + @IsInternet +
+			'AND MenuLevel = 2  ' +
+			'AND ParentMenuID = ''' + @MenuID +''' ' +
+			'AND MenuID IN(	 ' +	
+			'SELECT DISTINCT(MenuID) ' +
+			'FROM TAMS_Menu_Role ' +
+			'WHERE RoleId IN (' + @urole + '))' +
+			'AND ModuleID IN(	 ' +	
+			'SELECT DISTINCT(ModuleID) ' +
+			'FROM TAMS_Menu_Role ' +
+			'WHERE RoleId IN (' + @urole + ')) ORDER BY ID';
+		end;	
+		PRINT @rsql;
+		EXEC (@rsql);
+		
+		DROP TABLE #RoleTbl;
+	  END;
+	  ELSE 
+	  BEGIN 
+			SELECT MenuID, MenuLevel, DispText, ToolTip, ProgURL, ParentMenuID 
+				FROM Menu WHERE Active =1 AND MenuLevel = 2
+				AND ParentMenuID = @MenuID
+				AND ( @IsInternet = 0 or IsInternet = @IsInternet)
+				AND MenuID IN ('Application','Apply TRF','Logout')
+	  END; 
+    
+END
+
+---
+
+
+
+### ⬆️ END OF INPUT ⬆️
+**INSTRUCTION:** Document the logic above in English.

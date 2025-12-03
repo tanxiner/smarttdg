@@ -1,0 +1,430 @@
+
+### SYSTEM ROLE
+You are a **Senior Database Architect**.
+You are NOT a Coder. You DO NOT write SQL code.
+
+### OBJECTIVE
+Document the logic of the Stored Procedures provided below.
+
+### 🛑 STRICT CONSTRAINTS
+1. **NO SQL CODE BLOCKS.** Do not rewrite the procedure code.
+2. **NO** "Here is the documentation" filler.
+3. **NO** generic explanations (e.g. don't explain what a JOIN is).
+
+### ✅ REQUIRED OUTPUT FORMAT
+For each procedure, output exactly this structure:
+
+# Procedure: {ProcedureName}
+**Type:** Stored Procedure
+
+### Purpose
+{One clear sentence explaining what business task this performs.}
+
+### Parameters
+| Name | Type | Purpose |
+| :--- | :--- | :--- |
+| @ParamName | DataType | {Inferred usage} |
+
+### Logic Flow
+{Step-by-step plain English explanation. E.g., "1. Checks if user exists. 2. Inserts into Audit table. 3. Returns ID."}
+
+### Data Interactions
+* **Reads:** {List tables explicitly selected from}
+* **Writes:** {List tables inserted/updated/deleted}
+
+---
+
+### ⬇️ RAW SQL INPUT ⬇️
+CREATE PROCEDURE  [dbo].[sp_TAMS_Get_RegistrationInboxByUserID_hnin] 
+	@UserID INT
+AS
+BEGIN
+	--SELECT IIF(r.IsExternal = 1, 'External', 'Internal') AS 'UserType', r.Name, r.Email, r.UENNo, r.Company,
+	--r.SBSTContactPersonName, r.CreatedOn, rm.ID, rm.RegID, rm.Line, rm.Module, e.Title, wf.WFStatus
+	--FROM TAMS_Registration r, TAMS_Reg_Module rm, TAMS_Endorser e, TAMS_WFStatus wf
+	--WHERE r.id = rm.RegId 
+	--AND e.ID = rm.RegStatus
+	--AND e.RoleId IN 
+	--(
+	--	SELECT ur.RoleID 
+	--	FROM TAMS_User_Role ur 
+	--	WHERE ur.UserID = @UserID
+	--)
+	--AND wf.WFType = 'UserRegStatus'
+	--AND wf.Line = rm.Line
+	--AND wf.WFStatusID = e.WFStatusId
+
+
+	-- Option 2 - fail as tams_endorser is generic for OCC/TAR. There is no indicator
+	--SELECT IIF(r.IsExternal = 1, 'External', 'Internal') AS 'UserType', r.Name, r.Email, r.UENNo, r.Company,
+	--r.SBSTContactPersonName, r.CreatedOn, rm.ID, rm.RegID, rm.Line, rm.Module, e.Title, wf.WFStatus
+	--FROM TAMS_Registration r, TAMS_Reg_Module rm, TAMS_Endorser e, TAMS_WFStatus wf
+	--WHERE r.id = rm.RegId 
+	----AND e.ID = rm.RegStatus
+	--AND e.RoleId IN 
+	--(
+	--	SELECT ur.RoleID 
+	--	FROM TAMS_User_Role ur 
+	--	WHERE ur.UserID = @UserID
+	--)
+	--AND wf.WFType = 'UserRegStatus'
+	--AND wf.Line = rm.Line
+	--AND wf.WFStatusID = rm.regStatus
+	--AND e.WFStatusID = rm.regStatus
+	--AND e.Line = rm.Line
+	--AND e.WorkflowID = (SELECT ID FROM TAMS_Workflow 
+	--					WHERE Line = rm.Line 
+	--					AND WorkFlowType = (SELECT IIF(r.IsExternal = 1, 'ExtUser', 'IntUser')) 
+	--					AND GETDATE() >= EffectiveDate AND GETDATE() <= ExpiryDate AND IsActive = 1)
+
+	--To Keep Role ID List	
+	CREATE TABLE #RegistrationTable
+	(
+		--ROWID [int] IDENTITY(1,1),
+		RegID INT,
+		ID INT,
+		Line NVARCHAR(10),
+		TrackType NVARCHAR(50),
+		Module NVARCHAR(10),
+		WFStatus NVARCHAR(100),
+		UserType NVARCHAR(20),
+		Name NVARCHAR(500),
+		UENNo	NVARCHAR(100),
+		Company	NVARCHAR(200),
+		SBSTContactPersonName NVARCHAR(200),
+		CreatedOn DATETIME
+	);	
+
+	DECLARE @Line NVARCHAR(10);
+	DECLARE @TrackType NVARCHAR(50);
+	DECLARE @Module NVARCHAR(10);
+	DECLARE @Role NVARCHAR(100);
+	
+	DECLARE @RegId INT;
+	DECLARE @RegStatus INT;
+	DECLARE @WorkflowId INT;
+	DECLARE @EndorseId INT;
+
+	DECLARE @UpdatedBy INT;
+
+	DECLARE cur CURSOR FOR
+
+	SELECT r.Line,r.TrackType,  r.Module, r.Role FROM TAMS_User_Role ur, TAMS_Role r
+	WHERE ur.RoleID = r.ID
+	AND ur.Userid = @UserID
+	AND (r.Role LIKE '%_SysAdmin' OR r.Role LIKE '%_SysApprover')
+
+	OPEN cur;
+
+	FETCH NEXT FROM cur INTO @Line,@TrackType, @Module, @Role;
+
+	WHILE @@FETCH_STATUS = 0
+	BEGIN
+		
+		If @Role LIKE '%_SysAdmin'
+		BEGIN
+			INSERT INTO #RegistrationTable 
+			
+				SELECT rm.RegID, rm.ID, rm.Line,rm.TrackType, rm.Module, wf.WFStatus, IIF(r.IsExternal = 1, 'External', 'Internal') AS 'UserType', r.name, r.UENNo, r.Company, r.SBSTContactPersonName, r.CreatedOn FROM TAMS_Registration r, TAMS_Reg_Module rm, TAMS_WFStatus wf
+				WHERE r.ID = rm.RegID 
+				AND wf.WFType = 'UserRegStatus'
+				AND wf.Line = rm.Line
+				AND rm.TrackType = @TrackType
+				AND wf.WFStatusId = rm.RegStatus
+				AND rm.RegStatus in (SELECT DISTINCT(WFStatusId) FROM TAMS_WFStatus WHERE WFStatus = 'Pending Company Registration' AND LINE = @Line and TrackType = @TrackType)
+				AND rm.WFStatus = 'Pending'
+			print ' here 2';
+
+			INSERT INTO #RegistrationTable 
+				SELECT rm.RegID, rm.ID, rm.Line,rm.TrackType, rm.Module, wf.WFStatus, IIF(r.IsExternal = 1, 'External', 'Internal') AS 'UserType', r.name, r.UENNo, r.Company, r.SBSTContactPersonName, r.CreatedOn FROM TAMS_Registration r, TAMS_Reg_Module rm, TAMS_WFStatus wf
+				WHERE r.ID = rm.RegID 
+				AND wf.WFType = 'UserRegStatus'
+				AND wf.Line = rm.Line
+				AND rm.TrackType = @TrackType
+				AND wf.WFStatusId = rm.RegStatus
+				AND rm.RegStatus in (SELECT DISTINCT(WFStatusId) FROM TAMS_WFStatus WHERE WFStatus = 'Pending Company Approval' AND LINE = @Line and TrackType = @TrackType)
+			    AND rm.WFStatus = 'Pending'
+print ' here 3';
+			INSERT INTO #RegistrationTable
+				SELECT rm.RegID, rm.ID, rm.Line,rm.TrackType, rm.Module, wf.WFStatus, IIF(r.IsExternal = 1, 'External', 'Internal') AS 'UserType', r.name, r.UENNo, r.Company, r.SBSTContactPersonName, r.CreatedOn FROM TAMS_Registration r, TAMS_Reg_Module rm, TAMS_WFStatus wf
+				WHERE r.ID = rm.RegID 
+				AND wf.WFType = 'UserRegStatus'
+				AND wf.Line = rm.Line
+				AND rm.TrackType = @TrackType
+				AND wf.WFStatusId = rm.RegStatus
+				AND rm.RegStatus in (SELECT DISTINCT(WFStatusId) FROM TAMS_WFStatus WHERE WFStatus = 'Pending System Admin Approval' AND LINE = @Line and TrackType = @TrackType)
+				AND rm.Line = @Line
+				AND rm.Module = @Module
+				AND rm.WFStatus = 'Pending'
+				print ' here 4';
+		END
+		
+		IF @Role LIKE '%_SysApprover'
+		BEGIN
+		print ' here 1';
+			DECLARE cur1 CURSOR FOR
+
+			SELECT rm.RegID,  rm.Line,rm.TrackType, rm.Module, rm.RegStatus, rm.WorkflowId, rm.EndorserId FROM TAMS_Registration r, TAMS_Reg_Module rm, TAMS_WFStatus wf
+			WHERE r.ID = rm.RegID 
+			AND wf.WFType = 'UserRegStatus'
+			AND wf.Line = rm.Line
+			AND rm.TrackType = @TrackType
+			AND wf.WFStatusId = rm.RegStatus
+			AND rm.RegStatus in (SELECT DISTINCT(WFStatusId) FROM TAMS_WFStatus WHERE WFStatus = 'Pending System Approver Approval' AND LINE = @Line and TrackType = @TrackType)
+			AND rm.Line = @Line
+			AND rm.Module = @Module
+			AND rm.WFStatus = 'Pending'
+
+			OPEN cur1;
+
+			FETCH NEXT FROM cur1 INTO @RegId, @Line,@TrackType, @Module, @RegStatus, @WorkflowId, @EndorseId;
+
+			WHILE @@FETCH_STATUS = 0
+			BEGIN
+				SET @RegStatus = @RegStatus - 1;
+				SELECT @UpdatedBy=UpdatedBy FROM TAMS_Reg_Module WHERE RegId=@RegId AND Line=@Line and TrackType = @TrackType AND Module=@Module AND RegStatus=@RegStatus
+
+				IF @UpdatedBy != @UserID
+				BEGIN
+
+					INSERT INTO #RegistrationTable
+						SELECT rm.RegID, rm.ID, rm.Line,rm.TrackType, rm.Module, wf.WFStatus, IIF(r.IsExternal = 1, 'External', 'Internal') AS 'UserType', r.name, r.UENNo, r.Company, r.SBSTContactPersonName, r.CreatedOn FROM TAMS_Registration r, TAMS_Reg_Module rm, TAMS_WFStatus wf
+						WHERE r.ID = rm.RegID 
+						AND wf.WFType = 'UserRegStatus'
+						AND wf.Line = rm.Line
+						AND rm.TrackType = @TrackType
+						AND wf.WFStatusId = rm.RegStatus
+						AND rm.RegStatus in (SELECT DISTINCT(WFStatusId) FROM TAMS_WFStatus WHERE WFStatus = 'Pending System Approver Approval' AND LINE = @Line and TrackType = @TrackType)
+						AND rm.Line = @Line
+						AND rm.Module = @Module
+						AND rm.WFStatus = 'Pending'
+						AND rm.RegId = @RegId
+				END
+
+				FETCH NEXT FROM cur1 INTO @RegId, @Line,@TrackType, @Module, @RegStatus, @WorkflowId, @EndorseId;
+			END
+			CLOSE cur1;
+			DEALLOCATE cur1;
+		END 
+
+		FETCH NEXT FROM cur INTO @Line,@TrackType, @Module, @Role;
+	END;
+
+	CLOSE cur;
+	DEALLOCATE cur;
+
+	SELECT DISTINCT(RegID), ID, Line,TrackType, Module, WFStatus, UserType, Name, UENNo, Company, SBSTContactPersonName, CreatedOn 
+	FROM #RegistrationTable
+
+	DROP TABLE #RegistrationTable;
+
+END
+
+---
+
+CREATE PROCEDURE  [dbo].[sp_TAMS_Get_RegistrationInformationByRegModuleID] 
+	@RegModuleID INT
+AS
+BEGIN
+
+	DECLARE @RegId INT;
+	DECLARE @Line NVARCHAR(20);
+	Declare @TrackType nvarchar(50) ;
+	DECLARE @Module NVARCHAR(20);
+	DECLARE @RegStatus INT;
+	DECLARE @PrevRegModuleID INT;
+
+	IF EXISTS(SELECT * FROM TAMS_Reg_Module WHERE ID = @RegModuleID)
+	BEGIN
+
+		--SELECT r.*, rm.*, e.Title, wf.WFStatus 
+		--FROM TAMS_Registration r, TAMS_Reg_Module rm, TAMS_Endorser e, TAMS_WFStatus wf
+		--WHERE r.id = rm.RegId 
+		--AND rm.RegStatus = e.ID
+		--AND rm.id = @RegModuleID
+		--AND wf.WFType = 'UserRegStatus'
+		--AND wf.Line = rm.Line
+		--AND e.WfStatusId = wf.WFStatusID
+
+		SELECT r.*, rm.ID, rm.RegId, rm.Line, rm.TrackType,rm.Module, rm.RegStatus, rm.WorkflowId, rm.EndorserId,  wf.WFStatus 
+		FROM TAMS_Registration r, TAMS_Reg_Module rm, TAMS_WFStatus wf
+		WHERE r.id = rm.RegID
+		AND rm.ID = @RegModuleID
+		AND wf.WFType = 'UserRegStatus'
+		AND wf.Line = rm.Line
+		
+		AND wf.WFStatusId = rm.RegStatus
+
+		SELECT @RegId=RegID, @Line=Line,@TrackType = TrackType, @Module=Module, @RegStatus=RegStatus FROM TAMS_Reg_Module WHERE ID = @RegModuleID
+
+		SET @RegStatus = @RegStatus - 1;
+
+		SELECT @PrevRegModuleID=ID FROM TAMS_Reg_Module WHERE RegId = @RegId AND Line=@Line AND Module=@Module AND RegStatus=@RegStatus;
+	END;
+
+	IF EXISTS(SELECT * FROM TAMS_Reg_Role WHERE RegModID = @PrevRegModuleID)
+	BEGIN
+
+		SELECT rr.*, r.Role, r.RoleDesc FROM TAMS_Reg_Role rr, TAMS_Role r 
+		WHERE rr.RegRoleID = r.ID
+		AND RegModID = @PrevRegModuleID;
+	END;
+
+	IF EXISTS(SELECT * FROM TAMS_Reg_QueryDept WHERE RegModID = @PrevRegModuleID)
+	BEGIN
+
+		SELECT * FROM TAMS_Reg_QueryDept WHERE RegModID = @PrevRegModuleID
+	END;
+
+END
+
+---
+
+CREATE PROCEDURE  [dbo].[sp_TAMS_Get_RolesByLineModule] 
+	@Line	NVARCHAR(100) = NULL,
+	@TrackType	NVARCHAR(50) = NULL,
+	@Module NVARCHAR(100) = NULL
+AS
+BEGIN
+	
+	SELECT ID, Line,TrackType, Module, Role, RoleDesc
+	FROM TAMS_Role
+	WHERE Line LIKE @Line
+	AND TrackType LIKE @TrackType
+	AND Module LIKE @Module;
+	
+END
+
+---
+
+CREATE PROCEDURE [dbo].[sp_TAMS_Get_SignUpStatusByLoginID] 
+	@LoginID NVARCHAR(100) = NULL
+AS
+BEGIN
+	
+	IF EXISTS(SELECT * FROM TAMS_Registration WHERE LoginID = @LoginID)
+	BEGIN
+		DECLARE @ID INT;
+
+		SELECT TOP 1 * FROM TAMS_Registration WHERE LoginID = @LoginID ORDER BY CreatedOn Desc
+		SELECT @ID = ID FROM TAMS_Registration WHERE LoginID = @LoginID ORDER BY CreatedOn Desc
+	
+
+		CREATE TABLE #AccessStatus
+		(
+			Line NVARCHAR(10),
+			Module NVARCHAR(10),
+			Status NVARCHAR(100),
+			Pending NVARCHAR(100),
+			NotifiedAt DATETIME
+		)
+	
+		DECLARE @Line NVARCHAR(10);
+		DECLARE @Module NVARCHAR(10);
+
+		DECLARE cur CURSOR FOR
+			SELECT DISTINCT rm.Line, rm.Module 
+			FROM TAMS_Registration r, TAMS_Reg_Module rm
+			WHERE r.ID = rm.RegID
+			AND r.LoginID = @LoginID
+
+		OPEN cur;
+
+		FETCH NEXT FROM cur INTO @Line, @Module;
+
+		WHILE @@FETCH_STATUS = 0
+		BEGIN
+			DECLARE @RegStatusID INT;
+			DECLARE @UserType NVARCHAR(20);
+			DECLARE @WFStatusID INT;
+			DECLARE @WFStatus NVARCHAR(100);
+			DECLARE @WFPending NVARCHAR(100);
+			DECLARE @Notified DATETIME;
+			DECLARE @IsExternal INT;
+
+			SELECT TOP 1 @RegStatusID = rm.RegStatus, @Notified = rm.UpdatedOn, @UserType = IIF(r.IsExternal = 1, 'ExtUser', 'IntUser'), @IsExternal = r.IsExternal
+			FROM TAMS_Registration r, TAMS_Reg_Module rm
+			WHERE r.ID = rm.RegID
+			AND r.LoginID = @LoginID
+			AND rm.Line = @Line
+			AND rm.Module = @Module 
+			ORDER BY r.CreatedOn DESC
+
+			--SELECT @WFStatus = WFStatus, @WFStatusID = WFStatusID 
+			--FROM TAMS_WFStatus
+			--WHERE Line = @Line
+			--AND WFType = 'UserRegStatus'
+			--AND IsActive = 1
+			--AND ID = @RegStatusID
+
+			SELECT @WFStatus = WFStatus, @WFStatusID = WFStatusID 
+			FROM TAMS_WFStatus
+			WHERE Line = @Line
+			AND WFType = 'UserRegStatus'
+			AND IsActive = 1
+			AND ID IN (SELECT RegStatus from  TAMS_Reg_Module WHERE RegId = @ID)
+
+			IF @IsExternal = 0
+			BEGIN
+				SET @UserType = @Module + @UserType;
+			END
+
+			IF @WFStatus IN ('Rejected', 'Company Rejected', 'Approved')
+			BEGIN
+				SET @WFPending = '-';
+			END
+			ELSE
+			BEGIN
+				SELECT @WFPending = r.Role
+				FROM TAMS_Endorser e, TAMS_Workflow w, TAMS_Role r
+				WHERE e.WFStatusID = @WFStatusID
+				AND w.ID = e.WorkflowID
+				AND w.WorkflowType = @UserType
+				AND w.IsActive = 1
+				AND w.EffectiveDate <= GETDATE()
+				AND w.ExpiryDate >= GETDATE()
+				AND e.RoleID = r.ID
+				AND e.Line = @Line
+			END
+
+			INSERT INTO #AccessStatus VALUES (@Line, @Module, @WFStatus, @WFPending, @Notified);
+
+
+			FETCH NEXT FROM cur INTO @Line, @Module;
+
+		END;
+
+		CLOSE cur;
+		DEALLOCATE cur;
+
+
+		SELECT * FROM #AccessStatus ORDER BY Line, Module DESC;
+		DROP TABLE #AccessStatus;
+
+	END;
+END
+
+---
+
+CREATE PROCEDURE [dbo].[sp_TAMS_Get_UserAccessRoleInfo_by_ID] 
+	@UserID NVARCHAR(100) = NULL
+AS
+BEGIN
+
+	IF EXISTS (SELECT * FROM TAMS_User WHERE UserID = @UserID)
+	BEGIN
+		SELECT * 
+		FROM TAMS_User_Role ur, TAMS_Role r
+		WHERE ur.roleID = r.ID
+		AND ur.UserID = @UserID
+
+	END
+	
+END
+
+---
+
+
+
+### ⬆️ END OF INPUT ⬆️
+**INSTRUCTION:** Document the logic above in English.

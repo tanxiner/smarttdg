@@ -1,0 +1,313 @@
+
+### SYSTEM ROLE
+You are a **Senior Database Architect**.
+You are NOT a Coder. You DO NOT write SQL code.
+
+### OBJECTIVE
+Document the logic of the Stored Procedures provided below.
+
+### 🛑 STRICT CONSTRAINTS
+1. **NO SQL CODE BLOCKS.** Do not rewrite the procedure code.
+2. **NO** "Here is the documentation" filler.
+3. **NO** generic explanations (e.g. don't explain what a JOIN is).
+
+### ✅ REQUIRED OUTPUT FORMAT
+For each procedure, output exactly this structure:
+
+# Procedure: {ProcedureName}
+**Type:** Stored Procedure
+
+### Purpose
+{One clear sentence explaining what business task this performs.}
+
+### Parameters
+| Name | Type | Purpose |
+| :--- | :--- | :--- |
+| @ParamName | DataType | {Inferred usage} |
+
+### Logic Flow
+{Step-by-step plain English explanation. E.g., "1. Checks if user exists. 2. Inserts into Audit table. 3. Returns ID."}
+
+### Data Interactions
+* **Reads:** {List tables explicitly selected from}
+* **Writes:** {List tables inserted/updated/deleted}
+
+---
+
+### ⬇️ RAW SQL INPUT ⬇️
+create PROCEDURE [dbo].[sp_TAMS_Reject_UserRegistrationRequestByRegModID_20231009] 	
+	@RegModID			INT,
+	@UpdatedBy			INT
+AS
+BEGIN
+	--BEGIN TRY
+	--	BEGIN TRANSACTION;
+		DECLARE @Line NVARCHAR(10);
+		DECLARE @Module NVARCHAR(10);
+		DECLARE @RegID INT;
+		DECLARE @RegStatusID INT;
+		DECLARE @WFStatus NVARCHAR(100);
+
+		SELECT @RegID = RegID, @Line = Line, @Module = Module, @RegStatusID = RegStatus 
+			FROM TAMS_Reg_Module WHERE ID = @RegModID;
+
+		SELECT @WFStatus = WFStatus FROM TAMS_WFStatus WHERE ID = @RegStatusID;
+		 
+		-- If status still at Pending Company Registration || Pending Company Approval, reject the entire request. 
+		IF @WFStatus = 'Pending Company Registration' OR @WFStatus = 'Pending Company Approval'
+		BEGIN
+			DECLARE @cLine NVARCHAR(10);
+			DECLARE @cModule NVARCHAR(10);
+			DECLARE @cRegModID INT;
+			DECLARE @cRegStatus INT;
+
+			DECLARE cur CURSOR FOR 
+			SELECT ID, Line, Module, RegStatus FROM TAMS_Reg_Module WHERE RegID = @RegID;
+
+			OPEN cur;
+			FETCH NEXT FROM cur INTO @cRegModID, @cLine, @cModule, @cRegStatus
+
+			DECLARE @Sender NVARCHAR (100);
+			DECLARE @SysID NVARCHAR(10);
+			DECLARE @Subject NVARCHAR(500);    
+			DECLARE @Sys NVARCHAR(100);
+			DECLARE @Greetings  NVARCHAR(20);     
+			DECLARE @ToList NVARCHAR(MAX);
+			DECLARE @CCList NVARCHAR(MAX);
+			DECLARE @BCCList NVARCHAR(MAX);
+			DECLARE @Separator NVARCHAR(10);        
+			DECLARE @AlertMsg NVARCHAR(MAX);
+			DECLARE @AlertID AS INTEGER; 
+
+			DECLARE @Body VARCHAR(max);
+			DECLARE @Body1 VARCHAR(max);
+			DECLARE @Body2 VARCHAR(max);
+			DECLARE @Body3 VARCHAR(max);
+			DECLARE @Link NVARCHAR(MAX);
+
+			DECLARE @LoginPage	NVARCHAR(500)
+					
+			DECLARE @SendTo	NVARCHAR(200);	
+
+			WHILE @@FETCH_STATUS = 0
+			BEGIN
+				DECLARE @NextStageTitle NVARCHAR(100);
+				DECLARE @NextStageID	INT;
+
+				-- Reject straight to last stage. Hard Coded to Company Rejected
+				SELECT @NextStageID = ID
+				FROM TAMS_WFStatus 
+				WHERE WFType = 'UserRegStatus' 
+				AND Line = (SELECT Line FROM TAMS_Reg_Module WHERE ID = @cRegModID)
+				AND WFStatus = 'Company Rejected'
+
+				UPDATE TAMS_Reg_Module 
+				SET RegStatus = @NextStageID, 
+					WFStatus = 'Rejected',
+					UpdatedOn = GETDATE(), 
+					UpdatedBy = @UpdatedBy 
+				WHERE ID = @cRegModID
+
+				-- Sends email
+				-- Get Send to list
+				SELECT @ToList = Email FROM TAMS_Registration WHERE ID = @RegID;
+			
+
+				SET @Sender = 'TAMS Admin';
+				SET @SysID = 'TAMS';
+				SET @Subject = 'For your information: Company Registration has been rejected.'
+				SET @Sys = 'Track Access Management System'   
+				SET @Greetings = 'Dear Sir/Madam, '  
+				--SET @ToList = ''
+				SET @CCList = ''   
+				SET @BCCList = ''
+				SET @Separator = ','    
+				SET @CCList = ''
+				--SET @ToList = '';
+
+				SET @Body1 = ''
+				SET @Body2 = ''
+				SET @Body3 = ''
+			
+				SET @Body1 = @Body1 + '<table width="100%">'
+				SET @Body1 = @Body1 + '<tr align="left" valign="middle" style="font-size:10pt; font-face:Arial;">'
+				SET @Body1 = @Body1 + '<td>Please be informed that your company registration has been rejected. Thus, your User application has also been rejected. You will need to reapply for User registration.</td>'
+				SET @Body1 = @Body1 + '</tr>'
+				SET @Body1 = @Body1 + '</table>'
+				--SET @LoginPage = 'https://sbstweb.sbstransit.com.sg/TAMS/Login.aspx'
+			
+				--SET @LoginPage = 'http://nelappsvr/TAMS/Login.aspx'
+
+				--IF @IsExternal = 1
+				--BEGIN
+				--	SET @LoginPage = 'http://nelappuat/TAMS/Dev/ExternalLogin.aspx'
+
+				--END
+
+				--SET @Body2 = @Body2 + '<br>'
+				--SET @Body2 = @Body2 + '<table width="100%">'
+				--SET @Body2 = @Body2 + '<tr align="left" valign="middle" style="font-size:10pt; font-face:Arial;">'
+				--SET @Body2 = @Body2 + '<td>Click on the link <a href=' + @LoginPage + '>here</a> to access the Company Registration request.</td>'
+				--SET @Body2 = @Body2 + '</tr>'
+				--SET @Body2 = @Body2 + '</table>'
+
+				SET @Body3 = @Body3 + '<br>'
+				SET @Body3 = @Body3 + '<table width="100%">'
+				SET @Body3 = @Body3 + '<tr align="left" valign="middle" style="font-size:10pt; font-face:Arial;">'
+				SET @Body3 = @Body3 + '<td>***********************************************<br>Do Not reply. This is a computer generated Email. <br>***********************************************</td>'
+				SET @Body3 = @Body3 + '</tr>'
+				SET @Body3 = @Body3 + '</table>'
+
+				SET @Body = ''
+				SET @Body = @Body1 + @Body2 + @Body3
+
+				SET @BCCList = ''
+
+				EXEC [dbo].EAlertQ_EnQueue 
+					@Sender = @Sender, 
+					@UserId = @SysID, 
+					@Subject = @Subject,        
+					@Sys = @Sys,  
+					@Greetings = @Greetings, 
+					@AlertMsg = @Body, 
+					@SendTo = @ToList,        
+					@CC = @CCList, 
+					@BCC= @BCCList, 
+					@Separator = @Separator, 
+					@AlertID =  @AlertID output
+
+				FETCH NEXT FROM cur INTO @cRegModID, @cLine, @cModule, @cRegStatus
+			END;
+
+			CLOSE cur;
+			DEALLOCATE cur;
+
+			-- Insert Audit Log
+			INSERT INTO TAMS_Action_Log VALUES 
+			(
+				'All', 
+				'All', 
+				'UserReg-Registration', 
+				@RegID, 
+				'User Registration has been rejected', 
+				GETDATE(), 
+				@UpdatedBy
+			)
+
+		END;
+
+		IF @WFStatus = 'Pending System Admin Approval' OR @WFStatus = 'Pending System Approver Approval'
+		BEGIN
+			-- Reject straight to last stage. Hard Coded to Rejected
+			SELECT @NextStageID = ID
+			FROM TAMS_WFStatus 
+			WHERE WFType = 'UserRegStatus' 
+			AND Line = (SELECT Line FROM TAMS_Reg_Module WHERE ID = @RegModID)
+			AND WFStatus = 'Rejected'
+
+			UPDATE TAMS_Reg_Module 
+			SET RegStatus = @NextStageID, 
+				WFStatus = 'Rejected',
+				UpdatedOn = GETDATE(), 
+				UpdatedBy = @UpdatedBy 
+			WHERE ID = @RegModID
+
+			-- Insert Audit Log
+			INSERT INTO TAMS_Action_Log VALUES 
+			(
+				@Line, 
+				@Module, 
+				'UserReg-Registration', 
+				@RegID, 
+				'Module in Registration has been rejected', 
+				GETDATE(), 
+				@UpdatedBy
+			)
+
+			-- Sends email
+			SELECT @ToList = Email FROM TAMS_Registration WHERE ID = @RegID;
+			
+
+			SET @Sender = 'TAMS Admin';
+			SET @SysID = 'TAMS';
+			SET @Subject = 'For your information: User Registration Request has been rejected'
+			SET @Sys = 'Track Access Management System'   
+			SET @Greetings = 'Dear Sir/Madam, '  
+			--SET @ToList = ''
+			SET @CCList = ''   
+			SET @BCCList = ''
+			SET @Separator = ','    
+			SET @CCList = ''
+			--SET @ToList = '';
+
+			SET @Body1 = ''
+			SET @Body2 = ''
+			SET @Body3 = ''
+			
+			SET @Body1 = @Body1 + '<table width="100%">'
+			SET @Body1 = @Body1 + '<tr align="left" valign="middle" style="font-size:10pt; font-face:Arial;">'
+			SET @Body1 = @Body1 + '<td>Please be informed that your User Registration for ' + @Line + ' ' + @Module + ' has been rejected.</td>'
+			SET @Body1 = @Body1 + '</tr>'
+			SET @Body1 = @Body1 + '</table>'
+			--SET @LoginPage = 'https://sbstweb.sbstransit.com.sg/TAMS/Login.aspx'
+			
+			--SET @LoginPage = 'http://nelappsvr/TAMS/Login.aspx'
+
+			--IF @IsExternal = 1
+			--BEGIN
+			--	SET @LoginPage = 'http://nelappuat/TAMS/Dev/ExternalLogin.aspx'
+
+			--END
+
+			--SET @Body2 = @Body2 + '<br>'
+			--SET @Body2 = @Body2 + '<table width="100%">'
+			--SET @Body2 = @Body2 + '<tr align="left" valign="middle" style="font-size:10pt; font-face:Arial;">'
+			--SET @Body2 = @Body2 + '<td>Click on the link <a href=' + @LoginPage + '>here</a> to access the Company Registration request.</td>'
+			--SET @Body2 = @Body2 + '</tr>'
+			--SET @Body2 = @Body2 + '</table>'
+
+			SET @Body3 = @Body3 + '<br>'
+			SET @Body3 = @Body3 + '<table width="100%">'
+			SET @Body3 = @Body3 + '<tr align="left" valign="middle" style="font-size:10pt; font-face:Arial;">'
+			SET @Body3 = @Body3 + '<td>***********************************************<br>Do Not reply. This is a computer generated Email. <br>***********************************************</td>'
+			SET @Body3 = @Body3 + '</tr>'
+			SET @Body3 = @Body3 + '</table>'
+
+			SET @Body = ''
+			SET @Body = @Body1 + @Body2 + @Body3
+
+			SET @BCCList = ''
+
+			EXEC [dbo].EAlertQ_EnQueue 
+				@Sender = @Sender, 
+				@UserId = @SysID, 
+				@Subject = @Subject,        
+				@Sys = @Sys,  
+				@Greetings = @Greetings, 
+				@AlertMsg = @Body, 
+				@SendTo = @ToList,        
+				@CC = @CCList, 
+				@BCC= @BCCList, 
+				@Separator = @Separator, 
+				@AlertID =  @AlertID output
+
+		END; 
+
+		
+
+		-- Else move to rejected by Line/Module
+
+	--	COMMIT TRANSACTION;
+	--END TRY
+	--BEGIN CATCH
+	--	ROLLBACK TRANSACTION;
+	--END CATCH
+
+END;
+
+---
+
+
+
+### ⬆️ END OF INPUT ⬆️
+**INSTRUCTION:** Document the logic above in English.

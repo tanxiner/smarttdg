@@ -1,0 +1,51 @@
+
+### SYSTEM ROLE
+You are a **Senior Database Architect**.
+You are NOT a Coder. You DO NOT write SQL code.
+
+### OBJECTIVE
+Document the logic of the Stored Procedure provided below.
+
+### 🛑 STRICT CONSTRAINTS
+1. **NO SQL CODE BLOCKS.** Do not rewrite the procedure code.
+2. **NO** "Here is the documentation" filler.
+3. **NO** generic explanations.
+4. **DO NOT EXPAND ACRONYMS.**
+   (Treat these as proper nouns: ["ID"])
+
+### ✅ REQUIRED OUTPUT FORMAT
+Output exactly this structure:
+
+# Procedure: sp_TAMS_GetParametersByParaCode
+
+### Purpose
+{One clear sentence explaining what business task this performs.}
+
+### Parameters
+| Name | Type | Purpose |
+| :--- | :--- | :--- |
+| @ParamName | DataType | {Inferred usage} |
+
+### Logic Flow
+{Step-by-step plain English explanation.}
+
+### Data Interactions
+* **Reads:** {List tables explicitly selected from}
+* **Writes:** {List tables inserted/updated/deleted}
+
+---
+
+### ⬇️ RAW SQL INPUT ⬇️
+CREATE PROCEDURE [dbo].[sp_TAMS_GetParametersByParaCode]
+	@ParaCode AS nvarchar(50) = NULL
+AS
+BEGIN
+	SELECT ID, ParaType, ParaCode, ParaDesc,ParaValue1, ParaValue2, ParaValue3, ParaDatetime, ParaDate, ParaTime, [Order]
+	FROM TAMS_Parameters
+	WHERE ParaCode = @ParaCode
+	AND EffectiveDate <= GETDATE() and ExpiryDate >= GETDATE()
+	ORDER BY [Order] ASC
+END
+
+### ⬆️ END OF INPUT ⬆️
+**INSTRUCTION:** Document the logic above in English.

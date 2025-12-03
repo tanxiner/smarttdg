@@ -1,0 +1,551 @@
+
+### SYSTEM ROLE
+You are a **Technical Writer** specializing in Legacy Web Applications.
+You are NOT a Developer. You DO NOT write code.
+
+### OBJECTIVE
+Analyze the "Code Behind" files to create a **Page Functionality Reference**.
+
+### 🛑 HARD NEGATIVE CONSTRAINTS
+1. **NO** C# or SQL code blocks.
+2. **NO** "Installation" or "Setup" sections.
+3. **NO** explanation of standard ASP.NET concepts (e.g., don't explain what Page_Load is; explain what *this specific page* does inside it).
+4. **NO** mentions of `.designer.cs` or auto-generated controls.
+
+### ✅ STRICT OUTPUT FORMAT
+For every Page/Control found in the input, output this structure:
+
+# Page: {PageName}
+**File:** {Filename}
+
+### 1. User Purpose
+{One sentence explaining what the user does here. E.g., "Users fill out this form to request track access."}
+
+### 2. Key Events & Logic
+| Event / Method | Business Logic Summary |
+| :--- | :--- |
+| {MethodName} | {Plain English description of what happens. E.g., "Validates inputs, calls DAO to save, sends email."} |
+
+### 3. Data Interactions
+* **Reads:** {List entities/tables loaded (e.g., User, BlockedTar)}
+* **Writes:** {List entities/tables saved or updated}
+
+---
+
+### ⬇️ RAW CODE BEHIND INPUT ⬇️
+{
+  "file": "TARForm_App.aspx.cs",
+  "language": "C#",
+  "namespaces": [
+    "TAMS"
+  ],
+  "classes": [
+    {
+      "name": "TARForm_App",
+      "modifiers": "public partial",
+      "baseType": "System.Web.UI.Page",
+      "interfaces": []
+    }
+  ],
+  "methods": [
+    "protected Page_Load(sender: object, e: EventArgs): void",
+    "protected Tab1_Click(sender: object, e: EventArgs): void",
+    "protected Tab2_Click(sender: object, e: EventArgs): void",
+    "protected Tab3_Click(sender: object, e: EventArgs): void",
+    "private PopOnLoad(): void",
+    "protected lnkDownload_Click(sender: object, e: EventArgs): void",
+    "protected dgOR_ItemDataBound(sender: object, e: DataGridItemEventArgs): void",
+    "protected gvPossAddPL_RowDataBound(sender: object, e: GridViewRowEventArgs): void",
+    "protected gvPossAddWL_RowDataBound(sender: object, e: GridViewRowEventArgs): void",
+    "protected gvPossAddOO_RowDataBound(sender: object, e: GridViewRowEventArgs): void",
+    "protected dgPossPowerSector_ItemDataBound(sender: object, e: DataGridItemEventArgs): void",
+    "protected lbtnAddBufferZone_Click(sender: object, e: EventArgs): void",
+    "protected gvAddBufferZone_RowDataBound(sender: object, e: GridViewRowEventArgs): void",
+    "protected gvAddBufferZone_RowCommand(sender: object, e: GridViewCommandEventArgs): void",
+    "protected lbtnAddTVFStation_Click(sender: object, e: EventArgs): void",
+    "protected gvAddTVF_RowDataBound(sender: object, e: GridViewRowEventArgs): void",
+    "protected gvAddTVF_RowCommand(sender: object, e: GridViewCommandEventArgs): void",
+    "protected lbCReject_Click(sender: object, e: EventArgs): void",
+    "protected lbProcToApp_Click(sender: object, e: EventArgs): void",
+    "protected lbNReject_Click(sender: object, e: EventArgs): void",
+    "protected lbEndorse_Click(sender: object, e: EventArgs): void",
+    "protected lbtnTARID_Click(sender: object, e: EventArgs): void",
+    "protected gvConflictTAR_RowDataBound(sender: object, e: GridViewRowEventArgs): void",
+    "protected rblTVFRunMode_SelectedIndexChanged(sender: object, e: EventArgs): void"
+  ],
+  "ir": {
+    "file": "TARForm_App.aspx.cs",
+    "path": "tams-dev\\TAMS\\TARForm_App.aspx.cs",
+    "namespaces": [
+      "TAMS"
+    ],
+    "types": [
+      {
+        "kind": "ClassDeclaration",
+        "name": "TARForm_App",
+        "namespaceName": "TAMS",
+        "modifiers": "public partial",
+        "baseTypes": [
+          "System.Web.UI.Page"
+        ],
+        "methods": [
+          {
+            "name": "Page_Load",
+            "modifiers": "protected",
+            "returnType": "void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "EventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "Tab1_Click",
+            "modifiers": "protected",
+            "returnType": "void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "EventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "Tab2_Click",
+            "modifiers": "protected",
+            "returnType": "void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "EventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "Tab3_Click",
+            "modifiers": "protected",
+            "returnType": "void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "EventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "PopOnLoad",
+            "modifiers": "private",
+            "returnType": "void",
+            "parameters": []
+          },
+          {
+            "name": "lnkDownload_Click",
+            "modifiers": "protected",
+            "returnType": "void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "EventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "dgOR_ItemDataBound",
+            "modifiers": "protected",
+            "returnType": "void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "DataGridItemEventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "gvPossAddPL_RowDataBound",
+            "modifiers": "protected",
+            "returnType": "void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "GridViewRowEventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "gvPossAddWL_RowDataBound",
+            "modifiers": "protected",
+            "returnType": "void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "GridViewRowEventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "gvPossAddOO_RowDataBound",
+            "modifiers": "protected",
+            "returnType": "void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "GridViewRowEventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "dgPossPowerSector_ItemDataBound",
+            "modifiers": "protected",
+            "returnType": "void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "DataGridItemEventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "lbtnAddBufferZone_Click",
+            "modifiers": "protected",
+            "returnType": "void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "EventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "gvAddBufferZone_RowDataBound",
+            "modifiers": "protected",
+            "returnType": "void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "GridViewRowEventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "gvAddBufferZone_RowCommand",
+            "modifiers": "protected",
+            "returnType": "void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "GridViewCommandEventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "lbtnAddTVFStation_Click",
+            "modifiers": "protected",
+            "returnType": "void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "EventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "gvAddTVF_RowDataBound",
+            "modifiers": "protected",
+            "returnType": "void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "GridViewRowEventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "gvAddTVF_RowCommand",
+            "modifiers": "protected",
+            "returnType": "void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "GridViewCommandEventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "lbCReject_Click",
+            "modifiers": "protected",
+            "returnType": "void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "EventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "lbProcToApp_Click",
+            "modifiers": "protected",
+            "returnType": "void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "EventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "lbNReject_Click",
+            "modifiers": "protected",
+            "returnType": "void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "EventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "lbEndorse_Click",
+            "modifiers": "protected",
+            "returnType": "void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "EventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "lbtnTARID_Click",
+            "modifiers": "protected",
+            "returnType": "void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "EventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "gvConflictTAR_RowDataBound",
+            "modifiers": "protected",
+            "returnType": "void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "GridViewRowEventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "rblTVFRunMode_SelectedIndexChanged",
+            "modifiers": "protected",
+            "returnType": "void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "EventArgs",
+                "defaultValue": null
+              }
+            ]
+          }
+        ],
+        "properties": [],
+        "fields": [
+          {
+            "name": "DAL",
+            "modifiers": "",
+            "type": "oFormApp"
+          }
+        ],
+        "sql": [
+          {
+            "Line": 439,
+            "Kind": "CommandTextAssignment",
+            "sql": "SELECT FileName, FileType, [File] AS FileUpload  FROM TAMS_TAR_Attachment  WHERE TARAccessReqId=@TARAccessReqId",
+            "CommandTypeIsStoredProcedure": false,
+            "inferred": [],
+            "raw": "cmd.CommandText = \"SELECT FileName, FileType, [File] AS FileUpload \" +\n                            \" FROM TAMS_TAR_Attachment \" +\n                            \" WHERE TARAccessReqId=@TARAccessReqId\""
+          },
+          {
+            "Line": 437,
+            "Kind": "SqlCommandCtor",
+            "sql": null,
+            "CommandTypeIsStoredProcedure": false,
+            "inferred": [],
+            "raw": "new SqlCommand()"
+          }
+        ]
+      }
+    ]
+  },
+  "sql_usages": [
+    {
+      "file": "TARForm_App.aspx.cs",
+      "Namespace": "TAMS",
+      "ClassName": "TARForm_App",
+      "MethodName": "lnkDownload_Click",
+      "MethodSignature": "TAMS.TARForm_App.lnkDownload_Click(object, System.EventArgs)",
+      "Line": 439,
+      "Kind": "CommandTextAssignment",
+      "SqlText": "SELECT FileName, FileType, [File] AS FileUpload  FROM TAMS_TAR_Attachment  WHERE TARAccessReqId=@TARAccessReqId",
+      "CommandTypeIsStoredProcedure": false,
+      "InferredStoredProcedures": [],
+      "RawSnippet": "cmd.CommandText = \"SELECT FileName, FileType, [File] AS FileUpload \" +\n                            \" FROM TAMS_TAR_Attachment \" +\n                            \" WHERE TARAccessReqId=@TARAccessReqId\""
+    },
+    {
+      "file": "TARForm_App.aspx.cs",
+      "Namespace": "TAMS",
+      "ClassName": "TARForm_App",
+      "MethodName": "lnkDownload_Click",
+      "MethodSignature": "TAMS.TARForm_App.lnkDownload_Click(object, System.EventArgs)",
+      "Line": 437,
+      "Kind": "SqlCommandCtor",
+      "SqlText": null,
+      "CommandTypeIsStoredProcedure": false,
+      "InferredStoredProcedures": [],
+      "RawSnippet": "new SqlCommand()"
+    }
+  ]
+}
+
+
+### ⬆️ END OF INPUT ⬆️
+**INSTRUCTION:** Document the page logic above. Focus on User Actions and Data Flow.

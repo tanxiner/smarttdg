@@ -1,0 +1,313 @@
+
+### SYSTEM ROLE
+You are a **Senior Database Architect**.
+You are NOT a Coder. You DO NOT write SQL code.
+
+### OBJECTIVE
+Document the logic of the Stored Procedure provided below.
+
+### 🛑 STRICT CONSTRAINTS
+1. **NO SQL CODE BLOCKS.** Do not rewrite the procedure code.
+2. **NO** "Here is the documentation" filler.
+3. **NO** generic explanations.
+4. **DO NOT EXPAND ACRONYMS.**
+   (Treat these as proper nouns: ["BB", "DTL", "ID", "SNO", "TAMS_TAR", "TARID", "TMP", "TMP_TVF", "XB"])
+
+### ✅ REQUIRED OUTPUT FORMAT
+Output exactly this structure:
+
+# Procedure: sp_TAMS_OCC_GetOCCTVFAckFromTableByParameters
+
+### Purpose
+{One clear sentence explaining what business task this performs.}
+
+### Parameters
+| Name | Type | Purpose |
+| :--- | :--- | :--- |
+| @ParamName | DataType | {Inferred usage} |
+
+### Logic Flow
+{Step-by-step plain English explanation.}
+
+### Data Interactions
+* **Reads:** {List tables explicitly selected from}
+* **Writes:** {List tables inserted/updated/deleted}
+
+---
+
+### ⬇️ RAW SQL INPUT ⬇️
+CREATE PROCEDURE [dbo].[sp_TAMS_OCC_GetOCCTVFAckFromTableByParameters]
+	@UserID		as int,
+	@Line AS nvarchar(10) = NULL,
+	@OperationDate as date,
+	@AccessDate as date
+
+AS
+
+DECLARE @TVF_Ack_CNT int;
+DECLARE @TVFStationId as int,
+		@TVFMode as nvarchar(50),
+		@TVFDirection as nvarchar(10)
+
+CREATE TABLE #TMP_Station
+(
+	Id int not null,	
+	StationName nvarchar(50)
+);
+
+CREATE TABLE #TMP_TVF
+(
+	Id int not null,	
+	TARID int,
+	TVFStationId int,
+	TVFMode nvarchar(20),
+	TVFDirection nvarchar(10)
+);
+
+CREATE TABLE #TMP_TVF_ToUpdate
+(
+	TVFStationId int,
+	TVFMode nvarchar(20),
+	TVFDirection nvarchar(10),
+	TVFDirection1 bit,
+	TVFDirection2 bit
+);
+
+CREATE TABLE #TMP_OCCTVF_Ack
+(
+	SNO int not null,
+	ID int,
+	--TARID int,
+	AccessDate date,
+	OperationDate date,
+	StationId int,
+	StationName nvarchar(50),
+	TVFDirection1 bit,
+	TVFDirection2 bit,
+	TVFMode nvarchar(50),
+	AcknowledgedBy nvarchar(500),
+	AcknowledgedOn datetime,
+	--TVFDirection nvarchar(50),
+	TVFOnTime datetime,
+	OperatedBy nvarchar(500),
+	VerifiedBy nvarchar(500),
+	VerifiedOn datetime
+);
+
+IF @Line = 'DTL'
+BEGIN
+
+	SELECT @TVF_Ack_CNT = COUNT(*) FROM [TAMS_TVF_Acknowledge] WHERE AccessDate = @AccessDate;
+
+	IF @TVF_Ack_CNT = 0
+	BEGIN
+
+		TRUNCATE TABLE #TMP_TVF_ToUpdate;
+
+		INSERT INTO #TMP_TVF(Id, TARID, TVFStationId, TVFMode, TVFDirection)
+		SELECT t.id, tarid, tvfstationid, tvfmode, tvfdirection
+		FROM [TAMS_TAR] t
+		INNER JOIN [TAMS_TAR_TVF] tvf
+		ON t.id = tvf.TARID
+		AND AccessDate = @AccessDate
+		WHERE t.TVFMode IS NOT NULL OR t.TVFMode != 'N.A.'
+		ORDER BY TVFStationId, TVFMode ASC
+
+		DECLARE cur CURSOR FOR
+		SELECT TVFStationId, TVFMode, TVFDirection FROM #TMP_TVF ORDER BY TVFStationId, TVFMode ASC
+
+		OPEN cur;
+
+		FETCH NEXT FROM cur INTO @TVFStationId, @TVFMode, @TVFDirection
+		print @TVFMode;
+		WHILE @@FETCH_STATUS = 0
+		BEGIN
+			IF NOT EXISTS
+			(
+				SELECT TVFStationId
+				FROM #TMP_TVF_ToUpdate
+				WHERE TVFStationId = @TVFStationId
+			)
+				BEGIN
+					IF @TVFDirection = 'XB'
+					BEGIN
+						INSERT INTO #TMP_TVF_ToUpdate(TVFStationId, TVFMode, TVFDirection1, TVFDirection2)
+						VALUES(@TVFStationId, @TVFMode, 1, 0)
+					END;
+					IF @TVFDirection = 'BB'
+					BEGIN
+						INSERT INTO #TMP_TVF_ToUpdate(TVFStationId, TVFMode, TVFDirection1, TVFDirection2)
+						VALUES(@TVFStationId, @TVFMode, 0, 1)
+					END;
+				END
+			ELSE
+				BEGIN
+					IF @TVFMode = 'Emergency'
+					BEGIN
+						--print 'emergency';
+
+						UPDATE #TMP_TVF_ToUpdate
+						SET TVFMode = @TVFMode
+						WHERE TVFStationId = @TVFStationId
+
+						IF @TVFDirection = 'XB'
+						BEGIN
+							UPDATE #TMP_TVF_ToUpdate
+							SET TVFDirection1 = 1, TVFDirection2 = 0
+							WHERE TVFStationId = @TVFStationId
+						END;
+						IF @TVFDirection = 'BB'
+						BEGIN
+							UPDATE #TMP_TVF_ToUpdate
+							SET TVFDirection2 = 1, TVFDirection1 = 0
+							WHERE TVFStationId = @TVFStationId
+						END;
+					END;
+					ELSE
+					BEGIN
+						--print 'congestion';
+						UPDATE #TMP_TVF_ToUpdate
+						SET TVFMode = @TVFMode
+						WHERE TVFStationId = @TVFStationId
+
+						IF @TVFDirection = 'XB'
+						BEGIN
+							UPDATE #TMP_TVF_ToUpdate
+							SET TVFDirection1 = 1
+							WHERE TVFStationId = @TVFStationId
+						END;
+						IF @TVFDirection = 'BB'
+						BEGIN
+							UPDATE #TMP_TVF_ToUpdate
+							SET TVFDirection2 = 1
+							WHERE TVFStationId = @TVFStationId
+						END;
+					END;
+				END
+			FETCH NEXT FROM Cur INTO @TVFStationId, @TVFMode, @TVFDirection;
+		END;
+		CLOSE Cur;
+		DEALLOCATE Cur;
+
+		--SELECT * FROM #TMP_TVF_ToUpdate;
+
+		INSERT INTO #TMP_Station(Id, StationName)
+		SELECT id, stationcode + ' ' + StationName AS station
+		FROM [TAMS_Station] 
+		WHERE Line = 'DTL'
+		AND IsActive = 1
+		AND IsStation = 1
+		ORDER BY [Order] ASC
+
+		INSERT INTO #TMP_OCCTVF_Ack(
+		SNO, 
+		ID, 
+		AccessDate,
+		OperationDate,
+		StationId,
+		StationName,
+		TVFDirection1,
+		TVFDirection2,
+		TVFMode, 
+		AcknowledgedBy,  
+		AcknowledgedOn,
+		--TVFDirection,
+		TVFOnTime,
+		OperatedBy,
+		VerifiedBy,
+		VerifiedOn)
+		SELECT ROW_NUMBER() OVER(ORDER BY tvf.ID ASC) AS SNO
+			  ,tvf.[ID]
+			  ,tvf.[AccessDate]
+			  ,tvf.[OperationDate]
+			  ,tmp.[Id]
+			  ,tmp.[StationName]
+			  ,tvf.[TVFDirection1]
+			  ,tvf.[TVFDirection2]
+			  ,tvf.[TVFMode]
+			  ,(SELECT Name FROM [TAMS_User] WHERE UserId = tvf.[AcknowledgedBy])
+			  ,tvf.[AcknowledgedOn]
+			  --,tvf.[TVFDirection]
+			  ,tvf.[TVFOnTime]
+			  ,(SELECT Name FROM [TAMS_User] WHERE UserId = tvf.[OperatedBy])
+			  ,(SELECT Name FROM [TAMS_User] WHERE UserId = tvf.[VerifiedBy])
+			  ,tvf.[VerifiedOn]
+		  FROM [TAMS_TVF_Acknowledge] tvf
+		  INNER JOIN #TMP_Station tmp
+		  ON tvf.StationId = tmp.Id	  
+		  AND tvf.OperationDate = @OperationDate
+		  AND tvf.AccessDate = @AccessDate
+
+		  UPDATE t1
+		  SET t1.TVFDirection1 = t2.TVFDirection1,
+			t1.TVFDirection2 = t2.TVFDirection2,
+			t1.TVFMode = t2.TVFMode
+		  FROM #TMP_OCCTVF_Ack t1 INNER JOIN #TMP_TVF_ToUpdate t2
+		  ON t1.StationId = t2.TVFStationId
+
+		SELECT * FROM #TMP_OCCTVF_Ack;
+		--SELECT * FROM #TMP;
+	END;
+	ELSE
+	BEGIN
+			INSERT INTO #TMP_Station(Id, StationName)
+			SELECT id, stationcode + ' ' + StationName AS station
+			FROM [TAMS_Station] 
+			WHERE Line = 'DTL'
+			AND IsActive = 1
+			AND IsStation = 1
+			ORDER BY [Order] ASC
+
+			INSERT INTO #TMP_OCCTVF_Ack(
+			SNO, 
+			ID, 
+			AccessDate,
+			OperationDate,
+			StationId,
+			StationName,
+			TVFDirection1,
+			TVFDirection2,
+			TVFMode, 
+			AcknowledgedBy,  
+			AcknowledgedOn,
+			--TVFDirection,
+			TVFOnTime,
+			OperatedBy,
+			VerifiedBy,
+			VerifiedOn)
+			SELECT ROW_NUMBER() OVER(ORDER BY tvf.ID ASC) AS SNO
+				  ,tvf.[ID]
+				  ,tvf.[AccessDate]
+				  ,tvf.[OperationDate]
+				  ,tmp.[Id]
+				  ,tmp.[StationName]
+				  ,tvf.[TVFDirection1]
+				  ,tvf.[TVFDirection2]
+				  ,tvf.[TVFMode]
+				  ,(SELECT Name FROM [TAMS_User] WHERE UserId = tvf.[AcknowledgedBy])
+				  ,tvf.[AcknowledgedOn]
+				  --,tvf.[TVFDirection]
+				  ,tvf.[TVFOnTime]
+				  ,(SELECT Name FROM [TAMS_User] WHERE UserId = tvf.[OperatedBy])
+			      ,(SELECT Name FROM [TAMS_User] WHERE UserId = tvf.[VerifiedBy])
+				  ,tvf.[VerifiedOn]
+			  FROM [TAMS_TVF_Acknowledge] tvf
+			  INNER JOIN #TMP_Station tmp
+			  ON tvf.StationId = tmp.Id	  
+			  AND tvf.OperationDate = @OperationDate
+			  AND tvf.AccessDate = @AccessDate
+
+			  SELECT * FROM #TMP_OCCTVF_Ack
+			  ORDER BY StationId ASC
+	END;
+
+END;
+DROP TABLE #TMP_Station;
+
+
+DROP TABLE #TMP_OCCTVF_Ack;
+
+DROP TABLE #TMP_TVF_ToUpdate;
+
+### ⬆️ END OF INPUT ⬆️
+**INSTRUCTION:** Document the logic above in English.

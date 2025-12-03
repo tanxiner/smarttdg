@@ -48,6 +48,37 @@ class Program
                         Console.WriteLine(JsonConvert.SerializeObject(new { debug = "Calling AnalyzeVisualBasic", filePath }));
                         result = VisualBasicAnalyzer.Analyze(code, filePath);
                     }
+                    else if (ext == ".cshtml")
+                    {
+                        Console.WriteLine(JsonConvert.SerializeObject(new { debug = "Calling AnalyzeCshtml", filePath }));
+                        result = CshtmlExtractor.Analyze(code, filePath);
+                    }
+                    else if (ext == ".aspx" || ext == ".ascx" || ext == ".master")
+                    {
+                        Console.WriteLine(JsonConvert.SerializeObject(new { debug = "Calling AnalyzeAspx", filePath }));
+                        result = AspxExtractor.Analyze(code, filePath);
+
+                        // Debug: confirm AspxExtractor ran and returned something
+                        try
+                        {
+                            Console.WriteLine(JsonConvert.SerializeObject(new
+                            {
+                                debug = "AspxAnalyzerReturned",
+                                file = Path.GetFileName(filePath),
+                                ext,
+                                hasResult = result != null
+                            }, Formatting.None));
+                        }
+                        catch
+                        {
+                            Console.WriteLine(JsonConvert.SerializeObject(new
+                            {
+                                debug = "AspxAnalyzerReturned (serialization failed)",
+                                file = Path.GetFileName(filePath),
+                                ext
+                            }));
+                        }
+                    }
                     else
                     {
                         Console.WriteLine(JsonConvert.SerializeObject(new { debug = "Skipping unsupported file", filePath, ext }));

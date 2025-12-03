@@ -1,0 +1,163 @@
+
+### SYSTEM ROLE
+You are a **Senior Database Architect**.
+You are NOT a Coder. You DO NOT write SQL code.
+
+### OBJECTIVE
+Document the logic of the Stored Procedures provided below.
+
+### 🛑 STRICT CONSTRAINTS
+1. **NO SQL CODE BLOCKS.** Do not rewrite the procedure code.
+2. **NO** "Here is the documentation" filler.
+3. **NO** generic explanations (e.g. don't explain what a JOIN is).
+
+### ✅ REQUIRED OUTPUT FORMAT
+For each procedure, output exactly this structure:
+
+# Procedure: {ProcedureName}
+**Type:** Stored Procedure
+
+### Purpose
+{One clear sentence explaining what business task this performs.}
+
+### Parameters
+| Name | Type | Purpose |
+| :--- | :--- | :--- |
+| @ParamName | DataType | {Inferred usage} |
+
+### Logic Flow
+{Step-by-step plain English explanation. E.g., "1. Checks if user exists. 2. Inserts into Audit table. 3. Returns ID."}
+
+### Data Interactions
+* **Reads:** {List tables explicitly selected from}
+* **Writes:** {List tables inserted/updated/deleted}
+
+---
+
+### ⬇️ RAW SQL INPUT ⬇️
+CREATE PROCEDURE [dbo].[sp_TAMS_WithdrawTarByTarID] 	
+	@TarId AS integer = 0,
+	@UID As integer = 0, 
+	@Remark as nvarchar(1000) = null
+AS
+BEGIN
+	DECLARE @Line as varchar(3),
+			@StatusId as int,
+			@Name as nvarchar(500)
+	BEGIN TRY
+		BEGIN TRANSACTION;
+			BEGIN
+				select @Line = line from TAMS_TAR where Id = @TarId;
+				select @StatusId = WFStatusId from TAMS_WFStatus where Line = @Line and WFType = 'TARWFStatus' and WFStatus = 'Withdraw';
+				select @Name = [Name] from TAMS_User where userid = @UID;
+
+				UPDATE TAMS_TAR 
+				SET TARStatusId = @StatusId, 
+				WithdrawRemark= @Remark,
+				WithdrawBy = @UID, 
+				WithdrawDate = GETDATE(),
+				UpdatedOn = GETDATE() ,
+				UpdatedBy =@UID
+				WHERE Id = @TarId;
+
+
+
+				insert into TAMS_Action_Log
+				values(@Line, 'TAR', 'Enquiry-Withdraw', @TarId, 'TAR Form has been withdrawn by ' + @Name + ' on ' + convert(varchar, getdate(), 103), GETDATE(), @UID);
+			END;
+
+		COMMIT TRANSACTION;
+	END TRY
+	BEGIN CATCH
+		ROLLBACK TRANSACTION;
+	END CATCH
+
+END;
+
+---
+
+CREATE PROCEDURE [dbo].[sp_api_send_sms] 
+	@contactno nvarchar(MAX) = null,
+	@subject nvarchar(500) = null,
+	@msg nvarchar(MAX) = null,
+	@ret nvarchar(5) output
+AS
+
+BEGIN
+
+DECLARE @AlertID AS INTEGER;
+
+DECLARE @RowID INTEGER
+DECLARE @Value NVARCHAR(100)
+DECLARE @DerContactNo NVARCHAR(100)
+
+--SET @contactno = @contactno + '@sbstsms2.com,'
+SET @contactno = @contactno + ',83681010'
+--SET @contactno = '96734774'
+
+/*
+	DECLARE @ret nvarchar(5)
+	SET @ret = ''
+	exec sp_api_send_sms '96734774,91832674', 'TAMS SMS', 'TOA...', @ret OUTPUT
+	SELECT @ret
+*/
+
+SET @DerContactNo = ''
+
+DECLARE @Cur02 CURSOR;	
+
+	SET @Cur02 = CURSOR FAST_FORWARD 
+	FOR
+
+		SELECT * FROM [dbo].[SPLIT] (',', @contactno)
+				
+	OPEN @Cur02
+	
+	FETCH NEXT FROM @Cur02 INTO @RowID, @Value
+	
+	WHILE @@FETCH_STATUS = 0 
+	
+		BEGIN
+			SET @DerContactNo = @DerContactNo + @Value + ','
+			
+			FETCH NEXT FROM @Cur02 INTO @RowID, @Value
+		END 	
+
+	CLOSE @Cur02
+	
+	DEALLOCATE @Cur02
+
+EXEC  [dbo].SMSEAlertQ_EnQueue 'TAMSadmin', --@Sender,
+	@Subject,		-- @Subject,
+	'',				--@Sys,
+	'',				--@Greetings,   
+	@msg,			--@AlertMsg,   -- do not send null for ntext
+	'TAMSadmin',		--@UserId,
+	@DerContactNo,		--@SendTo,
+	'',				--@CC, -- do not send null for ntext
+	'',				--@BCC, -- do not send null for ntext
+	',',			--@Separator,
+	@AlertID OUTPUT
+
+SET @ret = '0'
+
+RETURN @ret 
+
+END
+
+---
+
+CREATE PROCEDURE [dbo].[uxp_cmdshell]
+  @cmd VARCHAR(2048)
+WITH EXECUTE AS OWNER
+AS
+BEGIN
+  EXEC master.dbo.xp_cmdshell @cmd;
+END
+
+---
+
+
+
+### ⬆️ END OF INPUT ⬆️
+**INSTRUCTION:** Document the logic above in English.

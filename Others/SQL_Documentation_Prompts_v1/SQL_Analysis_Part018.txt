@@ -1,0 +1,558 @@
+
+### SYSTEM ROLE
+You are a **Senior Database Architect**.
+You are NOT a Coder. You DO NOT write SQL code.
+
+### OBJECTIVE
+Document the logic of the Stored Procedures provided below.
+
+### 🛑 STRICT CONSTRAINTS
+1. **NO SQL CODE BLOCKS.** Do not rewrite the procedure code.
+2. **NO** "Here is the documentation" filler.
+3. **NO** generic explanations (e.g. don't explain what a JOIN is).
+
+### ✅ REQUIRED OUTPUT FORMAT
+For each procedure, output exactly this structure:
+
+# Procedure: {ProcedureName}
+**Type:** Stored Procedure
+
+### Purpose
+{One clear sentence explaining what business task this performs.}
+
+### Parameters
+| Name | Type | Purpose |
+| :--- | :--- | :--- |
+| @ParamName | DataType | {Inferred usage} |
+
+### Logic Flow
+{Step-by-step plain English explanation. E.g., "1. Checks if user exists. 2. Inserts into Audit table. 3. Returns ID."}
+
+### Data Interactions
+* **Reads:** {List tables explicitly selected from}
+* **Writes:** {List tables inserted/updated/deleted}
+
+---
+
+### ⬇️ RAW SQL INPUT ⬇️
+CREATE PROCEDURE [dbo].[sp_TAMS_Batch_InActive_ResignedStaff]
+AS	
+	
+BEGIN	
+
+UPDATE TAMS_User 
+SET IsActive = 0 
+WHERE IsActive = 1 
+AND LoginId IN (
+	SELECT s_lanid 
+		FROM VMSDBSVR.ACRS.dbo.ResignedStaff 
+			WHERE s_eff_day BETWEEN CONVERT(DATETIME, CONVERT(NVARCHAR(10), GETDATE() - 7, 103), 103) AND CONVERT(DATETIME, CONVERT(NVARCHAR(10), GETDATE(), 103), 103)
+			-- WHERE s_eff_day < CONVERT(DATETIME, CONVERT(NVARCHAR(10), GETDATE(), 103), 103)
+				AND ISNULL(s_lanid, '') <> ''
+)
+
+
+INSERT INTO [dbo].[TAMS_User_InActive]
+([LoginId]
+	,[Name]
+	,[Email]
+	,[OfficeNo]
+	,[MobileNo]
+	,[SAPNo]
+	,[Department]
+	,[ValidFrom]
+	,[ValidTo]
+	,[IsExternal]
+	,[Password]
+	,[CompanyID]
+	,[SBSTContactPersonName]
+	,[SBSTContactPersonDept]
+	,[SBSTContactPersonOfficeNo]
+	,[LastLogin]
+	,[PasswordChangedDate]
+	,[IsActive]
+	,[CreatedOn]
+	,[CreatedBy]
+	,[UpdatedOn]
+	,[UpdatedBy])
+SELECT [LoginId]
+	,[Name]
+	,[Email]
+	,[OfficeNo]
+	,[MobileNo]
+	,[SAPNo]
+	,[Department]
+	,[ValidFrom]
+	,[ValidTo]
+	,[IsExternal]
+	,[Password]
+	,[CompanyID]
+	,[SBSTContactPersonName]
+	,[SBSTContactPersonDept]
+	,[SBSTContactPersonOfficeNo]
+	,[LastLogin]
+	,[PasswordChangedDate]
+	,[IsActive]
+	,[CreatedOn]
+	,[CreatedBy]
+	,[UpdatedOn]
+	,[UpdatedBy]
+	FROM [dbo].[TAMS_User]
+WHERE LoginId IN (
+	SELECT s_lanid 
+		FROM VMSDBSVR.ACRS.dbo.ResignedStaff 
+			WHERE s_eff_day BETWEEN CONVERT(DATETIME, CONVERT(NVARCHAR(10), GETDATE() - 7, 103), 103) AND CONVERT(DATETIME, CONVERT(NVARCHAR(10), GETDATE(), 103), 103)
+			-- WHERE s_eff_day < CONVERT(DATETIME, CONVERT(NVARCHAR(10), GETDATE(), 103), 103)
+				AND ISNULL(s_lanid, '') <> ''
+)
+
+DELETE FROM [dbo].[TAMS_User]
+WHERE LoginId IN (
+	SELECT s_lanid 
+		FROM VMSDBSVR.ACRS.dbo.ResignedStaff 
+			WHERE s_eff_day BETWEEN CONVERT(DATETIME, CONVERT(NVARCHAR(10), GETDATE() - 7, 103), 103) AND CONVERT(DATETIME, CONVERT(NVARCHAR(10), GETDATE(), 103), 103)
+			-- WHERE s_eff_day < CONVERT(DATETIME, CONVERT(NVARCHAR(10), GETDATE(), 103), 103)
+				AND ISNULL(s_lanid, '') <> ''
+)
+
+END;
+
+---
+
+CREATE PROCEDURE [dbo].[sp_TAMS_Batch_Populate_Calendar]
+(@Year	NVARCHAR(4),
+	@YrFlag INT)
+-- -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-- Procedure Name 	: sp_TAMS_Batch_Populate_Calendar
+-- Author		: jeffrey
+-- Date Created		: 26/08/2021
+-- Purpose		: 
+AS
+
+BEGIN
+		
+SET NOCOUNT ON
+
+DECLARE @LSQLQRY VARCHAR(4000)
+DECLARE @YearCnt INT
+DECLARE @CalID INT
+DECLARE @CalendarDayCnt INT
+DECLARE @CalendarID NVARCHAR(100)
+
+	IF ISNULL(@Year, '') = ''
+		BEGIN
+			SET @Year = DATEPART(yyyy, GETDATE())
+		END
+
+	IF ISNULL(@YrFlag, '') = ''
+		BEGIN
+			SET @YrFlag = 0
+		END
+
+	IF @YrFlag > 0
+		BEGIN
+			SET @Year = @Year + @YrFlag
+		END
+
+	------SELECT @Year, @YrFlag
+
+	TRUNCATE TABLE TAMS_TR_CALENDAR_REF -- >> TEMP TABLE
+
+	INSERT INTO TAMS_TR_CALENDAR_REF
+		SELECT * FROM OPENQUERY(SPIN, 'SELECT * FROM TR_CALENDAR_REF')
+			ORDER BY 1 
+
+	SELECT @CalendarDayCnt = COUNT(*)
+		FROM TAMS_Calendar
+			WHERE DATEPART(YEAR, CalendarDate) = @Year
+
+	IF @CalendarDayCnt > 0
+		BEGIN
+			DELETE FROM TAMS_Calendar
+			WHERE DATEPART(YEAR, CalendarDate) = @Year
+		END
+
+			INSERT INTO [dbo].[TAMS_Calendar]
+			([CalendarDate], [CalendarDay], [CalendarWeek], [HolidayCode], 
+				[CreatedOn], [CreatedBy], [UpdatedOn], [UpdatedBy])
+			SELECT FR_CALENDAR_REF_DATE, FR_CALENDAR_REF_DAY, FR_CALENDAR_REF_WEEK, FR_CALENDAR_REF_HOLIDAY,
+				GETDATE(), 1, GETDATE(), 1 FROM TAMS_TR_CALENDAR_REF
+				WHERE DATEPART(YEAR, FR_CALENDAR_REF_DATE) = @Year
+		/*
+				SET @LSQLQRY='SELECT FR_CALENDAR_REF_DATE,
+					CASE FR_CALENDAR_REF_HOL WHEN ''1'' THEN ''HOL'' ELSE ''REG'' END AS EarnCode
+						FROM TR_CALENDAR_REF WHERE TO_CHAR(FR_CALENDAR_REF_DATE, ''YYYY'') = ' + @Year + ' ORDER BY FR_CALENDAR_REF_DATE'
+
+				SET @LSQLQRY = 'INSERT INTO CALENDAR_DAY
+					(CalendarID, CalendarDay, EarnCode, Hours, 
+						LastUpdateOn, LastUpdatedBy, CreatedOn, CreatedBy, Active)
+					SELECT ' + @CalendarID + ', FR_CALENDAR_REF_DATE, EarnCode, 8.000000,
+						GETDATE(), system_user, GETDATE(), system_user, 1
+						FROM OPENQUERY(SPIN,' + dbo.TA_Quotestring(@LSQLQRY) + ')'
+
+				EXEC (@LSQLQRY)
+               	
+				IF @@ERROR <> 0
+					BEGIN
+						RAISERROR('Inserting into table CALENDAR_DAY failed' , 16, 1 ) --WITH LOG
+						RETURN
+					END
+		*/
+
+END
+
+---
+
+CREATE PROCEDURE [dbo].[sp_TAMS_Block_Date_Delete]
+	@BlockID	AS INTEGER,
+	@Message	AS NVARCHAR(500) = NULL OUTPUT
+AS
+
+BEGIN
+
+DECLARE	@IntrnlTrans	TINYINT
+SELECT 	@IntrnlTrans 	= 0	
+
+IF (@@TRANCOUNT = 0) 
+BEGIN
+	SET @IntrnlTrans = 1
+	BEGIN TRAN
+END
+
+-- >>
+SET @Message = ''
+
+INSERT INTO [dbo].[TAMS_Block_TARDate_Audit]
+SELECT '', GETDATE(), 'D', * FROM [dbo].[TAMS_Block_TARDate]
+	WHERE ID = @BlockID
+
+DELETE 
+	FROM TAMS_Block_TARDate
+		WHERE ID = @BlockID
+
+-- >>
+
+IF @@ERROR <> 0 BEGIN
+	SET @Message = 'ERROR DELETING TAMS_BLOCK_TARDATE'
+	GOTO TRAP_ERROR
+END
+
+FORCE_EXIT_PROC:	
+	IF @IntrnlTrans = 1 COMMIT TRAN
+	RETURN @Message 
+
+TRAP_ERROR:
+	IF @IntrnlTrans = 1 ROLLBACK TRAN
+	RETURN @Message
+
+
+END
+
+---
+
+CREATE PROCEDURE  [dbo].[sp_TAMS_Block_Date_OnLoad]
+	@Line		AS NVARCHAR(20) = NULL,
+	@TrackType  AS NVARCHAR(50) = NULL,
+	@BlockDate	AS NVARCHAR(20) = NULL
+AS
+
+BEGIN
+	SELECT ID, Line,TrackType, CONVERT(NVARCHAR(20), BlockDate, 103) AS BlockDate, BlockReason, IsActive 
+		FROM TAMS_Block_TARDate
+			WHERE (Line = @Line OR ISNULL(@Line, '') = '')
+			AND  (TrackType = @TrackType OR ISNULL(@TrackType, '') = '')
+				AND (BlockDate = CONVERT(DATE, @BlockDate, 103) OR ISNULL(@BlockDate, '') = '')
+		ORDER BY CONVERT(DATE, BlockDate, 103) DESC
+END
+
+---
+
+CREATE PROCEDURE  [dbo].[sp_TAMS_Block_Date_Save]
+	@Line			AS NVARCHAR(20) = NULL,
+	@TrackType		AS NVARCHAR(50) = NULL,
+	@BlockDate		AS NVARCHAR(20) = NULL,
+	@BlockReason	AS NVARCHAR(100) = NULL,
+	@UserLI			AS NVARCHAR(50) = NULL,
+	@Message		AS NVARCHAR(500) = NULL OUTPUT
+AS
+
+BEGIN
+
+DECLARE	@IntrnlTrans	TINYINT
+SELECT 	@IntrnlTrans 	= 0	
+
+IF (@@TRANCOUNT = 0) 
+BEGIN
+	SET @IntrnlTrans = 1
+	BEGIN TRAN
+END
+
+-- >>
+SET @Message = ''
+
+DECLARE @CDWeekNo	INTEGER
+DECLARE @BDWeekNo	INTEGER
+DECLARE @CDYear		INTEGER
+DECLARE @BDYear		INTEGER
+DECLARE @UserID		INTEGER
+DECLARE @BlockDateID	INTEGER
+
+SELECT @UserID = Userid
+FROM TAMS_User
+	WHERE LoginId = @UserLI
+
+SET @CDWeekNo = DATEPART(WEEK, GETDATE())
+SET @BDWeekNo = DATEPART(WEEK, CONVERT(DATE, @BlockDate, 103))
+
+SET @CDYear	= YEAR(GETDATE())
+SET @BDYear = YEAR(CONVERT(DATE, @BlockDate, 103))
+
+IF @CDYear = @BDYear
+	BEGIN
+		IF (@BDWeekNo - @CDWeekNo) < 5
+			BEGIN
+				-- "Block Date must be N-5 weeks."
+				-- SET @Message = 'Block Date must be N-5 weeks.'
+				SET @Message = '1'
+			END
+	END
+ELSE
+	BEGIN
+		IF @CDYear < @BDYear
+			BEGIN
+				SET @BDWeekNo = @BDWeekNo + 52
+				IF (@BDWeekNo - @CDWeekNo) < 5
+					BEGIN
+						-- "Block Date must be N-5 weeks."
+						-- SET @Message = 'Block Date must be N-5 weeks.'
+						SET @Message = '2'
+					END
+			END
+		ELSE
+			BEGIN
+				-- "Block Date must future date"
+				-- SET @Message = 'Block Date must future date.'
+				SET @Message = '3'
+			END
+	END
+
+	IF (SELECT COUNT(*) FROM TAMS_Block_TARDate 
+			WHERE BlockDate = CONVERT(DATE, @BlockDate, 103)
+				AND Line = @Line
+				AND  TrackType = @TrackType
+				AND IsActive = 1) > 0
+		BEGIN
+			-- "Block Date Already Existing."
+			-- SET @Message = 'Block Date Already Existing.'
+			SET @Message = '4'
+		END
+
+	IF @Message = ''
+		BEGIN
+			INSERT INTO [dbo].[TAMS_Block_TARDate]
+				([Line],[TrackType], [BlockDate], [BlockReason], [IsActive],
+				[CreatedOn], [CreatedBy], [UpdatedOn], [UpdatedBy])
+			VALUES
+				(@Line,@TrackType, CONVERT(DATE, @BlockDate, 103), @BlockReason, 1,
+				GETDATE(), @UserID, GETDATE(), @UserID)
+
+			SELECT @BlockDateID = SCOPE_IDENTITY();
+
+			INSERT INTO [dbo].[TAMS_Block_TARDate_Audit]
+			SELECT @UserID, GETDATE(), 'I', * FROM [dbo].[TAMS_Block_TARDate]
+				WHERE ID = @BlockDateID
+		END
+
+-- >>
+
+IF @@ERROR <> 0 BEGIN
+	SET @Message = 'ERROR INSERTING INTO TAMS_TAR'
+	GOTO TRAP_ERROR
+END
+
+FORCE_EXIT_PROC:	
+	IF @IntrnlTrans = 1 COMMIT TRAN
+	RETURN @Message 
+
+TRAP_ERROR:
+	IF @IntrnlTrans = 1 ROLLBACK TRAN
+	RETURN @Message
+
+
+END
+
+---
+
+CREATE PROCEDURE [dbo].[sp_TAMS_CancelTarByTarID] 	
+	@TarId AS integer = 0,
+	@UID As integer = 0
+AS
+BEGIN
+	DECLARE @Line as varchar(3),
+			@StatusId as int,
+			@Name as nvarchar(500)
+	BEGIN TRY
+		BEGIN TRANSACTION;
+			BEGIN
+				select @Line = line from TAMS_TAR where Id = @TarId;
+				select @StatusId = WFStatusId from TAMS_WFStatus where Line = @Line and WFType = 'TARWFStatus' and WFStatus = 'Cancel';
+				select @Name = [Name] from TAMS_User where userid = @UID;
+
+				UPDATE TAMS_TAR 
+				SET TARStatusId = @StatusId
+				WHERE Id = @TarId;
+
+
+
+				insert into TAMS_Action_Log
+				values(@Line, 'TAR', 'Enquiry-Cancel', @TarId, 'TAR Form has been cancelled by ' + @Name + ' on ' + convert(varchar, getdate(), 103), GETDATE(), @UID);
+			END;
+
+		COMMIT TRANSACTION;
+	END TRY
+	BEGIN CATCH
+		ROLLBACK TRANSACTION;
+	END CATCH
+
+END;
+
+---
+
+CREATE PROCEDURE [dbo].[sp_TAMS_Check_UserExist] 
+	@SapNo		NVARCHAR(100) = NULL,
+	@LoginID	NVARCHAR(200) = NULL
+
+AS
+BEGIN
+
+	IF NOT @LoginID = '' AND NOT @SapNo = ''
+	BEGIN
+		IF EXISTS (SELECT * FROM TAMS_User WHERE LoginID = @LoginID AND SAPNo = @SapNo)
+		BEGIN
+			SELECT 1
+
+		END
+	END
+	IF @SapNo = ''
+	BEGIN
+		IF EXISTS(SELECT * FROM TAMS_User WHERE LoginID = @LoginID)
+		BEGIN
+			SELECT 1
+		END
+	END
+
+
+	--IF NOT @LoginID = ''
+	--BEGIN
+	--	IF EXISTS (SELECT * FROM TAMS_User WHERE LoginID = @LoginID)
+	--	BEGIN
+	--		SELECT 1
+
+	--	END
+	--END
+
+	--IF NOT @SapNo = ''
+	--BEGIN
+	
+	--	IF EXISTS(SELECT * FROM TAMS_User WHERE SAPNo = @SapNo)
+	--	BEGIN
+	--		SELECT 1
+	--	END
+	--END
+	
+END
+
+---
+
+CREATE PROCEDURE [dbo].[sp_TAMS_Delete_RegQueryDept_SysOwnerApproval] 	
+	@RegModID			INT,
+	@RegRoleID			INT
+AS
+BEGIN
+	BEGIN TRY
+		BEGIN TRANSACTION;
+
+				DECLARE @Module NVARCHAR(20);
+				DECLARE @RegStatus INT;
+				DECLARE @RegId INT;
+				DECLARE @Line NVARCHAR(20);
+
+			-- TAMS_User_Role
+			SELECT @RegId=RegID, @Line=Line, @Module=Module, @RegStatus=RegStatus FROM TAMS_Reg_Module WHERE ID = @RegModID
+
+			SET @RegStatus = @RegStatus - 1;
+
+			SELECT @RegModID=ID FROM TAMS_Reg_Module WHERE RegId = @RegId AND Line=@Line AND Module=@Module AND RegStatus=@RegStatus;
+
+			IF EXISTS
+			(
+				SELECT * FROM TAMS_Reg_QueryDept WHERE RegModID = @RegModID AND RegRoleID = @RegRoleID
+			)
+			BEGIN
+				DELETE FROM TAMS_Reg_QueryDept WHERE RegModID = @RegModID AND RegRoleID = @RegRoleID;
+
+			END;
+		COMMIT TRANSACTION;
+	END TRY
+	BEGIN CATCH
+		ROLLBACK TRANSACTION;
+	END CATCH
+
+END;
+
+---
+
+CREATE PROCEDURE [dbo].[sp_TAMS_Delete_UserQueryDeptByUserID] 	
+	@UserID			INT
+AS
+BEGIN
+	BEGIN TRY
+		BEGIN TRANSACTION;
+			-- TAMS_User_Role
+			IF EXISTS
+			(
+				SELECT * FROM TAMS_User_QueryDept WHERE UserID = @UserID
+			)
+			BEGIN
+				DELETE FROM TAMS_User_QueryDept WHERE UserID = @UserID
+
+			END;
+		COMMIT TRANSACTION;
+	END TRY
+	BEGIN CATCH
+		ROLLBACK TRANSACTION;
+	END CATCH
+
+END;
+
+---
+
+CREATE PROCEDURE [dbo].[sp_TAMS_Delete_UserRoleByUserID] 	
+	@UserID			INT
+AS
+BEGIN
+	BEGIN TRY
+		BEGIN TRANSACTION;
+			-- TAMS_User_Role
+			IF EXISTS
+			(
+				SELECT * FROM TAMS_User_Role WHERE UserID = @UserID 
+			)
+			BEGIN
+				DELETE FROM TAMS_User_Role WHERE UserID = @UserID AND RoleID NOT IN (1)
+
+			END;
+		COMMIT TRANSACTION;
+	END TRY
+	BEGIN CATCH
+		ROLLBACK TRANSACTION;
+	END CATCH
+
+END;
+
+---
+
+
+
+### ⬆️ END OF INPUT ⬆️
+**INSTRUCTION:** Document the logic above in English.

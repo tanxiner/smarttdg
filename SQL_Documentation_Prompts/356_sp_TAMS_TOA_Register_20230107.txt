@@ -1,0 +1,403 @@
+
+### SYSTEM ROLE
+You are a **Senior Database Architect**.
+You are NOT a Coder. You DO NOT write SQL code.
+
+### OBJECTIVE
+Document the logic of the Stored Procedure provided below.
+
+### 🛑 STRICT CONSTRAINTS
+1. **NO SQL CODE BLOCKS.** Do not rewrite the procedure code.
+2. **NO** "Here is the documentation" filler.
+3. **NO** generic explanations.
+4. **DO NOT EXPAND ACRONYMS.**
+   (Treat these as proper nouns: ["ID", "INSERTING", "NEL", "NRIC", "QTS", "TAMS_TAR", "TAMS_TOA", "TAR", "TARID", "TIME", "TOA", "TOAID"])
+
+### ✅ REQUIRED OUTPUT FORMAT
+Output exactly this structure:
+
+# Procedure: sp_TAMS_TOA_Register_20230107
+
+### Purpose
+{One clear sentence explaining what business task this performs.}
+
+### Parameters
+| Name | Type | Purpose |
+| :--- | :--- | :--- |
+| @ParamName | DataType | {Inferred usage} |
+
+### Logic Flow
+{Step-by-step plain English explanation.}
+
+### Data Interactions
+* **Reads:** {List tables explicitly selected from}
+* **Writes:** {List tables inserted/updated/deleted}
+
+---
+
+### ⬇️ RAW SQL INPUT ⬇️
+CREATE PROCEDURE [dbo].[sp_TAMS_TOA_Register_20230107]
+	@Line		AS NVARCHAR(20) = NULL,
+	@Type		AS NVARCHAR(20) = NULL,
+	@Loc		AS NVARCHAR(20) = NULL,			-- >> SELECT StationName from TAMS_Station
+	@TARNo		AS NVARCHAR(30) = NULL,
+	@NRIC		AS NVARCHAR(20) = NULL,
+	@TOAID		AS BIGINT = 0 OUTPUT,
+	@Message	AS NVARCHAR(500) = NULL OUTPUT
+AS
+
+BEGIN
+
+DECLARE	@IntrnlTrans	TINYINT
+
+SELECT 	@IntrnlTrans 	= 0	
+
+IF (@@TRANCOUNT = 0) 
+BEGIN
+	SET @IntrnlTrans = 1
+	BEGIN TRAN
+END
+
+CREATE TABLE #tmpnric 
+(id BIGINT IDENTITY(1,1) NOT NULL, 
+nric NVARCHAR(50),
+namestr NVARCHAR(500),
+line NVARCHAR(50),
+qualdate NVARCHAR(50),
+qualcode NVARCHAR(100),
+qualstatus NVARCHAR(100))
+
+TRUNCATE TABLE #tmpnric
+
+DECLARE @ExecString	NVARCHAR(MAX)
+SET @ExecString = ''
+DECLARE @QualDate	NVARCHAR(20)
+SET @QualDate = ''
+
+DECLARE @InChargeName	NVARCHAR(500)
+DECLARE @InChargeStatus	NVARCHAR(20)
+
+SET @InChargeName = ''
+SET @InChargeStatus = ''
+
+DECLARE @CutOffTime		TIME
+DECLARE @QTSQualCode	NVARCHAR(20)
+DECLARE @QTSQualCodeProt	NVARCHAR(20)
+
+SELECT @CutOffTime = ParaTime 
+	FROM TAMS_Parameters
+		WHERE ParaCode = 'TOACutOffTime'
+			AND ParaValue1 = @Line
+			AND GETDATE() BETWEEN EffectiveDate AND ExpiryDate
+
+SELECT @QTSQualCode = ParaValue2
+	FROM TAMS_Parameters
+		WHERE ParaCode = 'QTSQualCode'
+			AND ParaValue1 = @Line
+			AND ParaValue3 = 'Possession'
+			AND GETDATE() BETWEEN EffectiveDate AND ExpiryDate
+
+SELECT @QTSQualCodeProt = ParaValue2
+	FROM TAMS_Parameters
+		WHERE ParaCode = 'QTSQualCode'
+			AND ParaValue1 = @Line
+			AND ParaValue3 = ''
+			AND GETDATE() BETWEEN EffectiveDate AND ExpiryDate
+
+DECLARE @TARCtr	INT
+
+SELECT @TARCtr = COUNT(*)
+	FROM TAMS_TAR
+		WHERE TARNo = @TARNo
+			AND TARStatusId = CASE WHEN @Line = 'NEL' THEN 9 ELSE 8 END
+			AND PowerOn = 0
+
+SET @TOAID = 0
+
+DECLARE @StationCtr	BIGINT
+SET @StationCtr = 0
+
+-- >> "Invalid Location for selected TAR."
+SELECT @StationCtr = COUNT(*) 
+	FROM TAMS_TAR_Station a, TAMS_Station b, TAMS_TAR c
+		WHERE a.StationId = b.ID
+			AND a.TARId = c.Id
+			AND c.TARNo = @TARNo
+			AND b.StationName = @Loc
+
+IF @TARCtr = 0 OR @StationCtr = 0
+	BEGIN
+		IF @TARCtr = 0
+			BEGIN
+				SET @Message = '1'	-- >> Invalid TAR No
+			END
+		ELSE
+			BEGIN
+				IF @StationCtr = 0
+					BEGIN
+						SET @Message = '10'	-- >> Invalid Location for selected TAR.
+					END
+			END
+	END
+ELSE
+	BEGIN
+		DECLARE @TARID		BIGINT
+		DECLARE @TARLine	NVARCHAR(20)
+		DECLARE @TARAccessDate	DATE
+		DECLARE @AccessType NVARCHAR(50)
+		
+		SELECT @TARID = ID,
+				@TARLine = Line,
+				@TARAccessDate = AccessDate,
+				@AccessType = AccessType
+			FROM TAMS_TAR
+				WHERE TARNo = @TARNo
+					AND TARStatusId = CASE WHEN @Line = 'NEL' THEN 9 ELSE 8 END
+					AND PowerOn = 0
+
+		IF @Line <> @TARLine
+			BEGIN
+				SET @Message = '2'	-- >> Invalid Line for selected TAR
+			END
+		ELSE
+			BEGIN
+				DECLARE @TOACtr		INT
+				DECLARE @GetTime	TIME
+				DECLARE @OPDate		DATE
+				DECLARE @GetDate	DATE
+
+				SET @TOAID = 0
+
+				SELECT @TOAID = Id
+					FROM TAMS_TOA
+						WHERE TARId = @TARID
+				
+				SET @GetTime = GETDATE()
+				SET @GetDate = GETDATE()
+
+				-- >> SELECT @GetTime, @GetDate, @TARAccessDate, DATEADD(DAY, 1, @GetDate)
+
+				IF @TOAID = 0
+					BEGIN
+						IF @GetTime <= @CutOffTime
+							BEGIN
+								SET @OPDate = DATEADD(DAY, -1, GETDATE())
+
+								IF @TARAccessDate <> @GetDate
+									BEGIN
+										SET @Message = '3' -- >> Invalid TAR Access Date
+									END
+							END
+						ELSE
+							BEGIN
+								SET @OPDate = GETDATE()
+							END
+
+						IF @TARAccessDate <> DATEADD(DAY, 1, @GetDate)
+							BEGIN
+								SET @Message = '4' -- >> Invalid TAR Access Date
+							END
+						ELSE
+							BEGIN
+								PRINT '1' -- @QTSQualCode
+
+								SET @QualDate = CONVERT(NVARCHAR(20), @TARAccessDate, 103)
+								SET @ExecString = 'sp_TAMS_TOA_QTS_Chk '+ '''' + @NRIC + ''', ''' + @QualDate + ''', ''' + @Line + ''', ''' + @QTSQualCode + ''''
+
+								INSERT INTO #tmpnric
+								EXEC(@ExecString)
+
+								SELECT @InChargeName = namestr,
+									@InChargeStatus = qualstatus
+								FROM #tmpnric
+								
+								DECLARE @QTSFinStatus NVARCHAR(20)
+								SET @QTSFinStatus = ''
+
+								IF @InChargeStatus	= 'InValid'
+									BEGIN
+										IF @AccessType = 'Protection'
+											BEGIN
+												TRUNCATE TABLE #tmpnric
+												SET @InChargeName = ''
+												SET @InChargeStatus = ''
+
+												SET @ExecString = 'sp_TAMS_TOA_QTS_Chk '+ '''' + @NRIC + ''', ''' + @QualDate + ''', ''' + @Line + ''', ''' + @QTSQualCodeProt + ''''
+
+												INSERT INTO #tmpnric
+												EXEC(@ExecString)
+
+												SELECT @InChargeName = namestr,
+													@InChargeStatus = qualstatus
+												FROM #tmpnric
+
+												IF @InChargeStatus	= 'InValid'
+													BEGIN
+														SET @QTSFinStatus = 'InValid'
+													END
+												ELSE
+													BEGIN
+														SET @QTSFinStatus = 'Valid'
+													END
+											END
+										ELSE
+											BEGIN
+												SET @QTSFinStatus = 'InValid'
+											END
+									END
+								ELSE
+									BEGIN
+										SET @QTSFinStatus = 'Valid'
+									END
+
+								DROP TABLE #tmpnric
+								-- >> CHECK QTS
+
+								IF @QTSFinStatus = 'InValid'
+									BEGIN
+										SET @Message = '9' -- >> Invalid Qualification
+									END
+								ELSE
+									BEGIN
+										-- >> Insert into TOA Table
+										INSERT INTO [dbo].[TAMS_TOA]
+										([Line], [OperationDate], [AccessDate], [TARId], 
+											[QRLocation], [TOAType], 
+											[InChargeName], [InChargeNRIC], 
+											[MobileNo], [TetraRadioNo],
+											[NoOfParties],
+											[RegisteredTime], [AckRegisterTime], 
+											[GrantTOATime], [AckGrantTOATime],
+											[ReqProtectionLimitTime], [AckProtectionLimitTime],
+											[UpdateQTSTime],
+											[SurrenderTime], [AckSurrenderTime],
+											[TOAStatus], [TOANo],
+											[CancelRemark],
+											[CreatedOn], [CreatedBy], [UpdatedOn], [UpdatedBy])
+										VALUES
+										(@Line, @OPDate, @TARAccessDate, @TARID,
+											@Loc, @Type,
+											@InChargeName, dbo.EncryptString(@NRIC), 
+											'', '', 
+											1,
+											GETDATE(), NULL, 
+											NULL, NULL, 
+											NULL, NULL, 
+											NULL, 
+											NULL, NULL, 
+											0, NULL, 
+											NULL, 
+											GETDATE(), @NRIC, GETDATE(), @NRIC)
+
+										SELECT @TOAID = SCOPE_IDENTITY();
+
+										INSERT INTO TAMS_TOA_Audit
+										SELECT @NRIC, GETDATE(), 'U', * FROM TAMS_TOA
+											WHERE TARId = @TARID
+
+										-- >> Insert into TOA Parties Table
+
+										INSERT INTO [dbo].[TAMS_TOA_Parties]
+											([TOAId], [Name], [NRIC], [IsInCharge], [IsWitness], [IsTMC], 
+												[BookInTime], [BookOutTime], [BookInStatus])
+										VALUES
+											(@TOAID, @InChargeName, dbo.EncryptString(@NRIC), 1, 0, 0,
+												GETDATE(), NULL, 'In')
+
+										SET @Message = '99' -- >> BookIn
+									END
+							END
+					END
+				ELSE
+					BEGIN
+						DECLARE @InChargeCtr	INT
+						
+						SELECT @InChargeCtr = COUNT(*)
+							FROM TAMS_TOA
+								WHERE TARId = @TARID
+									AND dbo.DecryptString(InChargeNRIC) = LTRIM(RTRIM(@NRIC))
+
+						IF @InChargeCtr = 0
+							BEGIN
+								SET @Message = '5' -- >> NRIC / Fin No does not match with InCharge
+							END
+						ELSE
+							BEGIN
+								DECLARE @TOStatus	INT
+
+								SELECT @TOStatus = TOAStatus
+									FROM TAMS_TOA
+										WHERE TARId = @TARID
+											AND dbo.DecryptString(InChargeNRIC) = LTRIM(RTRIM(@NRIC))
+
+								IF @TOStatus = 0
+									BEGIN
+										IF @GetTime <= @CutOffTime
+											BEGIN
+												SET @OPDate = DATEADD(DAY, -1, GETDATE())
+
+												IF @TARAccessDate <> @GetDate
+													BEGIN
+														SET @Message = '6' -- >> Invalid TAR Access Date
+													END
+											END
+										ELSE
+											BEGIN
+												SET @OPDate = GETDATE()
+											END
+
+										IF @TARAccessDate <> DATEADD(DAY, 1, @GetDate)
+											BEGIN
+												SET @Message = '7' -- >> Invalid TAR Access Date
+											END
+										ELSE
+											BEGIN
+												UPDATE TAMS_TOA
+													SET OperationDate = @OPDate
+														WHERE TARId = @TARID
+
+												SET @Message = '99' -- >> BookIn
+											END
+									END
+								ELSE
+									BEGIN
+										IF @TOStatus = 3 OR @TOStatus = 2 OR @TOStatus = 1
+											BEGIN
+												IF @TOStatus = 2 OR @TOStatus = 1
+													BEGIN
+														SET @Message = '98' -- >> AddParties
+													END
+												ELSE
+													BEGIN
+														SET @Message = '97' -- >> BookOut
+													END
+											END
+										ELSE
+											BEGIN
+												SET @Message = '8' -- >> Invalid TAR Status
+											END
+									END
+							END
+					END
+
+			END
+	END
+-- >>
+
+IF @@ERROR <> 0 BEGIN
+	SET @Message = 'ERROR INSERTING INTO TAMS_TOA'
+	GOTO TRAP_ERROR
+END
+
+FORCE_EXIT_PROC:	
+	IF @IntrnlTrans = 1 COMMIT TRAN
+	RETURN @Message 
+
+TRAP_ERROR:
+	IF @IntrnlTrans = 1 ROLLBACK TRAN
+	RETURN @Message
+
+END
+
+### ⬆️ END OF INPUT ⬆️
+**INSTRUCTION:** Document the logic above in English.

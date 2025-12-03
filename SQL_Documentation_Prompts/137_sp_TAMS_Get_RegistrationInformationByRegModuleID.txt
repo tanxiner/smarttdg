@@ -1,0 +1,96 @@
+
+### SYSTEM ROLE
+You are a **Senior Database Architect**.
+You are NOT a Coder. You DO NOT write SQL code.
+
+### OBJECTIVE
+Document the logic of the Stored Procedure provided below.
+
+### 🛑 STRICT CONSTRAINTS
+1. **NO SQL CODE BLOCKS.** Do not rewrite the procedure code.
+2. **NO** "Here is the documentation" filler.
+3. **NO** generic explanations.
+4. **DO NOT EXPAND ACRONYMS.**
+   (Treat these as proper nouns: ["ID"])
+
+### ✅ REQUIRED OUTPUT FORMAT
+Output exactly this structure:
+
+# Procedure: sp_TAMS_Get_RegistrationInformationByRegModuleID
+
+### Purpose
+{One clear sentence explaining what business task this performs.}
+
+### Parameters
+| Name | Type | Purpose |
+| :--- | :--- | :--- |
+| @ParamName | DataType | {Inferred usage} |
+
+### Logic Flow
+{Step-by-step plain English explanation.}
+
+### Data Interactions
+* **Reads:** {List tables explicitly selected from}
+* **Writes:** {List tables inserted/updated/deleted}
+
+---
+
+### ⬇️ RAW SQL INPUT ⬇️
+CREATE PROCEDURE  [dbo].[sp_TAMS_Get_RegistrationInformationByRegModuleID] 
+	@RegModuleID INT
+AS
+BEGIN
+
+	DECLARE @RegId INT;
+	DECLARE @Line NVARCHAR(20);
+	Declare @TrackType nvarchar(50) ;
+	DECLARE @Module NVARCHAR(20);
+	DECLARE @RegStatus INT;
+	DECLARE @PrevRegModuleID INT;
+
+	IF EXISTS(SELECT * FROM TAMS_Reg_Module WHERE ID = @RegModuleID)
+	BEGIN
+
+		--SELECT r.*, rm.*, e.Title, wf.WFStatus 
+		--FROM TAMS_Registration r, TAMS_Reg_Module rm, TAMS_Endorser e, TAMS_WFStatus wf
+		--WHERE r.id = rm.RegId 
+		--AND rm.RegStatus = e.ID
+		--AND rm.id = @RegModuleID
+		--AND wf.WFType = 'UserRegStatus'
+		--AND wf.Line = rm.Line
+		--AND e.WfStatusId = wf.WFStatusID
+
+		SELECT r.*, rm.ID, rm.RegId, rm.Line, rm.TrackType,rm.Module, rm.RegStatus, rm.WorkflowId, rm.EndorserId,  wf.WFStatus 
+		FROM TAMS_Registration r, TAMS_Reg_Module rm, TAMS_WFStatus wf
+		WHERE r.id = rm.RegID
+		AND rm.ID = @RegModuleID
+		AND wf.WFType = 'UserRegStatus'
+		AND wf.Line = rm.Line
+		
+		AND wf.WFStatusId = rm.RegStatus
+
+		SELECT @RegId=RegID, @Line=Line,@TrackType = TrackType, @Module=Module, @RegStatus=RegStatus FROM TAMS_Reg_Module WHERE ID = @RegModuleID
+
+		SET @RegStatus = @RegStatus - 1;
+
+		SELECT @PrevRegModuleID=ID FROM TAMS_Reg_Module WHERE RegId = @RegId AND Line=@Line AND Module=@Module AND RegStatus=@RegStatus;
+	END;
+
+	IF EXISTS(SELECT * FROM TAMS_Reg_Role WHERE RegModID = @PrevRegModuleID)
+	BEGIN
+
+		SELECT rr.*, r.Role, r.RoleDesc FROM TAMS_Reg_Role rr, TAMS_Role r 
+		WHERE rr.RegRoleID = r.ID
+		AND RegModID = @PrevRegModuleID;
+	END;
+
+	IF EXISTS(SELECT * FROM TAMS_Reg_QueryDept WHERE RegModID = @PrevRegModuleID)
+	BEGIN
+
+		SELECT * FROM TAMS_Reg_QueryDept WHERE RegModID = @PrevRegModuleID
+	END;
+
+END
+
+### ⬆️ END OF INPUT ⬆️
+**INSTRUCTION:** Document the logic above in English.

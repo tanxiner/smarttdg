@@ -1,0 +1,262 @@
+
+### SYSTEM ROLE
+You are a **Senior Database Architect**.
+You are NOT a Coder. You DO NOT write SQL code.
+
+### OBJECTIVE
+Document the logic of the Stored Procedure provided below.
+
+### 🛑 STRICT CONSTRAINTS
+1. **NO SQL CODE BLOCKS.** Do not rewrite the procedure code.
+2. **NO** "Here is the documentation" filler.
+3. **NO** generic explanations.
+4. **DO NOT EXPAND ACRONYMS.**
+   (Treat these as proper nouns: ["BB", "CSAPEX57", "CTARID", "DTL", "ID", "NB", "NEL", "TAMS_TAR", "TAMS_USER", "TARID"])
+
+### ✅ REQUIRED OUTPUT FORMAT
+Output exactly this structure:
+
+# Procedure: sp_TAMS_Inbox_Child_OnLoad_20230706
+
+### Purpose
+{One clear sentence explaining what business task this performs.}
+
+### Parameters
+| Name | Type | Purpose |
+| :--- | :--- | :--- |
+| @ParamName | DataType | {Inferred usage} |
+
+### Logic Flow
+{Step-by-step plain English explanation.}
+
+### Data Interactions
+* **Reads:** {List tables explicitly selected from}
+* **Writes:** {List tables inserted/updated/deleted}
+
+---
+
+### ⬇️ RAW SQL INPUT ⬇️
+CREATE PROCEDURE [dbo].[sp_TAMS_Inbox_Child_OnLoad_20230706]
+	@Line		AS NVARCHAR(10) = NULL,
+	@AccessDate	AS NVARCHAR(20) = NULL,
+	@TARType	AS NVARCHAR(20) = NULL,
+	@LoginUser	AS NVARCHAR(50) = NULL,
+	@SectorID	AS INT
+AS
+
+BEGIN
+
+DECLARE @UserID INT
+
+SELECT @UserID = Userid 
+	FROM TAMS_USER
+		WHERE LoginId = @LoginUser
+
+DECLARE @CurrDate	DATETIME
+SET @CurrDate = CONVERT(DATETIME, CONVERT(NVARCHAR(20), GETDATE(), 103), 103)
+
+-- >> Remove Cancelled TARs
+DECLARE @StatusId AS INT
+
+SELECT @StatusId = WFStatusId 
+	FROM TAMS_WFStatus WHERE Line = @Line AND WFType = 'TARWFStatus' AND WFStatus = 'Cancel';
+
+CREATE TABLE #TmpSector 
+(Line		NVARCHAR(10),
+SectorID	INT,
+SectorStr	NVARCHAR(50),
+SectorOrder	INT,
+Direction	INT)
+
+CREATE TABLE #TmpInbox 
+(TARID			BIGINT,
+TARNo			NVARCHAR(20),
+TARType			NVARCHAR(10),
+AccessDate		NVARCHAR(20),
+AccessType		NVARCHAR(20),
+SectorID		INT,
+SectorStr		NVARCHAR(50),
+Direction		INT)
+
+CREATE TABLE #TmpInboxList 
+(TARID			BIGINT,
+TARNo			NVARCHAR(20),
+TARType			NVARCHAR(10),
+AccessDate		NVARCHAR(20),
+AccessType		NVARCHAR(20),
+SectorID		INT,
+SectorStr		NVARCHAR(50),
+Direction		INT)
+
+TRUNCATE TABLE #TmpSector
+TRUNCATE TABLE #TmpInbox
+TRUNCATE TABLE #TmpInboxList
+
+INSERT INTO #TmpSector 
+	(Line, SectorID, SectorStr, SectorOrder, Direction)
+SELECT Line, ID, Sector, [Order], CASE WHEN Direction IN ('BB', 'NB') THEN 1 ELSE 2 END
+	FROM TAMS_Sector
+		WHERE Line = @Line
+			AND IsActive = 1
+			AND @CurrDate BETWEEN EffectiveDate AND ExpiryDate
+		ORDER BY [Order]
+print @StatusId; 
+print '@StatusId' ;
+INSERT INTO #TmpInbox
+	(TARID, TARNo, TARType, AccessDate, AccessType, SectorID, SectorStr, Direction)
+SELECT a.[Id], a.[TARNo], a.[TARType], CONVERT(NVARCHAR(20), a.[AccessDate], 103), a.[AccessType], b.[Id], b.[Sector], CASE WHEN b.Direction IN ('BB', 'NB') THEN 1 ELSE 2 END
+	FROM TAMS_TAR a, TAMS_Sector b, TAMS_TAR_Sector c, TAMS_TAR_Workflow d, TAMS_Endorser e
+		WHERE b.[Id] = c.[SectorId]
+			AND c.[TarId] = a.[Id]
+			AND a.[Id] = d.[TARid]
+			AND d.[EndorserId] = e.[Id]
+			AND d.[WFStatus] like '%Pending%'
+			-- >> AND ISNULL(b.[IsGap], 0) = 0
+			--AND  d.[UserId]  is null
+			AND ISNULL(d.[UserId], 0) = 0
+			AND e.[RoleId] IN (SELECT f.RoleID FROM TAMS_User_Role f WHERE f.UserID = @UserID) 
+			AND (a.AccessDate = CONVERT(DATE, @AccessDate, 103) OR ISNULL(@AccessDate, '') = '')
+			AND (a.TARType = @TARType OR ISNULL(@TARType, '') = '')
+			AND c.[IsBuffer] = 0
+			AND a.TARStatusId <> @StatusId -- >> Remove Cancelled TARs
+UNION
+SELECT a.[Id], a.[TARNo], a.[TARType], CONVERT(NVARCHAR(20), a.[AccessDate], 103), a.[AccessType], b.[Id], b.[Sector], CASE WHEN b.Direction IN ('BB', 'NB') THEN 1 ELSE 2 END
+	FROM TAMS_TAR a, TAMS_Sector b, TAMS_TAR_Sector c, TAMS_TAR_Workflow d, TAMS_Endorser e
+		WHERE b.[Id] = c.[SectorId]
+			AND c.[TarId] = a.[Id]
+			AND a.[Id] = d.[TARid]
+			AND d.[EndorserId] = e.[Id]
+			AND d.[WFStatus] like '%Pending%'
+			AND d.[UserId] = @UserID
+			AND (a.AccessDate = CONVERT(DATE, @AccessDate, 103) OR ISNULL(@AccessDate, '') = '')
+			AND (a.TARType = @TARType OR ISNULL(@TARType, '') = '')
+			AND c.[IsBuffer] = 0
+			AND a.TARStatusId <> @StatusId -- >> Remove Cancelled TARs
+  
+DECLARE @Cur01 CURSOR;
+DECLARE @CTARID			BIGINT
+DECLARE @CTARNo			NVARCHAR(20)
+DECLARE @CTARType		NVARCHAR(10)
+DECLARE @CAccessDate	NVARCHAR(20)
+DECLARE @CAccessType	NVARCHAR(20)
+DECLARE @CSectorID		INT
+DECLARE @CSectorStr		NVARCHAR(50)
+DECLARE @CDirection		INT
+
+DECLARE @Cur02 CURSOR;
+DECLARE @C2ActionBy		INT
+DECLARE @ActionByChk	INT
+
+SET @Cur01 = CURSOR FAST_FORWARD 
+FOR
+	SELECT TARID, TARNo, TARType, AccessDate, AccessType, SectorID, SectorStr, Direction
+		FROM #TmpInbox
+			ORDER BY TARID, SectorID;		
+
+OPEN @Cur01
+	
+FETCH NEXT FROM @Cur01 INTO @CTARID, @CTARNo, @CTARType, @CAccessDate, @CAccessType, @CSectorID, @CSectorStr, @CDirection
+	
+WHILE @@FETCH_STATUS = 0 
+	
+	BEGIN
+
+		SET @ActionByChk = 0
+
+		IF (SELECT COUNT(*) 
+				FROM TAMS_TAR_Workflow
+					WHERE TARId = @CTARID
+						AND WFStatus <> 'Pending'
+				) = 0
+			BEGIN
+				INSERT INTO #TmpInboxList
+					(TARID, TARNo, TARType, AccessDate, AccessType, SectorID, SectorStr, Direction)
+				VALUES
+					(@CTARID, @CTARNo, @CTARType, @CAccessDate, @CAccessType, @CSectorID, @CSectorStr, @CDirection)
+			END
+		ELSE
+			BEGIN
+				-- >>
+				SET @Cur02 = CURSOR FAST_FORWARD 
+				FOR
+					SELECT ActionBy
+						FROM TAMS_TAR_Workflow
+							WHERE TARId = @CTARID
+								AND WFStatus <> 'Pending'
+
+				OPEN @Cur02
+	
+				FETCH NEXT FROM @Cur02 INTO @C2ActionBy
+	
+				WHILE @@FETCH_STATUS = 0 
+	
+					BEGIN
+
+						 -- >> Comment for 1 Man Testing
+						IF (@UserID = @C2ActionBy)
+							BEGIN
+								SET @ActionByChk = @ActionByChk + 1
+							END
+
+						FETCH NEXT FROM @Cur02 INTO @C2ActionBy
+					END 	
+
+				CLOSE @Cur02
+	
+				DEALLOCATE @Cur02
+				-- >>
+			END
+
+		IF (@ActionByChk = 0)
+			BEGIN
+				INSERT INTO #TmpInboxList
+					(TARID, TARNo, TARType, AccessDate, AccessType, SectorID, SectorStr, Direction)
+				VALUES
+					(@CTARID, @CTARNo, @CTARType, @CAccessDate, @CAccessType, @CSectorID, @CSectorStr, @CDirection)
+			END
+
+		FETCH NEXT FROM @Cur01 INTO @CTARID, @CTARNo, @CTARType, @CAccessDate, @CAccessType, @CSectorID, @CSectorStr, @CDirection
+	END 	
+
+CLOSE @Cur01
+	
+DEALLOCATE @Cur01
+
+select * from #TmpInboxList; 
+
+SELECT b.TARID, b.TARNo, b.TARType, b.AccessDate, b.AccessType
+	FROM #TmpInboxList b
+		WHERE b.SectorID = @SectorID
+	GROUP BY b.TARID, b.TARNo, b.TARType, b.AccessDate, b.AccessType
+	ORDER BY b.TARID, b.TARNo, b.TARType, b.AccessDate, b.AccessType
+
+--SELECT a.Line, a.SectorID, a.SectorStr, a.Direction, a.SectorOrder -- >>, b.TARID, b.TARNo, b.TARType, b.AccessDate, b.AccessType
+--	FROM #TmpSector a -- >>LEFT OUTER JOIN #TmpInboxList b ON a.SectorID = b.SectorID
+--		WHERE a.Direction = 1
+--	GROUP BY a.Line, a.SectorID, a.SectorStr, a.Direction, a.SectorOrder -- >>, b.TARID, b.TARNo, b.TARType, b.AccessDate, b.AccessType
+--	ORDER BY a.SectorOrder
+
+--SELECT a.Line, a.SectorID, a.SectorStr, a.Direction, a.SectorOrder -- >>, b.TARID, b.TARNo, b.TARType, b.AccessDate, b.AccessType 
+--	FROM #TmpSector a -- >>LEFT OUTER JOIN #TmpInboxList b ON a.SectorID = b.SectorID
+--		WHERE a.Direction = 2
+--	GROUP BY a.Line, a.SectorID, a.SectorStr, a.Direction, a.SectorOrder -- >>, b.TARID, b.TARNo, b.TARType, b.AccessDate, b.AccessType
+--	ORDER BY a.SectorOrder
+
+-- >> Logic to check userid not yet inside
+
+/*
+	EXEC sp_TAMS_Inbox_OnLoad 'DTL', '', '', 'CSAPEX57'	
+	EXEC sp_TAMS_Inbox_OnLoad 'NEL', '', '', 'CSAPEX57'	
+*/
+
+
+
+
+DROP TABLE #TmpSector
+DROP TABLE #TmpInbox
+DROP TABLE #TmpInboxList
+
+END
+
+### ⬆️ END OF INPUT ⬆️
+**INSTRUCTION:** Document the logic above in English.

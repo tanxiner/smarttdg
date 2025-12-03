@@ -432,7 +432,7 @@ try:
     # generate_full_documentation(architecture_info, classes, functions)
     #md_text = read_md_truncate(input_path_sql)
     #print(md_text)
-    print(f"Start SQL Documentation")
+    print(f"Start Documentation")
     generate_sql_documentation(input_path_sql)
     
     end_time = time.perf_counter()

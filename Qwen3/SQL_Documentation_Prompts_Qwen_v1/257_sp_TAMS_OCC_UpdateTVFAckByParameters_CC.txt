@@ -1,0 +1,118 @@
+
+### SYSTEM ROLE
+You are a **Senior Database Architect**.
+You are NOT a Coder. You DO NOT write SQL code.
+
+### OBJECTIVE
+Document the logic of the Stored Procedure provided below.
+
+### 🛑 STRICT CONSTRAINTS
+1. **NO SQL CODE BLOCKS.** Do not rewrite the procedure code.
+2. **NO** "Here is the documentation" filler.
+3. **NO** generic explanations.
+4. **DO NOT EXPAND ACRONYMS.**
+   (Treat these as proper nouns: ["ID"])
+
+### ✅ REQUIRED OUTPUT FORMAT
+Output exactly this structure:
+
+# Procedure: sp_TAMS_OCC_UpdateTVFAckByParameters_CC
+
+### Purpose
+{One clear sentence explaining what business task this performs.}
+
+### Parameters
+| Name | Type | Purpose |
+| :--- | :--- | :--- |
+| @ParamName | DataType | {Inferred usage} |
+
+### Logic Flow
+{Step-by-step plain English explanation.}
+
+### Data Interactions
+* **Reads:** {List tables explicitly selected from}
+* **Writes:** {List tables inserted/updated/deleted}
+
+---
+
+### ⬇️ RAW SQL INPUT ⬇️
+CREATE PROCEDURE [dbo].[sp_TAMS_OCC_UpdateTVFAckByParameters_CC]
+	@OperationDate datetime = null,
+	@AccessDate datetime = null,
+	@UserID as int = 0,
+	@StationId as int = 0,	
+	@TVFMode as varchar(10) = null,	
+	@TVFDirection1 as bit = null,	
+	@TVFDirection2 as bit = null
+
+
+
+AS
+BEGIN
+	BEGIN TRY
+		BEGIN TRANSACTION;
+
+			UPDATE TAMS_TVF_Acknowledge
+			SET TVFMode = @TVFMode, TVFDirection1 = @TVFDirection1, TVFDirection2 = @TVFDirection2,
+			VerifiedBy = @UserID, VerifiedOn = GETDATE(), UpdatedOn = GETDATE(), UpdatedBy = @UserID
+			WHERE StationId = @StationId
+			AND OperationDate = @OperationDate
+			AND AccessDate = @AccessDate
+
+			INSERT INTO TAMS_TVF_Acknowledge_Audit(
+			   [ActionBy]
+			  ,[ActionOn]
+			  ,[AuditAction]
+			  ,[TVFAckId]
+			  ,[AccessDate]
+			  ,[OperationDate]
+			  ,[StationId]
+			  ,[TVFMode]
+			  ,[TVFDirection1]
+			  ,[TVFDirection2]
+			  ,[AcknowledgedBy]
+			  ,[AcknowledgedOn]
+			  ,[VerifiedBy]
+			  ,[VerifiedOn]
+			  ,[OperatedBy]
+			  ,[TVFOnTime]
+			  ,[CreatedOn]
+			  ,[CreatedBy]
+			  ,[UpdatedOn]
+			  ,[UpdatedBy])
+			  SELECT 
+			   @UserID
+			  ,GETDATE()
+			  ,'V'
+			  ,[ID]
+			  ,[AccessDate]
+			  ,[OperationDate]
+			  ,[StationId]
+			  ,[TVFMode]
+			  ,[TVFDirection1]
+			  ,[TVFDirection2]
+			  ,[AcknowledgedBy]
+			  ,[AcknowledgedOn]
+			  ,[VerifiedBy]
+			  ,[VerifiedOn]
+			  ,[OperatedBy]
+			  ,[TVFOnTime]
+			  ,[CreatedOn]
+			  ,[CreatedBy]
+			  ,[UpdatedOn]
+			  ,[UpdatedBy]
+			  FROM TAMS_TVF_Acknowledge
+			  WHERE StationId = @StationId
+			  AND OperationDate = @OperationDate
+			  AND AccessDate = @AccessDate
+
+		COMMIT TRANSACTION;
+	END TRY
+	BEGIN CATCH
+		PRINT ERROR_MESSAGE();
+		ROLLBACK TRANSACTION;
+	END CATCH
+END
+
+### ⬆️ END OF INPUT ⬆️
+**INSTRUCTION:** Document the logic above in English.

@@ -1,0 +1,81 @@
+
+### SYSTEM ROLE
+You are a **Senior Database Architect**.
+You are NOT a Coder. You DO NOT write SQL code.
+
+### OBJECTIVE
+Document the logic of the Stored Procedure provided below.
+
+### 🛑 STRICT CONSTRAINTS
+1. **NO SQL CODE BLOCKS.** Do not rewrite the procedure code.
+2. **NO** "Here is the documentation" filler.
+3. **NO** generic explanations.
+4. **DO NOT EXPAND ACRONYMS.**
+   (Treat these as proper nouns: ["DTL", "ID", "NEL"])
+
+### ✅ REQUIRED OUTPUT FORMAT
+Output exactly this structure:
+
+# Procedure: sp_TAMS_OCC_GetTarSectorByLineAndTarAccessDate
+
+### Purpose
+{One clear sentence explaining what business task this performs.}
+
+### Parameters
+| Name | Type | Purpose |
+| :--- | :--- | :--- |
+| @ParamName | DataType | {Inferred usage} |
+
+### Logic Flow
+{Step-by-step plain English explanation.}
+
+### Data Interactions
+* **Reads:** {List tables explicitly selected from}
+* **Writes:** {List tables inserted/updated/deleted}
+
+---
+
+### ⬇️ RAW SQL INPUT ⬇️
+CREATE PROCEDURE [dbo].[sp_TAMS_OCC_GetTarSectorByLineAndTarAccessDate]
+	@Line AS nvarchar(10) = NULL,
+	@AccessDate as nvarchar(50) = NULL
+
+AS
+BEGIN
+	IF @Line = 'DTL'
+	BEGIN
+		SELECT s.id, tarid, d.tractionpowerid, s.sectorid, isbuffer, colourcode, isaddedbuffer, t.poweron
+		FROM tams_tar t, TAMS_TAR_Sector s, TAMS_Traction_Power_Detail d
+		WHERE t.id = s.TARId
+		AND s.sectorid = d.sectorid
+		AND t.TARStatusId = 8
+		AND t.Line = @Line
+		AND t.AccessDate = convert(datetime,@AccessDate,103)
+		ORDER by d.tractionpowerid ASC
+	END;
+	ELSE IF @Line = 'NEL'
+	BEGIN
+		SELECT s.id, tarid, d.PowerSection as tractionpowerid, s.powersectorid as sectorid, isbuffer, '' as colourcode, '' as isaddedbuffer, t.poweron
+		FROM tams_tar t, TAMS_TAR_Power_Sector s, TAMS_Power_Sector d
+		WHERE t.id = s.TARId
+		AND s.PowerSectorId = d.ID
+		AND t.TARStatusId = 9
+		AND t.Line = @Line
+		AND t.AccessDate = convert(datetime,@AccessDate,103)
+		ORDER by s.powersectorid ASC
+	END;
+
+	--ORDER by s.id ASC, d.tractionpowerid ASC, s.SectorId ASC
+	--SELECT s.id, tarid, s.sectorid, isbuffer, colourcode, isaddedbuffer, t.poweron
+	--FROM tams_tar_reno t, TAMS_TAR_Sector_reno s
+	--WHERE t.id = s.TARId
+	--AND t.Line = @Line
+	--AND t.AccessDate = convert(datetime,@AccessDate,103)
+	--and s.tarid = 4
+	--ORDER by s.SectorId ASC
+
+	----ORDER by s.id ASC, s.SectorId ASC
+END
+
+### ⬆️ END OF INPUT ⬆️
+**INSTRUCTION:** Document the logic above in English.

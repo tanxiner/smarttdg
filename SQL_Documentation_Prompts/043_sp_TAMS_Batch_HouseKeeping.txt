@@ -1,0 +1,103 @@
+
+### SYSTEM ROLE
+You are a **Senior Database Architect**.
+You are NOT a Coder. You DO NOT write SQL code.
+
+### OBJECTIVE
+Document the logic of the Stored Procedure provided below.
+
+### 🛑 STRICT CONSTRAINTS
+1. **NO SQL CODE BLOCKS.** Do not rewrite the procedure code.
+2. **NO** "Here is the documentation" filler.
+3. **NO** generic explanations.
+4. **DO NOT EXPAND ACRONYMS.**
+   (Treat these as proper nouns: ["ID", "TAMS_TAR", "TAMS_TOA"])
+
+### ✅ REQUIRED OUTPUT FORMAT
+Output exactly this structure:
+
+# Procedure: sp_TAMS_Batch_HouseKeeping
+
+### Purpose
+{One clear sentence explaining what business task this performs.}
+
+### Parameters
+| Name | Type | Purpose |
+| :--- | :--- | :--- |
+| @ParamName | DataType | {Inferred usage} |
+
+### Logic Flow
+{Step-by-step plain English explanation.}
+
+### Data Interactions
+* **Reads:** {List tables explicitly selected from}
+* **Writes:** {List tables inserted/updated/deleted}
+
+---
+
+### ⬇️ RAW SQL INPUT ⬇️
+CREATE PROCEDURE [dbo].[sp_TAMS_Batch_HouseKeeping]
+-- -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-- Procedure Name 	: MMS_DeActivate_UserAccount
+-- Author		: jeffrey
+-- Date Created		: 26/08/2021
+-- Purpose		: 
+AS
+
+BEGIN
+		
+	DECLARE @DeAct	BIGINT
+	SET @DeAct = 0
+
+	SELECT @DeAct = CAST(ParaValue1 AS BIGINT) FROM TAMS_Parameters
+	WHERE ParaCode = 'DeActivateAcct'
+	AND GETDATE() BETWEEN EffectiveDate AND ExpiryDate
+
+	--UPDATE TAMS_User 
+	--SET IsActive = 0,
+	--	UpdatedBy = 'AdmDeAct',
+	--	UpdatedOn = GETDATE()
+	--		WHERE DATEDIFF(MONTH, CONVERT(DATETIME, CONVERT(NVARCHAR(10), LastLogin, 103), 103), GETDATE()) >= @DeAct 
+
+SELECT * FROM [dbo].[TAMS_TAR_AccessReq]
+	WHERE TARId IN (SELECT DISTINCT ID FROM [dbo].[TAMS_TAR])
+SELECT * FROM [dbo].[TAMS_TAR_Attachment]
+	WHERE TARAccessReqId IN (SELECT ID FROM [dbo].[TAMS_TAR_AccessReq]
+								WHERE TARId IN (SELECT DISTINCT ID FROM [dbo].[TAMS_TAR]))
+SELECT * FROM [dbo].[TAMS_TAR_Attachment_Temp]
+	WHERE TARId IN (SELECT DISTINCT ID FROM [dbo].[TAMS_TAR])
+SELECT * FROM [dbo].[TAMS_TAR_Power_Sector]
+	WHERE TARId IN (SELECT DISTINCT ID FROM [dbo].[TAMS_TAR])
+SELECT * FROM [dbo].[TAMS_TAR_Sector]
+	WHERE TARId IN (SELECT DISTINCT ID FROM [dbo].[TAMS_TAR])
+SELECT * FROM [dbo].[TAMS_TAR_Station]
+	WHERE TARId IN (SELECT DISTINCT ID FROM [dbo].[TAMS_TAR])
+SELECT * FROM [dbo].[TAMS_TAR_TVF]
+	WHERE TARId IN (SELECT DISTINCT ID FROM [dbo].[TAMS_TAR])
+SELECT * FROM [dbo].[TAMS_TAR_Workflow]
+	WHERE TARId IN (SELECT DISTINCT ID FROM [dbo].[TAMS_TAR])
+
+
+SELECT * FROM [dbo].[TAMS_Block_TARDate]
+SELECT * FROM [dbo].[TAMS_OCC_Auth]
+SELECT * FROM [dbo].[TAMS_OCC_Auth_Workflow]
+SELECT * FROM [dbo].[TAMS_OCC_Duty_Roster]
+SELECT * FROM [dbo].[TAMS_Possession]
+SELECT * FROM [dbo].[TAMS_Possession_Limit]
+SELECT * FROM [dbo].[TAMS_Possession_OtherProtection]
+SELECT * FROM [dbo].[TAMS_Possession_PowerSector]
+SELECT * FROM [dbo].[TAMS_Possession_WorkingLimit]
+
+
+SELECT * FROM [dbo].[TAMS_TOA]
+SELECT * FROM [dbo].[TAMS_TOA_Parties]
+SELECT * FROM [dbo].[TAMS_TVF_Ack_Remark]
+SELECT * FROM [dbo].[TAMS_TVF_Acknowledge]
+
+SELECT * FROM [dbo].[TAMS_TAR]
+
+
+END
+
+### ⬆️ END OF INPUT ⬆️
+**INSTRUCTION:** Document the logic above in English.

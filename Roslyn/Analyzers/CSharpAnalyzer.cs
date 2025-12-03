@@ -169,12 +169,15 @@ namespace Roslyn.Analyzers
                 }
             }
 
+            // Build IR for this file
+            var ir = BuildIR(root, model, compilation, merged.ToList(), filePath);
+
             return new
             {
                 file = Path.GetFileName(filePath),
                 language = "C#",
                 namespaces,
-                usings,
+                //usings,
                 classes = classDetails,
                 //interfaces,
                 //structs,
@@ -182,7 +185,8 @@ namespace Roslyn.Analyzers
                 methods,
                 //properties,
                 //fields,
-                dependencies,
+                //dependencies,
+                ir, // include IR here
                 sql_usages = merged.Select(s => new {
                     file = Path.GetFileName(s.FilePath),
                     s.Namespace,
@@ -197,6 +201,119 @@ namespace Roslyn.Analyzers
                     s.RawSnippet
                 }).ToArray()
             };
+        }
+
+        // Add this helper near the bottom of the file (inside the CSharpAnalyzer class)
+        // It builds a simple, compact IR for the file's types/members and SQL usages.
+
+        private static object BuildIR(CSS.CompilationUnitSyntax root, SemanticModel model, Compilation compilation, List<SqlCommandExtractor.SqlUsage> sqlUsages, string filePath)
+        {
+            string Modifiers(SyntaxTokenList mods) => string.Join(" ", mods.Select(m => m.Text)).Trim();
+
+            Func<CSS.ParameterListSyntax?, object[]> FormatParams = (pList) =>
+            {
+                if (pList == null) return Array.Empty<object>();
+                return pList.Parameters.Select(p => new
+                {
+                    name = p.Identifier.Text,
+                    type = p.Type?.ToString() ?? "object",
+                    defaultValue = p.Default?.Value?.ToString()
+                }).ToArray();
+            };
+
+            var types = root.DescendantNodes().OfType<CSS.TypeDeclarationSyntax>()
+                .Select(t =>
+                {
+                    var methods = t.Members.OfType<CSS.MethodDeclarationSyntax>()
+                        .Select(m => new
+                        {
+                            name = m.Identifier.Text,
+                            modifiers = Modifiers(m.Modifiers),
+                            returnType = (m.ReturnType != null) ? m.ReturnType.ToString() : "void",
+                            parameters = FormatParams(m.ParameterList)
+                        })
+                        .ToArray();
+
+                    var properties = t.Members.OfType<CSS.PropertyDeclarationSyntax>()
+                        .Select(p => new
+                        {
+                            name = p.Identifier.Text,
+                            modifiers = Modifiers(p.Modifiers),
+                            type = p.Type?.ToString() ?? "object"
+                        })
+                        .ToArray();
+
+                    var fields = t.Members.OfType<CSS.FieldDeclarationSyntax>()
+                        .SelectMany(f => f.Declaration.Variables.Select(v => new
+                        {
+                            name = v.Identifier.Text,
+                            modifiers = Modifiers(f.Modifiers),
+                            type = f.Declaration.Type?.ToString() ?? "object"
+                        }))
+                        .ToArray();
+
+                    var baseTypes = (t is CSS.ClassDeclarationSyntax cd && cd.BaseList != null)
+                        ? cd.BaseList.Types.Select(bt => bt.Type.ToString()).ToArray()
+                        : (t is CSS.StructDeclarationSyntax sd && sd.BaseList != null)
+                            ? sd.BaseList.Types.Select(bt => bt.Type.ToString()).ToArray()
+                            : Array.Empty<string>();
+
+                    // attach SQL usages for this type (by class name)
+                    var typeName = t.Identifier.Text;
+                    var sqlForType = sqlUsages
+                        .Where(s => string.Equals(s.ClassName, typeName, StringComparison.OrdinalIgnoreCase))
+                        .Select(s => new
+                        {
+                            s.Line,
+                            s.Kind,
+                            sql = s.SqlText,
+                            s.CommandTypeIsStoredProcedure,
+                            inferred = s.InferredStoredProcedures,
+                            raw = s.RawSnippet
+                        })
+                        .ToArray();
+
+                    return new
+                    {
+                        kind = t.Kind().ToString().Replace("DeclarationSyntax", ""), // "ClassDeclaration" -> "Class"
+                        name = typeName,
+                        namespaceName = t.Ancestors().OfType<CSS.BaseNamespaceDeclarationSyntax>().FirstOrDefault()?.Name?.ToString() ?? "",
+                        modifiers = Modifiers(t.Modifiers),
+                        baseTypes,
+                        methods,
+                        properties,
+                        fields,
+                        sql = sqlForType
+                    };
+                })
+                .ToArray();
+
+            var fileLevelSql = sqlUsages
+                .Where(s => string.IsNullOrEmpty(s.ClassName))
+                .Select(s => new
+                {
+                    s.FilePath,
+                    s.Line,
+                    s.Kind,
+                    sql = s.SqlText,
+                    s.CommandTypeIsStoredProcedure,
+                    inferred = s.InferredStoredProcedures,
+                    raw = s.RawSnippet
+                })
+                .ToArray();
+
+            var ir = new
+            {
+                file = Path.GetFileName(filePath),
+                path = filePath,
+                namespaces = root.DescendantNodes().OfType<CSS.BaseNamespaceDeclarationSyntax>()
+                                 .Select(n => n.Name?.ToString()).Where(s => !string.IsNullOrWhiteSpace(s)).Distinct().ToArray(),
+                usings = root.Usings.Select(u => u.Name?.ToString()).Where(s => !string.IsNullOrWhiteSpace(s)).Distinct().ToArray(),
+                types,
+                file_level_sql = fileLevelSql
+            };
+
+            return ir;
         }
     }
 }

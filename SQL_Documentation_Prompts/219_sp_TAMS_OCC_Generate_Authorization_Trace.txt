@@ -1,0 +1,342 @@
+
+### SYSTEM ROLE
+You are a **Senior Database Architect**.
+You are NOT a Coder. You DO NOT write SQL code.
+
+### OBJECTIVE
+Document the logic of the Stored Procedure provided below.
+
+### 🛑 STRICT CONSTRAINTS
+1. **NO SQL CODE BLOCKS.** Do not rewrite the procedure code.
+2. **NO** "Here is the documentation" filler.
+3. **NO** generic explanations.
+4. **DO NOT EXPAND ACRONYMS.**
+   (Treat these as proper nouns: ["C1ID", "C2ID", "DTL", "ID", "NEL", "TAMS_TAR", "TARID", "TIME"])
+
+### ✅ REQUIRED OUTPUT FORMAT
+Output exactly this structure:
+
+# Procedure: sp_TAMS_OCC_Generate_Authorization_Trace
+
+### Purpose
+{One clear sentence explaining what business task this performs.}
+
+### Parameters
+| Name | Type | Purpose |
+| :--- | :--- | :--- |
+| @ParamName | DataType | {Inferred usage} |
+
+### Logic Flow
+{Step-by-step plain English explanation.}
+
+### Data Interactions
+* **Reads:** {List tables explicitly selected from}
+* **Writes:** {List tables inserted/updated/deleted}
+
+---
+
+### ⬇️ RAW SQL INPUT ⬇️
+CREATE PROCEDURE [dbo].[sp_TAMS_OCC_Generate_Authorization_Trace]
+	@Line	NVARCHAR(20) = NULL,
+	@AccessDate	NVARCHAR(20) = NULL
+AS
+
+BEGIN
+
+DECLARE @CurDate		DATE
+DECLARE @CurTime		TIME
+DECLARE @DerOPDate		DATE
+DECLARE @DerAccessDate	DATE
+DECLARE @CutOff			TIME
+
+SET @CurDate = GETDATE()
+SET @CurTime = CONVERT(TIME, GETDATE(), 108)
+SET @CutOff = '06:00:00'
+
+IF ISNULL(@AccessDate, '') = ''
+	BEGIN
+		IF @CurTime > @CutOff
+			BEGIN
+				SET @DerOPDate	= CONVERT(DATE, @CurDate, 103)
+				SET @DerAccessDate	= DATEADD(DAY, 1, CONVERT(DATE, @CurDate, 103))
+			END
+		ELSE
+			BEGIN
+				SET @DerOPDate	= DATEADD(DAY, -1, CONVERT(DATE, @CurDate, 103))
+				SET @DerAccessDate	= CONVERT(DATE, @CurDate, 103)
+			END
+		--SET @DerOPDate = CONVERT(DATE, @CurDate, 103)
+		--SET @DerAccessDate = DATEADD(DAY, 1, CONVERT(DATE, @CurDate, 103))
+	END
+ELSE
+	BEGIN
+		SET @DerOPDate = DATEADD(DAY, -1, CONVERT(DATE, @AccessDate, 103))
+		SET @DerAccessDate = CONVERT(DATE, @AccessDate, 103)
+	END
+
+DECLARE @OCCAuthCtr	INT = 0
+
+SELECT @OCCAuthCtr = COUNT(*) 
+	FROM [dbo].[TAMS_OCC_Auth] 
+		WHERE [Line] = @Line 
+			AND [AccessDate] = @DerAccessDate
+
+DECLARE @WorkflowID	INT
+DECLARE @WFStatusId INT
+DECLARE @EndorserID	INT
+
+SELECT @WorkflowID = ID
+	FROM TAMS_Workflow
+		WHERE Line = @Line
+			AND WorkflowType = 'OCCAuth'
+			AND GETDATE() BETWEEN EffectiveDate AND ExpiryDate
+			AND IsActive = 1
+		ORDER BY ID
+
+SELECT @WFStatusId = WFStatusId,
+		@EndorserID =  ID
+	FROM TAMS_Endorser
+		WHERE WorkflowId = @WorkflowID
+			AND [Level] = 1
+			AND GETDATE() BETWEEN EffectiveDate AND ExpiryDate
+			AND IsActive = 1
+		ORDER BY ID
+
+CREATE TABLE #TmpTARSectors 
+(ID				INT,
+TARID			INT,
+TractionPowerID	INT,
+SectorID		INT,
+IsBuffer		BIT,
+ColourCode		NVARCHAR(100) NULL,
+IsAddedBuffer	BIT,
+PowerOn			BIT)
+
+CREATE TABLE #TmpOCCAuth 
+(ID				INT,
+Line			NVARCHAR(10),
+OperationDate	DATETIME,
+AccessDate		DATETIME,
+TractionPowerId	INT,
+Remark			NVARCHAR(1000) NULL,
+PFRRemark		NVARCHAR(1000) NULL,
+OCCAuthStatusId	INT,
+IsBuffer		BIT,
+PowerOn			BIT,
+PowerOffTime	DATETIME,
+RackedOutTime	DATETIME,
+CreatedOn		DATETIME,
+CreatedBy		INT,
+UpdatedOn		DATETIME NULL,
+UpdatedBy		INT NULL)
+
+CREATE TABLE #TmpOCCAuthWorkflow 
+(ID					INT,
+OCCAuthId			INT,
+OCCAuthEndorserId	INT,
+WFStatus			NVARCHAR(50),
+StationId			INT,
+FISTestResult		NVARCHAR(50) NULL,
+ActionOn			DATETIME,
+ActionBy			INT)
+
+TRUNCATE TABLE #TmpTARSectors
+TRUNCATE TABLE #TmpOCCAuth
+TRUNCATE TABLE #TmpOCCAuthWorkflow
+
+IF @Line = 'DTL'
+	BEGIN
+		INSERT INTO #TmpTARSectors
+		SELECT s.id, tarid, d.tractionpowerid, s.sectorid, isbuffer, colourcode, isaddedbuffer, t.poweron
+			FROM TAMS_TAR t, TAMS_TAR_Sector s, TAMS_Traction_Power_Detail d
+				WHERE t.id = s.TARId
+					AND s.sectorid = d.sectorid
+					AND t.TARStatusId = 8
+					AND t.Line = @Line
+					AND t.AccessDate = CONVERT(DATETIME, @DerAccessDate, 103)
+			ORDER by d.tractionpowerid ASC
+	END;
+ELSE IF @Line = 'NEL'
+	BEGIN
+		INSERT INTO #TmpTARSectors
+		-- >> SELECT s.id, tarid, d.PowerSection AS tractionpowerid, s.powersectorid AS sectorid, isbuffer, '' AS colourcode, 0 AS isaddedbuffer, t.poweron
+		SELECT s.id, tarid, d.ID AS tractionpowerid, s.powersectorid AS sectorid, isbuffer, '' AS colourcode, 0 AS isaddedbuffer, t.poweron
+			FROM TAMS_TAR t, TAMS_TAR_Power_Sector s, TAMS_Power_Sector d
+				WHERE t.id = s.TARId
+					AND s.PowerSectorId = d.ID
+					AND t.TARStatusId = 9
+					AND t.Line = @Line
+					AND t.AccessDate = CONVERT(DATETIME, @DerAccessDate, 103)
+			ORDER by s.powersectorid ASC
+	END;
+
+DECLARE @TARSectorCtr	INT = 0
+DECLARE @TARSecRecCtr	INT = 0
+
+SELECT @TARSectorCtr = COUNT(*) FROM #TmpTARSectors
+
+DECLARE @Cur01 CURSOR;
+DECLARE @Cur02 CURSOR;
+
+DECLARE @C1ID			INT,
+	@C1TractionPowerId	INT,
+	@C1OCCAuthStatusId	INT,
+	@TARSectorIsBuffer	BIT,
+	@TARSectorPowerOn	BIT,
+	@C2ID				INT,
+	@Row				INT = 0
+
+
+/*
+EXEC sp_TAMS_OCC_Generate_Authorization 'DTL', NULL
+EXEC sp_TAMS_OCC_Generate_Authorization 'NEL', NULL
+*/
+
+IF @OCCAuthCtr > 0
+	BEGIN
+		IF @TARSectorCtr > 0
+			BEGIN
+
+				INSERT INTO #TmpOCCAuth
+				SELECT [Order], [Line], @DerOPDate, @DerAccessDate, [ID], '', '', @WFStatusId, 0, 0, NULL, NULL, GETDATE(), 1, NULL, NULL
+				FROM [dbo].[TAMS_Traction_Power]
+					WHERE [Line] = @Line
+						AND GETDATE() BETWEEN EffectiveDate AND ExpiryDate
+						AND IsActive = 1
+				ORDER BY [Order] ASC
+
+				-- >> 
+
+				SET @Cur01 = CURSOR FAST_FORWARD 
+				FOR
+
+				--SELECT ID, Line, OperationDate, AccessDate, 
+				--	TractionPowerId, Remark, PFRRemark, OCCAuthStatusId, 
+				--	IsBuffer, PowerOn, PowerOffTime, RackedOutTime 
+				--	FROM #TmpOCCAuth
+				--		ORDER BY 1
+
+				SELECT ID, TractionPowerId
+					FROM #TmpOCCAuth
+						ORDER BY 1
+				OPEN @Cur01
+				FETCH NEXT FROM @Cur01 INTO @C1ID, @C1TractionPowerId
+				WHILE @@FETCH_STATUS = 0 
+					BEGIN
+						SET @TARSecRecCtr = 0
+
+						SELECT @TARSecRecCtr = COUNT(*) 
+							FROM #TmpTARSectors
+								WHERE TractionPowerID = @C1TractionPowerId
+									-- >> AND IsBuffer = 1
+
+						IF @TARSecRecCtr > 0
+							BEGIN
+								SELECT TOP 1 @TARSectorIsBuffer = IsBuffer,
+										@TARSectorPowerOn = PowerOn 
+									FROM #TmpTARSectors
+										WHERE TractionPowerID = @C1TractionPowerId
+											-- >> AND IsBuffer = 1
+
+								IF (@TARSectorIsBuffer = 1 AND @TARSectorPowerOn = 1)
+									BEGIN
+										UPDATE #TmpOCCAuth
+											SET IsBuffer = 1,
+												PowerOn = 1
+										WHERE ID = @C1ID
+											AND TractionPowerId = @C1TractionPowerId
+									END
+								ELSE IF (@TARSectorIsBuffer = 0 AND @TARSectorPowerOn = 1)
+									BEGIN
+										UPDATE #TmpOCCAuth
+											SET IsBuffer = 0,
+												PowerOn = 1
+										WHERE ID = @C1ID
+											AND TractionPowerId = @C1TractionPowerId
+									END
+								--ELSE IF (@TARSectorIsBuffer = 0 AND @TARSectorPowerOn = 1)
+								--	BEGIN
+								--		UPDATE #TmpOCCAuth
+								--			SET IsBuffer = 0,
+								--				PowerOn = 1
+								--		WHERE ID = @C1ID
+								--			AND TractionPowerId = @C1TractionPowerId
+								--	END
+								ELSE
+									BEGIN
+										UPDATE #TmpOCCAuth
+											SET IsBuffer = 0,
+												PowerOn = 0
+										WHERE ID = @C1ID
+											AND TractionPowerId = @C1TractionPowerId
+									END
+							END
+						
+						FETCH NEXT FROM @Cur01 INTO @C1ID, @C1TractionPowerId
+					END 	
+				CLOSE @Cur01
+				DEALLOCATE @Cur01
+
+				-- >>
+
+				----INSERT INTO [dbo].[TAMS_OCC_Auth]
+				----([Line], [OperationDate], [AccessDate], 
+				----	[TractionPowerId], [Remark], [PFRRemark], [OCCAuthStatusId],
+				----	[IsBuffer], [PowerOn], [PowerOffTime], [RackedOutTime],
+				----	[CreatedOn], [CreatedBy], [UpdatedOn], [UpdatedBy])
+				SELECT Line, OperationDate, AccessDate,
+					TractionPowerId, Remark, PFRRemark, OCCAuthStatusId,
+					IsBuffer, PowerOn, PowerOffTime, RackedOutTime,
+					CreatedOn, CreatedBy, NULL, NULL 
+					FROM #TmpOCCAuth
+				ORDER BY ID
+
+				-- >>
+				
+				SET @Row = 1
+
+				SET @Cur02 = CURSOR FAST_FORWARD 
+				FOR
+
+				SELECT ID
+					FROM TAMS_OCC_Auth
+						WHERE Line = @Line
+							AND AccessDate = @DerAccessDate
+							AND OperationDate = @DerOPDate
+						ORDER BY 1
+				OPEN @Cur02
+				FETCH NEXT FROM @Cur02 INTO @C2ID
+				WHILE @@FETCH_STATUS = 0 
+					BEGIN
+						
+						INSERT INTO #TmpOCCAuthWorkflow
+							(ID, OCCAuthId, OCCAuthEndorserId, WFStatus, StationId, FISTestResult, ActionOn, ActionBy)
+						VALUES
+							(@Row, @C2ID, @EndorserID, 'Pending', 0, NULL, GETDATE(), 1)
+
+						SET @Row = @Row + 1
+
+						FETCH NEXT FROM @Cur02 INTO @C2ID
+					END 	
+				CLOSE @Cur02
+				DEALLOCATE @Cur02
+
+				-- >>
+
+				----INSERT INTO [dbo].[TAMS_OCC_Auth_Workflow]
+				----	([OCCAuthId], [OCCAuthEndorserId], [WFStatus], [StationId], [FISTestResult], [ActionOn], [ActionBy])
+				SELECT OCCAuthId, OCCAuthEndorserId, WFStatus, StationId, FISTestResult, ActionOn, ActionBy 
+					FROM #TmpOCCAuthWorkflow
+						ORDER BY ID
+
+			END
+	END
+
+DROP TABLE #TmpOCCAuth
+DROP TABLE #TmpTARSectors
+DROP TABLE #TmpOCCAuthWorkflow
+
+END
+
+### ⬆️ END OF INPUT ⬆️
+**INSTRUCTION:** Document the logic above in English.

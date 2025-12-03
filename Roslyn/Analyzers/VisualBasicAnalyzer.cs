@@ -60,12 +60,23 @@ namespace Roslyn.Analyzers
                         .Where(s => !string.IsNullOrWhiteSpace(s))
                         .ToArray();
 
+                    // collect members summary for convenience
+                    var methods = cb.Members.OfType<VBS.MethodBlockSyntax>()
+                        .Select(mb => mb.SubOrFunctionStatement.Identifier.Text)
+                        .Concat(cb.Members.OfType<VBS.MethodStatementSyntax>().Select(ms => ms.Identifier.Text))
+                        .Distinct()
+                        .ToArray();
+
+                    var props = cb.Members.OfType<VBS.PropertyStatementSyntax>().Select(p => p.Identifier.Text).ToArray();
+
                     return new
                     {
                         name,
                         modifiers,
                         baseType,
-                        interfaces
+                        interfaces,
+                        Methods = methods,
+                        Properties = props
                     };
                 })
                 .ToArray();
@@ -144,14 +155,9 @@ namespace Roslyn.Analyzers
                      var type = (d.AsClause as VBS.SimpleAsClauseSyntax)?.Type?.ToString() ?? "Object";
                      var mods = GetModifiers(f.Modifiers);
                      var fieldStr = $"{mods} {n.Identifier.Text}: {type}".Trim();
-                     // Skip fields whose type contains "System.Windows.Forms" OR "System.ComponentModel"
-                     bool isUIField = fieldStr.Contains("System.Windows.Forms") || fieldStr.Contains("System.ComponentModel") ||
-                     fieldStr.StartsWith("WM_") || fieldStr.StartsWith("WS_") || fieldStr.StartsWith("SWP_") || fieldStr.Contains("System.Globalization.CultureInfo")
-                     || fieldStr.Contains("HWND_") || fieldStr.Contains("hHwnd")|| fieldStr.Contains("System.Resources.ResourceManager")
-                     || fieldStr.Contains("System.Windows.Forms.Panel") || fieldStr.Contains("System") || fieldStr.Contains("Windows") ||
-                     fieldStr.Contains("System.Windows.Forms.RadioButton") || fieldStr.Contains("System.Windows.Forms.Label") || fieldStr.Contains("System.Windows.Forms.TextBox")
-                     || fieldStr.Contains("System.Windows.Forms.Button") || fieldStr.Contains("System.ComponentModel.IContainer") || fieldStr.Contains("System.Windows.Forms.Label");
-
+                     // Skip UI / resource-like fields similar to C# analyzer filtering
+                     bool isUIField = fieldStr.Contains("System.Windows.Forms") || fieldStr.Contains("System.ComponentModel")
+                         || fieldStr.StartsWith("WM_") || fieldStr.StartsWith("WS_") || fieldStr.StartsWith("SWP_");
                      return isUIField ? null : fieldStr;
                  })))
              .Where(f => f != null)
@@ -178,6 +184,42 @@ namespace Roslyn.Analyzers
 
             var dependencies = DependencyExtractor.Extract(filePath, "VB");
 
+            // === Collect SQL usages using SqlCommandExtractor (best-effort) ===
+            List<SqlCommandExtractor.SqlUsage> extractUsages = new List<SqlCommandExtractor.SqlUsage>();
+            List<SqlCommandExtractor.SqlUsage> wrapperUsages = new List<SqlCommandExtractor.SqlUsage>();
+            try
+            {
+                extractUsages = SqlCommandExtractor.AnalyzeDocument(tree, model, filePath) ?? new List<SqlCommandExtractor.SqlUsage>();
+            }
+            catch
+            {
+                // non-fatal
+            }
+            try
+            {
+                wrapperUsages = SqlCommandExtractor.AnalyzeDbWrapperCalls(root, model, filePath).ToList();
+            }
+            catch
+            {
+                // non-fatal
+            }
+
+            // Merge and deduplicate usages (prefer entries with SqlText)
+            var merged = new List<SqlCommandExtractor.SqlUsage>();
+            var seen = new HashSet<string>();
+            IEnumerable<SqlCommandExtractor.SqlUsage> all = extractUsages.Concat(wrapperUsages);
+            foreach (var u in all.OrderByDescending(u => !string.IsNullOrEmpty(u.SqlText)).ThenBy(u => u.Line))
+            {
+                var key = $"{u.Kind}|{u.Line}|{(u.SqlText ?? "").Trim()}|{(u.RawSnippet ?? "").Trim()}";
+                if (seen.Add(key))
+                {
+                    merged.Add(u);
+                }
+            }
+
+            // Build VB IR and include in returned result
+            var ir = BuildIR(root, model, compilation, merged.ToList(), filePath);
+
             return new
             {
                 file = Path.GetFileName(filePath),
@@ -191,8 +233,165 @@ namespace Roslyn.Analyzers
                 methods,
                 //properties,
                 //fields,
-                dependencies
+                //dependencies,
+                ir,
+                sql_usages = merged.Select(s => new {
+                    file = Path.GetFileName(s.FilePath),
+                    s.Namespace,
+                    s.ClassName,
+                    s.MethodName,
+                    s.MethodSignature,
+                    s.Line,
+                    s.Kind,
+                    s.SqlText,
+                    s.CommandTypeIsStoredProcedure,
+                    s.InferredStoredProcedures,
+                    s.RawSnippet
+                }).ToArray()
             };
+        }
+
+        // Build a compact IR for VB files (types, members, and SQL usages)
+        private static object BuildIR(VBS.CompilationUnitSyntax root, SemanticModel model, Compilation compilation, List<SqlCommandExtractor.SqlUsage> sqlUsages, string filePath)
+        {
+            string Modifiers(SyntaxTokenList mods) => string.Join(" ", mods.Select(m => m.Text)).Trim();
+
+            Func<VBS.ParameterListSyntax?, object[]> FormatParams = (pList) =>
+            {
+                if (pList == null) return Array.Empty<object>();
+                return pList.Parameters.Select(p => new
+                {
+                    name = p.Identifier.Identifier.Text,
+                    type = (p.AsClause as VBS.SimpleAsClauseSyntax)?.Type?.ToString() ?? "Object",
+                    defaultValue = p.Default?.Value?.ToString()
+                }).ToArray();
+            };
+
+            var types = new List<object>();
+
+            // Classes
+            foreach (var cb in root.DescendantNodes().OfType<VBS.ClassBlockSyntax>())
+            {
+                var stmt = cb.ClassStatement;
+                var typeName = stmt.Identifier.Text;
+                var ns = cb.Ancestors().OfType<VBS.NamespaceBlockSyntax>().FirstOrDefault()?.NamespaceStatement.Name?.ToString() ?? "";
+
+                var methods = cb.Members.OfType<VBS.MethodBlockSyntax>()
+                    .Select(mb => new
+                    {
+                        name = mb.SubOrFunctionStatement.Identifier.Text,
+                        modifiers = Modifiers(mb.SubOrFunctionStatement.Modifiers),
+                        returnType = (mb.SubOrFunctionStatement.AsClause as VBS.SimpleAsClauseSyntax)?.Type?.ToString() ?? "Void",
+                        parameters = FormatParams(mb.SubOrFunctionStatement.ParameterList)
+                    })
+                    .Concat(cb.Members.OfType<VBS.MethodStatementSyntax>().Select(ms => new
+                    {
+                        name = ms.Identifier.Text,
+                        modifiers = Modifiers(ms.Modifiers),
+                        returnType = (ms.AsClause as VBS.SimpleAsClauseSyntax)?.Type?.ToString() ?? "Void",
+                        parameters = FormatParams(ms.ParameterList)
+                    }))
+                    .ToArray();
+
+                var properties = cb.Members.OfType<VBS.PropertyStatementSyntax>()
+                    .Select(p => new
+                    {
+                        name = p.Identifier.Text,
+                        modifiers = Modifiers(p.Modifiers),
+                        type = (p.AsClause as VBS.SimpleAsClauseSyntax)?.Type?.ToString() ?? "Object"
+                    })
+                    .ToArray();
+
+                var fields = cb.Members.OfType<VBS.FieldDeclarationSyntax>()
+                    .SelectMany(f => f.Declarators.SelectMany(d => d.Names.Select(n => new
+                    {
+                        name = n.Identifier.Text,
+                        modifiers = Modifiers(f.Modifiers),
+                        type = (d.AsClause as VBS.SimpleAsClauseSyntax)?.Type?.ToString() ?? "Object"
+                    })))
+                    .ToArray();
+
+                var baseTypes = cb.Inherits.SelectMany(i => i.Types).Select(t => t.ToString()).ToArray();
+
+                var sqlForType = sqlUsages
+                    .Where(s => string.Equals(s.ClassName, typeName, System.StringComparison.OrdinalIgnoreCase))
+                    .Select(s => new
+                    {
+                        s.Line,
+                        s.Kind,
+                        sql = s.SqlText,
+                        s.CommandTypeIsStoredProcedure,
+                        inferred = s.InferredStoredProcedures,
+                        raw = s.RawSnippet
+                    })
+                    .ToArray();
+
+                types.Add(new
+                {
+                    kind = "Class",
+                    name = typeName,
+                    namespaceName = ns,
+                    modifiers = Modifiers(stmt.Modifiers),
+                    baseTypes,
+                    methods,
+                    properties,
+                    fields,
+                    sql = sqlForType
+                });
+            }
+
+            // Structures
+            foreach (var sb in root.DescendantNodes().OfType<VBS.StructureBlockSyntax>())
+            {
+                var stmt = sb.StructureStatement;
+                var name = stmt.Identifier.Text;
+                var methods = sb.Members.OfType<VBS.MethodStatementSyntax>().Select(m => new { name = m.Identifier.Text }).ToArray();
+                types.Add(new { kind = "Struct", name, methods });
+            }
+
+            // Interfaces
+            foreach (var ib in root.DescendantNodes().OfType<VBS.InterfaceBlockSyntax>())
+            {
+                var stmt = ib.InterfaceStatement;
+                var name = stmt.Identifier.Text;
+                var methodsIface = ib.Members.OfType<VBS.MethodStatementSyntax>().Select(m => new { name = m.Identifier.Text }).ToArray();
+                types.Add(new { kind = "Interface", name, methods = methodsIface });
+            }
+
+            // Enums
+            foreach (var eb in root.DescendantNodes().OfType<VBS.EnumBlockSyntax>())
+            {
+                var stmt = eb.EnumStatement;
+                var name = stmt.Identifier.Text;
+                var members = eb.Members.OfType<VBS.EnumMemberDeclarationSyntax>().Select(m => m.Identifier.Text).ToArray();
+                types.Add(new { kind = "Enum", name, members });
+            }
+
+            var fileLevelSql = sqlUsages
+                .Where(s => string.IsNullOrEmpty(s.ClassName))
+                .Select(s => new
+                {
+                    s.FilePath,
+                    s.Line,
+                    s.Kind,
+                    sql = s.SqlText,
+                    s.CommandTypeIsStoredProcedure,
+                    inferred = s.InferredStoredProcedures,
+                    raw = s.RawSnippet
+                })
+                .ToArray();
+
+            var ir = new
+            {
+                file = Path.GetFileName(filePath),
+                path = filePath,
+                namespaces = root.Members.OfType<VBS.NamespaceBlockSyntax>().Select(n => n.NamespaceStatement.Name?.ToString()).Where(s => !string.IsNullOrWhiteSpace(s)).Distinct().ToArray(),
+                imports = root.Imports.SelectMany(i => i.ImportsClauses.OfType<VBS.SimpleImportsClauseSyntax>()).Select(c => c.Name?.ToString()).Where(s => !string.IsNullOrWhiteSpace(s)).Distinct().ToArray(),
+                types = types.ToArray(),
+                file_level_sql = fileLevelSql
+            };
+
+            return ir;
         }
     }
 }

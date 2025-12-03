@@ -1,0 +1,107 @@
+
+### SYSTEM ROLE
+You are a **Senior Database Architect**.
+You are NOT a Coder. You DO NOT write SQL code.
+
+### OBJECTIVE
+Document the logic of the Stored Procedure provided below.
+
+### 🛑 STRICT CONSTRAINTS
+1. **NO SQL CODE BLOCKS.** Do not rewrite the procedure code.
+2. **NO** "Here is the documentation" filler.
+3. **NO** generic explanations.
+4. **DO NOT EXPAND ACRONYMS.**
+   (Treat these as proper nouns: ["INSERTING", "PCNRIC", "TAMS_TAR", "TARID"])
+
+### ✅ REQUIRED OUTPUT FORMAT
+Output exactly this structure:
+
+# Procedure: sp_TAMS_Form_Save_Possession
+
+### Purpose
+{One clear sentence explaining what business task this performs.}
+
+### Parameters
+| Name | Type | Purpose |
+| :--- | :--- | :--- |
+| @ParamName | DataType | {Inferred usage} |
+
+### Logic Flow
+{Step-by-step plain English explanation.}
+
+### Data Interactions
+* **Reads:** {List tables explicitly selected from}
+* **Writes:** {List tables inserted/updated/deleted}
+
+---
+
+### ⬇️ RAW SQL INPUT ⬇️
+CREATE PROCEDURE [dbo].[sp_TAMS_Form_Save_Possession]
+	@TARID					AS BIGINT			= 0,
+	@Summary				AS NVARCHAR(1000)	= NULL,
+	@WorkDesc				AS NVARCHAR(1000)	= NULL,
+	@TypeOfWorkId			AS INT				= NULL,
+	@WorkWithinPossession	AS NVARCHAR(1000)	= NULL,
+	@TakePossession			AS NVARCHAR(1000)	= NULL,
+	@GiveUpPossession		AS NVARCHAR(1000)	= NULL,
+	@Remarks				AS NVARCHAR(1000)	= NULL,
+	@PowerOnOff				AS INT				= NULL,
+	@EngTrainFormation		AS NVARCHAR(50) = NULL,	
+	@EngTrainArriveLoc		AS NVARCHAR(50) = NULL,	
+	@EngTrainArriveTime		AS NVARCHAR(10) = NULL,	
+	@EngTrainDepartLoc		AS NVARCHAR(50) = NULL,	
+	@EngTrainDepartTime		AS NVARCHAR(10) = NULL,	
+	@PCNRIC					AS NVARCHAR(50) = NULL,	
+	@PCName					AS NVARCHAR(100) = NULL,	
+	@PossID					AS BIGINT = 0 OUTPUT,
+	@Message				AS NVARCHAR(500) = NULL OUTPUT
+AS
+
+BEGIN
+
+DECLARE	@IntrnlTrans	TINYINT		
+
+SET @PossID = 0
+
+SELECT 	@IntrnlTrans 	= 0	
+
+IF (@@TRANCOUNT = 0) 
+BEGIN
+	SET @IntrnlTrans = 1
+	BEGIN TRAN
+END
+
+-- >>
+INSERT INTO [dbo].[TAMS_Possession]
+([TARId], [Summary], [WorkDesc], [TypeOfWorkId], 
+[WorkWithinPossession], [TakePossession], [GiveUpPossession], [Remarks], 
+[PowerOnOff],
+[EngTrainFormation], [EngTrainArriveLoc], [EngTrainArriveTime], [EngTrainDepartLoc], [EngTrainDepartTime], 
+[PCNRIC], [PCName])
+VALUES
+(@TARID, @Summary, @WorkDesc, @TypeOfWorkId,
+@WorkWithinPossession, @TakePossession, @GiveUpPossession, @Remarks,
+@PowerOnOff,
+@EngTrainFormation, @EngTrainArriveLoc, @EngTrainArriveTime, @EngTrainDepartLoc, @EngTrainDepartTime,
+dbo.EncryptString(@PCNRIC), @PCName)
+SELECT @PossID = SCOPE_IDENTITY();
+-- >>
+
+IF @@ERROR <> 0 BEGIN
+	SET @Message = 'ERROR INSERTING INTO TAMS_TAR'
+	GOTO TRAP_ERROR
+END
+
+FORCE_EXIT_PROC:	
+	IF @IntrnlTrans = 1 COMMIT TRAN
+	RETURN @Message 
+
+TRAP_ERROR:
+	IF @IntrnlTrans = 1 ROLLBACK TRAN
+	RETURN @Message
+
+
+END
+
+### ⬆️ END OF INPUT ⬆️
+**INSTRUCTION:** Document the logic above in English.

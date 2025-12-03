@@ -1,0 +1,312 @@
+
+### SYSTEM ROLE
+You are a **Senior Database Architect**.
+You are NOT a Coder. You DO NOT write SQL code.
+
+### OBJECTIVE
+Document the logic of the Stored Procedure provided below.
+
+### 🛑 STRICT CONSTRAINTS
+1. **NO SQL CODE BLOCKS.** Do not rewrite the procedure code.
+2. **NO** "Here is the documentation" filler.
+3. **NO** generic explanations.
+4. **DO NOT EXPAND ACRONYMS.**
+   (Treat these as proper nouns: ["ID", "INSERTING", "SPKSID"])
+
+### ✅ REQUIRED OUTPUT FORMAT
+Output exactly this structure:
+
+# Procedure: sp_TAMS_Depot_UpdateDTCAuth
+
+### Purpose
+{One clear sentence explaining what business task this performs.}
+
+### Parameters
+| Name | Type | Purpose |
+| :--- | :--- | :--- |
+| @ParamName | DataType | {Inferred usage} |
+
+### Logic Flow
+{Step-by-step plain English explanation.}
+
+### Data Interactions
+* **Reads:** {List tables explicitly selected from}
+* **Writes:** {List tables inserted/updated/deleted}
+
+---
+
+### ⬇️ RAW SQL INPUT ⬇️
+CREATE PROCEDURE [dbo].[sp_TAMS_Depot_UpdateDTCAuth]
+	-- Add the parameters for the stored procedure here
+	@username as nvarchar(50),
+	@authid as int,
+	@workflowid as int,
+	@statusid as int,
+	@val as bit=NULL,
+	@valstr as nvarchar(50)=NULL,
+	@powerzoneid as int=NULL,
+	@success as bit=NULL OUTPUT,
+	@type as int, -- type is 1 if checkbox, 2 if dropdown
+	@spksid as int=NULL,
+	@Message AS NVARCHAR(500) = NULL OUTPUT
+AS
+BEGIN
+	-- SET NOCOUNT ON added to prevent extra result sets from
+	-- interfering with SELECT statements.
+	SET NOCOUNT ON;
+
+	DECLARE	@IntrnlTrans	TINYINT
+
+	SELECT 	@IntrnlTrans 	= 0	
+
+	IF (@@TRANCOUNT = 0) 
+	BEGIN
+		SET @IntrnlTrans = 1
+		BEGIN TRAN
+	END
+
+    -- Insert statements for procedure here
+
+	DECLARE @access as bit=0;
+
+	IF not EXISTS(select TAMS_User.LoginId from TAMS_Endorser INNER JOIN TAMS_User_Role 
+	ON TAMS_User_Role.ID=TAMS_Endorser.RoleId INNER JOIN TAMS_User
+	ON TAMS_User.LoginId=@username 
+	where TAMS_Endorser.ID=@workflowid)
+	BEGIN
+		SET @access=1
+	END
+
+	if @access=0
+	BEGIN
+		--throw exception
+		set @Message='User ' + @username + ' do not have access to update the information';
+		
+		GOTO TRAP_ERROR
+	END
+
+
+	if @workflowid<>139 and @workflowid<>141
+	BEGIN
+		if not Exists(Select * from TAMS_Depot_Auth_Workflow where WorkflowID=@workflowid)
+		BEGIN
+			set @Message='Workflow not found or is invalid';
+		
+			GOTO TRAP_ERROR
+		END
+	END
+
+
+	--check if workflow is already updated
+	IF Exists(Select * from TAMS_Depot_Auth_Workflow where DTCAuthId=@authid and WorkflowID=@workflowid
+	and WFStatus is not NULL and CheckBoxValue is not null)
+	BEGIN
+		-- already updated
+		-- throw error
+		set @Message='Workflow ID ' + CONVERT(nvarchar(10),@workflowid) + ' is already updated';
+		GOTO TRAP_ERROR
+
+	END
+
+	DECLARE @newstatusid as int;
+	-- get next status
+	select @newstatusid=WFStatusId+1 from TAMS_WFStatus where WFType='dtcauth' and WFStatusId=@statusid
+	and isActive=1
+	order by [Order] ASC;
+
+
+	--update current workflow
+
+	UPDATE TAMS_Depot_Auth_Workflow
+	SET WFStatus=CASE when @type=1 THEN 'Completed' ELSE @valstr END, ActionBy=@username, ActionOn=getDate(),CheckBoxValue=CASE WHEN @type=1 THEN @val ELSE NULL END
+	where WorkflowID=@workflowid and
+	@workflowid<>127 and @workflowid<>131 and @workflowid<>139 and @workflowid<>135 and @workflowid<>136 and @workflowid<>137
+
+	-- get next workflow
+	DECLARE @currentStatus as int;
+	DECLARE @newworkflowid as int;
+
+	select @currentStatus=WFStatusId from TAMS_WFStatus where WFType='dtcauth' and Id=@workflowid
+	Select @newworkflowid=ID from TAMS_WFStatus where WFType='dtcauth' and WFStatusId=(@currentStatus+1)
+
+	-- insert next workflow 
+	INSERT INTO TAMS_Depot_Auth_Workflow
+	SELECT @authid, null, null, null, @newworkflowid,null,0
+	where @workflowid<>127 and @workflowid<>131 and @workflowid<>139 and @workflowid<>135 and @workflowid<>136 and @workflowid<>137
+
+
+	if @workflowid=126
+	BEGIN
+		UPDATE TAMS_Depot_DTCAuth_SPKS
+		SET ProtectOffTiming=getDate(), ProtectOffType=@valstr,ProtectOffActionBy=@username
+		where AuthID=@authid
+	END
+	
+
+
+	if @workflowid=127
+	BEGIN
+
+		UPDATE TAMS_Depot_Auth_Powerzone
+		SET PowerOffTiming=getDate(),PowerOffType=@valstr,PowerOffActionBy=@username,statusID=@newstatusid
+		where AuthID=@authid and PowerzoneID=@powerzoneid
+
+	END
+
+	if @workflowid=135
+	BEGIN
+
+		UPDATE TAMS_Depot_Auth_Powerzone
+		SET PowerOnTiming=getDate(),PowerOnType=@valstr,PowerOnActionBy=@username,statusID=@newstatusid
+		where AuthID=@authid and PowerzoneID=@powerzoneid
+
+	END
+
+
+	if @workflowid=137
+	BEGIN
+		UPDATE TAMS_Depot_DTCAuth_SPKS
+		SET ProtectOnTiming=getDate(), ProtectOnType=@valstr,ProtectOnActionBy=@username,StatusID=@newstatusid
+		where AuthID=@authid and SPKSID=@spksid
+	END
+
+	if @workflowid=131 or @workflowid=139
+	BEGIN
+		UPDATE TAMS_Depot_Auth_Powerzone
+		SET RackedOutTiming=getDate(),RackedOutType=@valstr,RackedOffActionBy=@username,statusID=@newstatusid
+		where AuthID=@authid and PowerzoneID=@powerzoneid
+
+	END
+
+
+	if @workflowid=136
+	BEGIN
+		UPDATE TAMS_Depot_Auth_Powerzone
+		SET RackedInTiming=getDate(),RackedInType=@valstr,RackedInActionBy=@username,statusID=@newstatusid
+		where AuthID=@authid and PowerzoneID=@powerzoneid
+
+		UPDATE TAMS_Depot_DTCAuth_SPKS
+		SET StatusID=@newstatusid+1
+		where AuthID=@authid and SPKSID NOT IN 
+		(
+			Select DISTINCT SPKSId from (
+			(Select PowerzoneID,TAMS_Depot_Auth_Powerzone.StatusID from TAMS_Depot_Auth_Powerzone
+			where TAMS_Depot_Auth_Powerzone.AuthID=@authid) B
+			LEFT JOIN
+			(Select DISTINCT PowerSectorId, PowerSector,SPKSId  from 
+			TAMS_Track_Power_Sector INNER JOIN TAMS_Track_SPKSZone 
+			ON TAMS_Track_Power_Sector.SectorId=TAMS_Track_SPKSZone.SectorId 
+			INNER JOIN TAMS_Power_Sector 
+			ON TAMS_Power_Sector.ID=TAMS_Track_Power_Sector.PowerSectorId 
+			) A ON A.PowerSectorId=B.PowerzoneID)
+			where StatusID<>12
+			group by SPKSId,PowerSectorId,StatusID
+		) and SPKSID not in
+		(
+			Select TAMS_Depot_DTCAuth_SPKS.SPKSID from (
+			Select B.* from (Select AccessDate,ID from TAMS_Depot_Auth) A  
+			join TAMS_Depot_Auth B ON B.AccessDate=A.AccessDate
+			where A.ID=@authid ) C JOIN TAMS_Depot_DTCAuth_SPKS ON C.ID=TAMS_Depot_DTCAuth_SPKS.AuthID 
+			where C.ID<>@authid and TAMS_Depot_DTCAuth_SPKS.StatusID<13 and TAMS_Depot_DTCAuth_SPKS.StatusID is null
+		) and SPKSID not in
+		(
+			Select SPKSID from TAMS_Depot_DTCAuth_SPKS 
+			where authID=@authid and StatusID=14
+		)
+		
+	END
+	
+	
+
+	if @workflowid=127 or @workflowid=131 or @workflowid=139 or @workflowid=135 or @workflowid=136 or @workflowid=137
+	BEGIN
+		DECLARE @checkstatus as int;
+		
+		if @workflowid=127 or @workflowid=135
+		BEGIN
+			Select @checkstatus=WFStatusId from TAMS_WFStatus where ID=@workflowid
+		END
+		ELSE
+		BEGIN
+			Select @checkstatus=WFStatusId+1 from TAMS_WFStatus where ID=@workflowid
+		END
+
+		
+		DECLARE @newstatus as int
+
+		if @workflowid=137
+		BEGIN
+		if not exists(Select * from TAMS_Depot_DTCAuth_SPKS where AuthID=@authid and (StatusID<@checkstatus or StatusID is null))
+			BEGIN
+				SET @newstatus=@checkstatus+1;
+
+				UPDATE TAMS_Depot_Auth
+				SET DepotAuthStatusId=@newstatus,UpdatedOn=getDate(),UpdatedBy=@username
+				where ID=@authid
+
+				UPDATE TAMS_Depot_Auth_Workflow
+				SET WFStatus=CASE when @type=1 THEN 'Completed' ELSE @valstr END, ActionBy=@username, ActionOn=getDate(),CheckBoxValue=CASE WHEN @type=1 THEN @val ELSE NULL END
+				where WorkflowID=@workflowid
+
+				Select @newworkflowid=ID from TAMS_WFStatus where WFType='dtcauth' and WFStatusId=@newstatus
+
+
+				INSERT INTO TAMS_Depot_Auth_Workflow
+				VALUES(@authid, 'Completed', getDate(), 'csapmg72', @newworkflowid,null,0)
+			END
+		END
+		ELSE
+		BEGIN
+		if not exists(Select * from TAMS_Depot_Auth_Powerzone where AuthID=@authid and (StatusID<@checkstatus or StatusID is null))
+			BEGIN
+				SET @newstatus=@checkstatus+1;
+
+				UPDATE TAMS_Depot_Auth
+				SET DepotAuthStatusId=@newstatus,UpdatedOn=getDate(),UpdatedBy=@username
+				where ID=@authid
+
+				UPDATE TAMS_Depot_Auth_Workflow
+				SET WFStatus=CASE when @type=1 THEN 'Completed' ELSE @valstr END, ActionBy=@username, ActionOn=getDate(),CheckBoxValue=CASE WHEN @type=1 THEN @val ELSE NULL END
+				where WorkflowID=@workflowid
+
+				Select @newworkflowid=ID from TAMS_WFStatus where WFType='dtcauth' and WFStatusId=@newstatus
+
+				INSERT INTO TAMS_Depot_Auth_Workflow
+				VALUES(@authid, null, null, null, @newworkflowid,null,0)
+			END
+		END
+	END
+	ELSE
+	BEGIN
+			UPDATE TAMS_Depot_Auth
+			SET DepotAuthStatusId=@newstatusid,UpdatedOn=getDate(),UpdatedBy=@username
+			where ID=@authid
+	END
+
+	IF @@ERROR <> 0 BEGIN
+		SET @Message = 'ERROR INSERTING INTO Depot Authorization module.'
+		
+		PRINT 'trap error'
+		GOTO TRAP_ERROR
+	END
+
+	FORCE_EXIT_PROC:	
+	
+		PRINT 'trap error 1'
+		IF @IntrnlTrans = 1 COMMIT TRAN
+		set @success=1;
+		RETURN;
+		--RETURN @Message 
+
+	TRAP_ERROR:
+	
+		PRINT 'trap error 2'
+		IF @IntrnlTrans = 1 ROLLBACK TRAN
+		set @success=0;
+		RETURN;
+		--RETURN @Message
+
+END
+
+### ⬆️ END OF INPUT ⬆️
+**INSTRUCTION:** Document the logic above in English.

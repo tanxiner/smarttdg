@@ -1,0 +1,538 @@
+
+### SYSTEM ROLE
+You are a **Senior Database Architect**.
+You are NOT a Coder. You DO NOT write SQL code.
+
+### OBJECTIVE
+Document the logic of the Stored Procedures provided below.
+
+### 🛑 STRICT CONSTRAINTS
+1. **NO SQL CODE BLOCKS.** Do not rewrite the procedure code.
+2. **NO** "Here is the documentation" filler.
+3. **NO** generic explanations (e.g. don't explain what a JOIN is).
+
+### ✅ REQUIRED OUTPUT FORMAT
+For each procedure, output exactly this structure:
+
+# Procedure: {ProcedureName}
+**Type:** Stored Procedure
+
+### Purpose
+{One clear sentence explaining what business task this performs.}
+
+### Parameters
+| Name | Type | Purpose |
+| :--- | :--- | :--- |
+| @ParamName | DataType | {Inferred usage} |
+
+### Logic Flow
+{Step-by-step plain English explanation. E.g., "1. Checks if user exists. 2. Inserts into Audit table. 3. Returns ID."}
+
+### Data Interactions
+* **Reads:** {List tables explicitly selected from}
+* **Writes:** {List tables inserted/updated/deleted}
+
+---
+
+### ⬇️ RAW SQL INPUT ⬇️
+CREATE PROCEDURE  [dbo].[sp_TAMS_OPD_OnLoad]
+	@Line		NVARCHAR(20) = NULL,
+	@TrackType		NVARCHAR(50) = NULL
+AS
+
+BEGIN
+
+DECLARE @CurDate		DATE
+DECLARE @CurTime		TIME
+DECLARE @OperationDate	DATE
+DECLARE @AccessDate		DATE
+DECLARE @AccessDateStr	NVARCHAR(20)
+
+SET @CurDate = GETDATE()
+SET @CurTime = CONVERT(TIME, GETDATE(), 108)
+
+DECLARE @CutOff	TIME
+
+SET @CutOff = '06:00:00'
+
+IF @CurTime > @CutOff
+	BEGIN
+		SET @OperationDate	= @CurDate
+		SET @AccessDate		= DATEADD(DAY, 1, @CurDate)
+	END
+ELSE
+	BEGIN
+		SET @OperationDate	= DATEADD(DAY, -1, @CurDate)
+		SET @AccessDate		= @CurDate
+	END
+
+SET @AccessDateStr = CONVERT(NVARCHAR(20), @AccessDate, 103)
+
+CREATE TABLE #TmpOPD
+(DirID				INT,
+Dir					NVARCHAR(10),
+SectorID			BIGINT,
+Sector				NVARCHAR(100),
+DHorizontalX		BIGINT,
+DHorizontalY		BIGINT,
+DHorizontalWidth	BIGINT,
+DHorizontalHeight	BIGINT,
+TARInformation		NVARCHAR(4000),
+BGColor				NVARCHAR(50))
+
+TRUNCATE TABLE #TmpOPD
+
+INSERT INTO #TmpOPD
+SELECT CASE WHEN @Line = 'DTL' THEN 
+		CASE WHEN a.Direction = 'BB' THEN 1 ELSE 2 END 
+		ELSE CASE WHEN a.Direction = 'NB' THEN 1 ELSE 2 END END AS DirID,
+		a.Direction,
+		a.ID,
+		a.Sector,
+		b.DHorizontalX,
+		b.DHorizontalY,
+		b.DHorizontalWidth,
+		b.DHorizontalHeight,
+		--CASE WHEN a.IsGap = 1 THEN '' ELSE
+		--	ISNULL((SELECT [VALUE] FROM dbo.SPLIT(';', dbo.TAMS_Get_TOA_WPCount(@Line, a.ID, @AccessDateStr)) WHERE ROWID = 2), '') END,
+		ISNULL((SELECT [VALUE] FROM dbo.SPLIT(';', dbo.TAMS_Get_TOA_WPCount(@Line, a.ID, @AccessDateStr)) WHERE ROWID = 2), ''),
+		ISNULL((SELECT [VALUE] FROM dbo.SPLIT(';', dbo.TAMS_Get_TOA_WPCount(@Line, a.ID, @AccessDateStr)) WHERE ROWID = 1), '')
+	FROM TAMS_Sector a, TAMS_Track_Coordinates b
+		WHERE a.ID = b.SectorId
+			AND a.Line = @Line
+			and a.TrackType = @TrackType
+
+-- >> Dir2 Above
+SELECT * 
+	FROM #TmpOPD
+		WHERE DirID = CASE WHEN @Line = 'DTL' THEN 2 ELSE 1 END
+			AND DHorizontalX <> 0
+	ORDER BY SectorID ASC
+
+-- >> Dir1 Below
+SELECT * 
+	FROM #TmpOPD
+		WHERE DirID = CASE WHEN @Line = 'DTL' THEN 1 ELSE 2 END
+			AND DHorizontalX <> 0
+	ORDER BY SectorID ASC
+
+SELECT CONVERT(NVARCHAR(20), @OperationDate, 103) AS OperationDate,  
+	CONVERT(NVARCHAR(20), @AccessDate, 103) AS AccessDate
+
+DROP TABLE #TmpOPD
+
+END
+
+---
+
+CREATE PROCEDURE [dbo].[sp_TAMS_RGS_AckReg]
+	@TARID		AS BIGINT = 0,
+	@UserID		AS NVARCHAR(500),
+	@Message	AS NVARCHAR(500) = NULL OUTPUT
+AS
+
+BEGIN
+
+DECLARE	@IntrnlTrans	TINYINT
+SELECT 	@IntrnlTrans 	= 0	
+
+IF (@@TRANCOUNT = 0) 
+BEGIN
+	SET @IntrnlTrans = 1
+	BEGIN TRAN
+END
+
+SET @Message = ''
+
+DECLARE @NewLine AS CHAR(2) = CHAR(30) + CHAR(10)
+
+DECLARE @TOAStatus INT
+DECLARE @TrackType nvarchar(50)
+
+SELECT @TOAStatus = b.TOAStatus, @TrackType=a.TrackType
+	FROM TAMS_TAR a, TAMS_TOA b	
+		WHERE a.Id = b.TARId
+			AND a.Id = @TARID
+
+IF @TOAStatus = 1
+	BEGIN
+		UPDATE TAMS_TOA
+			SET	TOAStatus = 2,
+				AckRegisterTime = GETDATE(),
+				UpdatedOn = GETDATE(),
+				UpdatedBy = @UserID
+		WHERE TARId = @TARID
+
+		if UPPER(@TrackType)='DEPOT'
+		BEGIN
+			DECLARE @id as int;
+
+
+			IF NOT EXISTS(SELECT * from TAMS_Depot_Auth where TarID=@TARID)
+			BEGIN 
+
+				DECLARE @cutofftime as nvarchar(50)	
+				DECLARE @today as DATE
+				DECLARE @cutofftimedt as DateTime;
+			
+
+				--Get Ops Date base on cutoff
+				--Select @cutofftime=ParaTime from TAMS_Parameters where paracode='OpDateCutOffTime' and ParaValue1='NEL' and ParaValue2='Depot'
+				
+				--SET @today=CAST(GETDATE() AS DATE);
+
+
+				--SELECT @cutofftimedt=CAST(@today AS DATETIME) + CAST(LEFT(@cutofftime,8) AS DATETIME)
+
+				--PRINT @cutofftimedt
+
+				--if @cutofftimedt > GETDATE() THEN
+				--BEGIN 
+				--	SET @
+				--END
+				--ELSE
+				--BEGIN
+
+				--END
+				-- Check if inserted before
+				if Exists(Select * from TAMS_Depot_Auth where TarID=@TARID) 
+				BEGIN 
+					RETURN;
+				END
+
+				INSERT INTO TAMS_Depot_Auth(Line,TrackType, OperationDate,  AccessDate, DepotAuthStatusId,CreatedOn,CreatedBy,TarID)
+				SELECT a.Line, @TrackType, b.OperationDate, a.AccessDate, 1,getDate(),@UserID,@TARID
+				FROM TAMS_TAR a , TAMS_TOA b	
+				WHERE a.Id = b.TARId
+				and a.Id  = @TARID
+
+				SET @id=SCOPE_IDENTITY();
+
+				DECLARE @workflowid as int;
+				Select @workflowid=ID from TAMS_WFStatus where WFType='DTCAuth' and WFStatus='Pending No Train Movement (SDS)'
+
+				INSERT INTO TAMS_Depot_Auth_Workflow
+				SELECT @id,NULL,NULL,NULL,@workflowid,NULL,0
+			
+				INSERT INTO TAMS_Depot_DTCAuth_SPKS(SPKSID, AuthID)
+				Select SPKSZone,@id from TAMS_TAR_SPKSZone T where TARId=@TARID 
+				and not exists(
+					SELECT 1 from TAMS_Depot_DTCAuth_SPKS where AuthID=@id and T.SPKSZone=SPKSID
+				)
+
+				INSERT INTO TAMS_Depot_Auth_Powerzone(PowerzoneID, AuthID,isBuffer)
+				Select PowerSectorId,@id,isBuffer from TAMS_TAR_Power_Sector as T 
+				where TARId=@TARID and PowerSectorId NOT IN (48,49,50)
+				and not exists(
+					SELECT 1 from TAMS_Depot_Auth_Powerzone where TAMS_Depot_Auth_Powerzone.AuthID=@id and TAMS_Depot_Auth_Powerzone.PowerzoneID=T.PowerSectorId
+				)
+
+				--INSERT INTO TAMS_Depot_Auth_Powerzone(PowerzoneID, AuthID,isBuffer)
+				--Select PowerSectorId,@id,isBuffer from TAMS_TAR_Power_Sector where TARId=@TARID and PowerSectorId NOT IN (48,49,50)
+			END
+		END
+
+		DECLARE @SMSMsg	NVARCHAR(4000)
+		SET @SMSMsg = ''
+
+		DECLARE @AckRegTime NVARCHAR(20)
+		DECLARE @TARNo	NVARCHAR(50)
+		DECLARE @Line NVARCHAR(5)
+		DECLARE @CurrDate NVARCHAR(20)
+		DECLARE @HPNo NVARCHAR(20)
+
+		SET @AckRegTime = ''
+		SET @TARNo = ''
+		SET @Line = ''
+		SET @CurrDate = ''
+		SET @HPNo = ''
+
+		SELECT @TARNo = a.TARNo, 
+				@Line = a.Line, 
+				@AckRegTime = CONVERT(NVARCHAR(20), b.AckRegisterTime, 108),
+				@HPNo = b.MobileNo
+			FROM TAMS_TAR a, TAMS_TOA b	
+				WHERE a.Id = b.TARId
+					AND a.Id = @TARID
+
+		SET @CurrDate = CONVERT(NVARCHAR(20), GETDATE(), 103)
+
+		IF @Line = 'DTL'
+			BEGIN
+				SET @SMSMsg = CAST(@TARNo AS NVARCHAR(50)) + ' registration has been acknowledged by DTL OCC @ ' + CAST(@AckRegTime AS NVARCHAR(20))
+					+ ' hrs on ' + CAST(@CurrDate AS NVARCHAR(20)) + '. DO NOT GO DOWN TO TRACK YET.'
+			END
+		ELSE
+			BEGIN
+				SET @SMSMsg = CAST(@TARNo AS NVARCHAR(50)) + ' registration has been acknowledged by NEL ' + CASE WHEN UPPER(@TrackType)='DEPOT' THEN 'DCC' ELSE 'OCC' END + ' @ ' + CAST(@AckRegTime AS NVARCHAR(20))
+					+ ' hrs on ' + CAST(@CurrDate AS NVARCHAR(20)) + '. DO NOT GO DOWN TO TRACK YET.'
+			END
+
+		-- >> SEND SMS
+		DECLARE @RetVal NVARCHAR(5)
+		SET @RetVal = ''
+
+			IF LTRIM(RTRIM(ISNULL(@HPNo, ''))) <> '' AND LTRIM(RTRIM(ISNULL(@SMSMsg, ''))) <> ''
+				BEGIN
+					EXEC sp_api_send_sms @HPNo, 'TAMS RGS', @SMSMsg, @RetVal OUTPUT
+				END
+
+		------ >> 20220818 Quickly trigger SMS Sending
+		----	DECLARE @SMSOutputMsg NVARCHAR(500) 
+
+		----	SET @SMSOutputMsg = ''
+
+		----	EXEC SP_Call_SMTP_Send_SMSAlert @SMSOutputMsg OUTPUT
+
+		----	IF @SMSOutputMsg <> ''
+		----		BEGIN
+		----			SET @Message = 'Error SMS Sending'
+		----			GOTO TRAP_ERROR
+		----		END
+		------ >> 20220818 Quickly trigger SMS Sending
+	END
+ELSE
+	BEGIN
+		IF @TOAStatus = 2
+			BEGIN
+				SET @Message = '1'
+				-- TOA already granted. Please refresh RGS.
+				GOTO TRAP_ERROR
+			END
+		ELSE
+			BEGIN
+				SET @Message = 'Invalid TAR status. Please refresh RGS.'
+				GOTO TRAP_ERROR
+			END
+	END
+
+IF @@ERROR <> 0 BEGIN
+	SET @Message = 'Error RGS Ack Reg'
+	GOTO TRAP_ERROR
+END
+
+FORCE_EXIT_PROC:	
+	IF @IntrnlTrans = 1 COMMIT TRAN
+	RETURN @Message 
+
+TRAP_ERROR:
+	IF @IntrnlTrans = 1 ROLLBACK TRAN
+	RETURN @Message
+
+END
+
+---
+
+CREATE PROCEDURE [dbo].[sp_TAMS_RGS_AckReg_20221107]
+	@TARID		AS BIGINT = 0,
+	@UserID		AS NVARCHAR(500),
+	@Message	AS NVARCHAR(500) = NULL OUTPUT
+AS
+
+BEGIN
+
+DECLARE	@IntrnlTrans	TINYINT
+SELECT 	@IntrnlTrans 	= 0	
+
+IF (@@TRANCOUNT = 0) 
+BEGIN
+	SET @IntrnlTrans = 1
+	BEGIN TRAN
+END
+
+SET @Message = ''
+
+DECLARE @NewLine AS CHAR(2) = CHAR(30) + CHAR(10)
+
+UPDATE TAMS_TOA
+	SET	TOAStatus = 2,
+		AckRegisterTime = GETDATE(),
+		UpdatedOn = GETDATE(),
+		UpdatedBy = @UserID
+WHERE TARId = @TARID
+
+DECLARE @SMSMsg	NVARCHAR(4000)
+SET @SMSMsg = ''
+
+DECLARE @AckRegTime NVARCHAR(20)
+DECLARE @TARNo	NVARCHAR(50)
+DECLARE @Line NVARCHAR(5)
+DECLARE @CurrDate NVARCHAR(20)
+DECLARE @HPNo NVARCHAR(20)
+
+SET @AckRegTime = ''
+SET @TARNo = ''
+SET @Line = ''
+SET @CurrDate = ''
+SET @HPNo = ''
+
+SELECT @TARNo = a.TARNo, 
+		@Line = a.Line, 
+		@AckRegTime = CONVERT(NVARCHAR(20), b.AckRegisterTime, 108),
+		@HPNo = b.MobileNo
+	FROM TAMS_TAR a, TAMS_TOA b	
+		WHERE a.Id = b.TARId
+			AND a.Id = @TARID
+
+SET @CurrDate = CONVERT(NVARCHAR(20), GETDATE(), 103)
+
+IF @Line = 'DTL'
+	BEGIN
+		SET @SMSMsg = CAST(@TARNo AS NVARCHAR(50)) + ' registration has been acknowledged by DTL OCC @ ' + CAST(@AckRegTime AS NVARCHAR(20))
+			+ ' hrs on ' + CAST(@CurrDate AS NVARCHAR(20)) + '. Do not go down to track yet.'
+	END
+ELSE
+	BEGIN
+		SET @SMSMsg = CAST(@TARNo AS NVARCHAR(50)) + ' registration has been acknowledged by NEL OCC @ ' + CAST(@AckRegTime AS NVARCHAR(20))
+			+ ' hrs on ' + CAST(@CurrDate AS NVARCHAR(20)) + '. Do not go down to track yet.'
+	END
+
+-- >> SEND SMS
+DECLARE @RetVal NVARCHAR(5)
+SET @RetVal = ''
+
+	IF LTRIM(RTRIM(ISNULL(@HPNo, ''))) <> '' AND LTRIM(RTRIM(ISNULL(@SMSMsg, ''))) <> ''
+		BEGIN
+			EXEC sp_api_send_sms @HPNo, 'TAMS RGS', @SMSMsg, @RetVal OUTPUT
+		END
+
+-- >> 20220818 Quickly trigger SMS Sending
+	DECLARE @SMSOutputMsg NVARCHAR(500) 
+
+	SET @SMSOutputMsg = ''
+
+	EXEC SP_Call_SMTP_Send_SMSAlert @SMSOutputMsg OUTPUT
+
+	IF @SMSOutputMsg <> ''
+		BEGIN
+			SET @Message = 'Error SMS Sending'
+			GOTO TRAP_ERROR
+		END
+-- >> 20220818 Quickly trigger SMS Sending
+
+IF @@ERROR <> 0 BEGIN
+	SET @Message = 'ERROR INSERTING TAMS_TOA_Parties'
+	GOTO TRAP_ERROR
+END
+
+FORCE_EXIT_PROC:	
+	IF @IntrnlTrans = 1 COMMIT TRAN
+	RETURN @Message 
+
+TRAP_ERROR:
+	IF @IntrnlTrans = 1 ROLLBACK TRAN
+	RETURN @Message
+
+END
+
+---
+
+CREATE PROCEDURE [dbo].[sp_TAMS_RGS_AckReg_20230807]
+	@TARID		AS BIGINT = 0,
+	@UserID		AS NVARCHAR(500),
+	@Message	AS NVARCHAR(500) = NULL OUTPUT
+AS
+
+BEGIN
+
+DECLARE	@IntrnlTrans	TINYINT
+SELECT 	@IntrnlTrans 	= 0	
+
+IF (@@TRANCOUNT = 0) 
+BEGIN
+	SET @IntrnlTrans = 1
+	BEGIN TRAN
+END
+
+SET @Message = ''
+
+DECLARE @NewLine AS CHAR(2) = CHAR(30) + CHAR(10)
+
+
+UPDATE TAMS_TOA
+	SET	TOAStatus = 2,
+		AckRegisterTime = GETDATE(),
+		UpdatedOn = GETDATE(),
+		UpdatedBy = @UserID
+WHERE TARId = @TARID
+
+DECLARE @SMSMsg	NVARCHAR(4000)
+SET @SMSMsg = ''
+
+DECLARE @AckRegTime NVARCHAR(20)
+DECLARE @TARNo	NVARCHAR(50)
+DECLARE @Line NVARCHAR(5)
+DECLARE @CurrDate NVARCHAR(20)
+DECLARE @HPNo NVARCHAR(20)
+
+SET @AckRegTime = ''
+SET @TARNo = ''
+SET @Line = ''
+SET @CurrDate = ''
+SET @HPNo = ''
+
+SELECT @TARNo = a.TARNo, 
+		@Line = a.Line, 
+		@AckRegTime = CONVERT(NVARCHAR(20), b.AckRegisterTime, 108),
+		@HPNo = b.MobileNo
+	FROM TAMS_TAR a, TAMS_TOA b	
+		WHERE a.Id = b.TARId
+			AND a.Id = @TARID
+
+SET @CurrDate = CONVERT(NVARCHAR(20), GETDATE(), 103)
+
+IF @Line = 'DTL'
+	BEGIN
+		SET @SMSMsg = CAST(@TARNo AS NVARCHAR(50)) + ' registration has been acknowledged by DTL OCC @ ' + CAST(@AckRegTime AS NVARCHAR(20))
+			+ ' hrs on ' + CAST(@CurrDate AS NVARCHAR(20)) + '. DO NOT GO DOWN TO TRACK YET.'
+	END
+ELSE
+	BEGIN
+		SET @SMSMsg = CAST(@TARNo AS NVARCHAR(50)) + ' registration has been acknowledged by NEL OCC @ ' + CAST(@AckRegTime AS NVARCHAR(20))
+			+ ' hrs on ' + CAST(@CurrDate AS NVARCHAR(20)) + '. DO NOT GO DOWN TO TRACK YET.'
+	END
+
+-- >> SEND SMS
+DECLARE @RetVal NVARCHAR(5)
+SET @RetVal = ''
+
+	IF LTRIM(RTRIM(ISNULL(@HPNo, ''))) <> '' AND LTRIM(RTRIM(ISNULL(@SMSMsg, ''))) <> ''
+		BEGIN
+			EXEC sp_api_send_sms @HPNo, 'TAMS RGS', @SMSMsg, @RetVal OUTPUT
+		END
+
+-- >> 20220818 Quickly trigger SMS Sending
+	DECLARE @SMSOutputMsg NVARCHAR(500) 
+
+	SET @SMSOutputMsg = ''
+
+	EXEC SP_Call_SMTP_Send_SMSAlert @SMSOutputMsg OUTPUT
+
+	IF @SMSOutputMsg <> ''
+		BEGIN
+			SET @Message = 'Error SMS Sending'
+			GOTO TRAP_ERROR
+		END
+-- >> 20220818 Quickly trigger SMS Sending
+
+IF @@ERROR <> 0 BEGIN
+	SET @Message = 'Error RGS Ack Reg'
+	GOTO TRAP_ERROR
+END
+
+FORCE_EXIT_PROC:	
+	IF @IntrnlTrans = 1 COMMIT TRAN
+	RETURN @Message 
+
+TRAP_ERROR:
+	IF @IntrnlTrans = 1 ROLLBACK TRAN
+	RETURN @Message
+
+END
+
+---
+
+
+
+### ⬆️ END OF INPUT ⬆️
+**INSTRUCTION:** Document the logic above in English.

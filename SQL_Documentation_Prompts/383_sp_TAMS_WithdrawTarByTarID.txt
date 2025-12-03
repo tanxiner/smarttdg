@@ -1,0 +1,79 @@
+
+### SYSTEM ROLE
+You are a **Senior Database Architect**.
+You are NOT a Coder. You DO NOT write SQL code.
+
+### OBJECTIVE
+Document the logic of the Stored Procedure provided below.
+
+### 🛑 STRICT CONSTRAINTS
+1. **NO SQL CODE BLOCKS.** Do not rewrite the procedure code.
+2. **NO** "Here is the documentation" filler.
+3. **NO** generic explanations.
+4. **DO NOT EXPAND ACRONYMS.**
+   (Treat these as proper nouns: ["TAMS_TAR", "TAR", "UID"])
+
+### ✅ REQUIRED OUTPUT FORMAT
+Output exactly this structure:
+
+# Procedure: sp_TAMS_WithdrawTarByTarID
+
+### Purpose
+{One clear sentence explaining what business task this performs.}
+
+### Parameters
+| Name | Type | Purpose |
+| :--- | :--- | :--- |
+| @ParamName | DataType | {Inferred usage} |
+
+### Logic Flow
+{Step-by-step plain English explanation.}
+
+### Data Interactions
+* **Reads:** {List tables explicitly selected from}
+* **Writes:** {List tables inserted/updated/deleted}
+
+---
+
+### ⬇️ RAW SQL INPUT ⬇️
+CREATE PROCEDURE [dbo].[sp_TAMS_WithdrawTarByTarID] 	
+	@TarId AS integer = 0,
+	@UID As integer = 0, 
+	@Remark as nvarchar(1000) = null
+AS
+BEGIN
+	DECLARE @Line as varchar(3),
+			@StatusId as int,
+			@Name as nvarchar(500)
+	BEGIN TRY
+		BEGIN TRANSACTION;
+			BEGIN
+				select @Line = line from TAMS_TAR where Id = @TarId;
+				select @StatusId = WFStatusId from TAMS_WFStatus where Line = @Line and WFType = 'TARWFStatus' and WFStatus = 'Withdraw';
+				select @Name = [Name] from TAMS_User where userid = @UID;
+
+				UPDATE TAMS_TAR 
+				SET TARStatusId = @StatusId, 
+				WithdrawRemark= @Remark,
+				WithdrawBy = @UID, 
+				WithdrawDate = GETDATE(),
+				UpdatedOn = GETDATE() ,
+				UpdatedBy =@UID
+				WHERE Id = @TarId;
+
+
+
+				insert into TAMS_Action_Log
+				values(@Line, 'TAR', 'Enquiry-Withdraw', @TarId, 'TAR Form has been withdrawn by ' + @Name + ' on ' + convert(varchar, getdate(), 103), GETDATE(), @UID);
+			END;
+
+		COMMIT TRANSACTION;
+	END TRY
+	BEGIN CATCH
+		ROLLBACK TRANSACTION;
+	END CATCH
+
+END;
+
+### ⬆️ END OF INPUT ⬆️
+**INSTRUCTION:** Document the logic above in English.

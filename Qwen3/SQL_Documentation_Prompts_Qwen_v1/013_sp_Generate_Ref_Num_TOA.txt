@@ -1,0 +1,174 @@
+
+### SYSTEM ROLE
+You are a **Senior Database Architect**.
+You are NOT a Coder. You DO NOT write SQL code.
+
+### OBJECTIVE
+Document the logic of the Stored Procedure provided below.
+
+### 🛑 STRICT CONSTRAINTS
+1. **NO SQL CODE BLOCKS.** Do not rewrite the procedure code.
+2. **NO** "Here is the documentation" filler.
+3. **NO** generic explanations.
+4. **DO NOT EXPAND ACRONYMS.**
+   (Treat these as proper nouns: ["DDMM", "DTL", "GENERATING", "ID", "NEL", "NUM", "REF", "TAMS_TAR", "TARID", "TIME", "TOA", "XXX"])
+
+### ✅ REQUIRED OUTPUT FORMAT
+Output exactly this structure:
+
+# Procedure: sp_Generate_Ref_Num_TOA
+
+### Purpose
+{One clear sentence explaining what business task this performs.}
+
+### Parameters
+| Name | Type | Purpose |
+| :--- | :--- | :--- |
+| @ParamName | DataType | {Inferred usage} |
+
+### Logic Flow
+{Step-by-step plain English explanation.}
+
+### Data Interactions
+* **Reads:** {List tables explicitly selected from}
+* **Writes:** {List tables inserted/updated/deleted}
+
+---
+
+### ⬇️ RAW SQL INPUT ⬇️
+CREATE PROCEDURE [dbo].[sp_Generate_Ref_Num_TOA]
+	@FormType	AS NVARCHAR(20) = NULL,
+	@Line		AS NVARCHAR(20) = NULL,
+	@TARID		AS Int = 0, 
+	@OperationDate	AS NVARCHAR(20) = NULL,
+	@TrackType	AS NVARCHAR(50) = 'MainLine',
+	@RefNum		AS NVARCHAR(20) = NULL OUTPUT,
+	@Message	AS NVARCHAR(500) = NULL OUTPUT
+AS
+
+BEGIN
+
+DECLARE	@IntrnlTrans	TINYINT,
+	@ErrorMsg		NVARCHAR(500)			
+
+SET @ErrorMsg = ''
+
+SELECT 	@IntrnlTrans 	= 0	
+
+IF (@@TRANCOUNT = 0) 
+BEGIN
+	SET @IntrnlTrans = 1
+	BEGIN TRAN
+END
+
+-- >>
+
+DECLARE @MaxNum	BIGINT
+SET @MaxNum = 1
+
+DECLARE @OPDateStr			NVARCHAR(20)
+DECLARE @CurrTimeStr		NVARCHAR(20)
+DECLARE @RefNumOPDateStr	NVARCHAR(20)
+DECLARE @RefNumCurrStr		NVARCHAR(20)
+
+Declare @AccessDate	Date;
+Select @AccessDate = AccessDate 
+From TAMS_TAR 
+Where ID = @TARID;
+
+
+SET @OPDateStr = CONVERT(NVARCHAR(20), @AccessDate, 103)
+SET @CurrTimeStr = CONVERT(NVARCHAR(20), CONVERT(TIME, GETDATE(), 108), 108)
+
+SET @RefNumOPDateStr = CAST(LEFT(@OPDateStr, 2) AS NVARCHAR(2)) + CAST(SUBSTRING(@OPDateStr, 4, 2) AS NVARCHAR(2))
+SET @RefNumCurrStr = CAST(LEFT(@CurrTimeStr, 2) AS NVARCHAR(2)) + CAST(SUBSTRING(@CurrTimeStr, 4, 2) AS NVARCHAR(2))
+
+IF @FormType = 'TOA'
+	BEGIN
+		IF (SELECT COUNT(*) 
+			FROM [dbo].[TAMS_RefSerialNumber]
+				WHERE FormType = @FormType
+					AND Line = @Line
+					and UPPER(TrackType) = UPPER(@TrackType)
+					AND [Year] = YEAR(GETDATE())
+					AND OperationDate = CONVERT(DATE, CONVERT(DATETIME, @OperationDate, 103))) = 0
+			BEGIN
+				INSERT INTO [dbo].[TAMS_RefSerialNumber]
+					([Line], [TrackType], [Year], [OperationDate], [FormType], [MaxNum])
+				VALUES 
+					(@Line, @TrackType, YEAR(GETDATE()), CONVERT(DATE, CONVERT(DATETIME, @OperationDate, 103)), @FormType, @MaxNum)
+			END
+		ELSE
+			BEGIN
+				--SELECT @MaxNum = [MaxNum] 
+				--	FROM [dbo].[TAMS_RefSerialNumber]
+				--		WHERE FormType = @FormType
+				--			AND Line = @Line
+				--			AND [Year] = YEAR(GETDATE())
+				--			AND OperationDate = CONVERT(DATE, @OperationDate, 103)
+
+				--SET @MaxNum = @MaxNum + 1
+
+				UPDATE [dbo].[TAMS_RefSerialNumber]
+					SET MaxNum = ISNULL(MaxNum, 0) + 1
+				WHERE FormType = @FormType
+					AND Line = @Line
+					AND [Year] = YEAR(GETDATE())
+					and UPPER(TrackType) = UPPER(@TrackType)
+					AND OperationDate = CONVERT(DATE, CONVERT(DATETIME, @OperationDate, 103))
+
+				SELECT @MaxNum = ISNULL(MaxNum, 0)
+					FROM [dbo].[TAMS_RefSerialNumber]
+					WHERE FormType = @FormType
+					AND Line = @Line
+					and UPPER(TrackType) = UPPER(@TrackType)
+					AND [Year] = YEAR(GETDATE())
+					AND OperationDate = CONVERT(DATE, CONVERT(DATETIME, @OperationDate, 103))
+
+			END
+
+
+			--XXX-TOA-DDMM-hhmm-# 
+
+			--where XXX – Line (DTL, NEL)
+			--		DDMM – access date in day & month
+			--		hhmm – TOA generation time.
+			--			   hh in 24 hrs format
+			--			   mm minutes
+			--		# - Running no. Reset to 1 daily.
+
+			--Eg: DTL-TOA-1504-0123-1
+			--	DTL-TOA-1504-0126-2
+			--	DTL-TOA-1504-0130-3
+			--	DTL-TOA-1504-0130-4
+
+
+		if @TrackType = 'Depot' 
+		begin
+				set @Line = @Line + 'D';
+		end;
+		
+		SET @RefNum = @Line + '-' + 
+			@FormType + '-' + 
+			CAST(@RefNumOPDateStr AS NVARCHAR(5)) + '-' + 
+			CAST(@RefNumCurrStr AS NVARCHAR(5)) + '-' + 
+			CAST(@MaxNum AS VARCHAR(2))
+	END
+
+IF @@ERROR <> 0 BEGIN
+	SET @Message = 'ERROR GENERATING REF NUM'
+	GOTO TRAP_ERROR
+END
+
+FORCE_EXIT_PROC:	
+	IF @IntrnlTrans = 1 COMMIT TRAN
+	RETURN @Message 
+
+TRAP_ERROR:
+	IF @IntrnlTrans = 1 ROLLBACK TRAN
+	RETURN @Message
+
+END
+
+### ⬆️ END OF INPUT ⬆️
+**INSTRUCTION:** Document the logic above in English.

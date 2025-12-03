@@ -1,0 +1,98 @@
+
+### SYSTEM ROLE
+You are a **Senior Database Architect**.
+You are NOT a Coder. You DO NOT write SQL code.
+
+### OBJECTIVE
+Document the logic of the Stored Procedure provided below.
+
+### 🛑 STRICT CONSTRAINTS
+1. **NO SQL CODE BLOCKS.** Do not rewrite the procedure code.
+2. **NO** "Here is the documentation" filler.
+3. **NO** generic explanations.
+4. **DO NOT EXPAND ACRONYMS.**
+   (Treat these as proper nouns: ["ID", "TRF"])
+
+### ✅ REQUIRED OUTPUT FORMAT
+Output exactly this structure:
+
+# Procedure: sp_TAMS_Get_ParentMenuByUserRole
+
+### Purpose
+{One clear sentence explaining what business task this performs.}
+
+### Parameters
+| Name | Type | Purpose |
+| :--- | :--- | :--- |
+| @ParamName | DataType | {Inferred usage} |
+
+### Logic Flow
+{Step-by-step plain English explanation.}
+
+### Data Interactions
+* **Reads:** {List tables explicitly selected from}
+* **Writes:** {List tables inserted/updated/deleted}
+
+---
+
+### ⬇️ RAW SQL INPUT ⬇️
+CREATE PROCEDURE [dbo].[sp_TAMS_Get_ParentMenuByUserRole] 
+	@UserID AS NVARCHAR(100) = null,
+	@IsInternet AS NVARCHAR(1) = null
+AS
+BEGIN
+	DECLARE @rsql AS NVARCHAR(2000);
+
+	DECLARE @usql AS NVARCHAR(2000);
+	SET @usql ='SELECT DISTINCT Role ' +
+	'FROM [TAMS_User_Role] ur, [TAMS_User] u, [TAMS_Role] r ' +
+	'WHERE  ur.UserID = u.UserID ' + 
+	'AND ur.RoleID = r.ID ' +
+	'AND u.LoginID = '+ '''' +  @UserID   + '''' + 
+	'AND u.isactive = 1';
+
+	print (@usql);
+
+
+	IF EXISTS(SELECT u.UserID FROM TAMS_User_Role ur, TAMS_User u WHERE  ur.UserID = u.UserID AND u.LoginID = @UserID AND u.IsActive = 1 )
+	BEGIN 
+
+		IF @IsInternet = 0
+		BEGIN
+			SET @rsql ='SELECT MenuID, MenuLevel, DispText, ToolTip, ProgURL, ParentMenuID ' +
+			'FROM TAMS_Menu ' +
+			'WHERE Active = 1 ' + 
+			'AND MenuLevel = 1 ' + 
+			'AND (IsInternet = 0 OR IsInternet = 1)' +
+			'AND DispText IN (	 ' +	
+			'SELECT DISTINCT(menuID) ' +
+			'FROM TAMS_Menu_Role ' +
+			'WHERE Role in (' + @usql + ')) ORDER BY ID';
+			PRINT @rsql;
+			EXEC (@rsql);
+		END;
+		ELSE IF @IsInternet = 1
+		BEGIN
+			SET @rsql ='SELECT MenuID, MenuLevel, DispText, ToolTip, ProgURL, ParentMenuID ' +
+			'FROM TAMS_Menu ' +
+			'WHERE Active = 1 ' + 
+			'AND MenuLevel = 1 ' + 
+			'AND IsInternet = 1' +
+			'AND DispText IN (	 ' +	
+			'SELECT DISTINCT(menuID) ' +
+			'FROM TAMS_Menu_Role ' +
+			'WHERE Role in (' + @usql + ')) ORDER BY ID';
+			PRINT @rsql;
+			EXEC (@rsql);
+		END;
+    END;
+	ELSE 
+	BEGIN 
+		SELECT MenuID, MenuLevel, DispText, ToolTip, ProgURL, ParentMenuID 
+		FROM TAMS_Menu WHERE Active = 1 AND MenuLevel = 1 
+		AND MenuID IN ('Application','Apply TRF','Logout')
+	END; 
+END;
+
+### ⬆️ END OF INPUT ⬆️
+**INSTRUCTION:** Document the logic above in English.

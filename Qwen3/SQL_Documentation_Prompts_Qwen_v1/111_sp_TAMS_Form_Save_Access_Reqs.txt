@@ -1,0 +1,124 @@
+
+### SYSTEM ROLE
+You are a **Senior Database Architect**.
+You are NOT a Coder. You DO NOT write SQL code.
+
+### OBJECTIVE
+Document the logic of the Stored Procedure provided below.
+
+### 🛑 STRICT CONSTRAINTS
+1. **NO SQL CODE BLOCKS.** Do not rewrite the procedure code.
+2. **NO** "Here is the documentation" filler.
+3. **NO** generic explanations.
+4. **DO NOT EXPAND ACRONYMS.**
+   (Treat these as proper nouns: ["ID", "INSERTING", "TAMS_TAR", "TARID", "VALUE"])
+
+### ✅ REQUIRED OUTPUT FORMAT
+Output exactly this structure:
+
+# Procedure: sp_TAMS_Form_Save_Access_Reqs
+
+### Purpose
+{One clear sentence explaining what business task this performs.}
+
+### Parameters
+| Name | Type | Purpose |
+| :--- | :--- | :--- |
+| @ParamName | DataType | {Inferred usage} |
+
+### Logic Flow
+{Step-by-step plain English explanation.}
+
+### Data Interactions
+* **Reads:** {List tables explicitly selected from}
+* **Writes:** {List tables inserted/updated/deleted}
+
+---
+
+### ⬇️ RAW SQL INPUT ⬇️
+CREATE PROCEDURE  [dbo].[sp_TAMS_Form_Save_Access_Reqs]
+	@Line			AS NVARCHAR(10) = NULL,
+	@TrackType		AS NVARCHAR(50) = NULL,
+	@SelAccessReqs	AS NVARCHAR(200) = NULL,	-- >> [Order] in TAMS_Access_Requirement Table, Per Line
+	@PowerSelVal	AS NVARCHAR(10) = NULL,		-- >> ID in TAMS_Access_Requirement Table
+	@PowerSelTxt	AS NVARCHAR(100) = NULL,
+	@ARRemarks		AS NVARCHAR(1000) = NULL,
+	@TARID			AS BIGINT = 0,
+	@Message		AS NVARCHAR(500) = NULL OUTPUT
+AS
+
+BEGIN
+
+DECLARE	@IntrnlTrans	TINYINT
+
+SELECT 	@IntrnlTrans 	= 0	
+
+IF (@@TRANCOUNT = 0) 
+BEGIN
+	SET @IntrnlTrans = 1
+	BEGIN TRAN
+END
+
+	IF (SELECT COUNT(*) 
+			FROM TAMS_TAR_AccessReq
+				WHERE [TARId] = @TARId) = 0
+		BEGIN
+			-- >> Insert whole set of Access Requirement including Power Selection
+			INSERT INTO TAMS_TAR_AccessReq
+			SELECT @TARID, ID, IsAttachment, IsPowerReq, 0, [Order] 
+				FROM TAMS_Access_Requirement
+					WHERE Line = @Line
+					and TrackType = @TrackType
+						AND IsActive = 1
+				ORDER BY [Order]
+		END
+
+	-- >>
+	UPDATE TAMS_TAR_AccessReq
+		SET IsSelected = 0
+			WHERE TARId = @TARID
+	-- >>
+
+	-- >> Update TAMS_TAR_AccessReq from Selected AccReqs
+	UPDATE TAMS_TAR_AccessReq
+		SET IsSelected = 1
+			WHERE TARId = @TARID
+				AND OperationRequirement IN (SELECT ID 
+												FROM TAMS_Access_Requirement
+													WHERE Line = @Line
+														AND TrackType =  @TrackType
+														AND IsActive = 1
+														AND IsPowerReq = 0
+														AND [Order] IN (SELECT [VALUE] 
+																FROM [dbo].[SPLIT](';', @SelAccessReqs)))
+				AND IsPower = 0
+
+	-- >> Update TAMS_TAR_AccessReq from Selected AccReqs
+	UPDATE TAMS_TAR_AccessReq
+		SET IsSelected = 1
+			WHERE TARId = @TARID
+				AND OperationRequirement = @PowerSelVal
+
+	UPDATE TAMS_TAR
+		SET ARRemark = @ARRemarks
+			WHERE ID = @TARID
+-- >>
+
+IF @@ERROR <> 0 BEGIN
+	SET @Message = 'ERROR INSERTING INTO TAMS_TAR'
+	GOTO TRAP_ERROR
+END
+
+FORCE_EXIT_PROC:	
+	IF @IntrnlTrans = 1 COMMIT TRAN
+	RETURN @Message 
+
+TRAP_ERROR:
+	IF @IntrnlTrans = 1 ROLLBACK TRAN
+	RETURN @Message
+
+
+END
+
+### ⬆️ END OF INPUT ⬆️
+**INSTRUCTION:** Document the logic above in English.

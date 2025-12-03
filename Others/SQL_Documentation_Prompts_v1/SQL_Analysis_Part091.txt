@@ -1,0 +1,678 @@
+
+### SYSTEM ROLE
+You are a **Senior Database Architect**.
+You are NOT a Coder. You DO NOT write SQL code.
+
+### OBJECTIVE
+Document the logic of the Stored Procedures provided below.
+
+### 🛑 STRICT CONSTRAINTS
+1. **NO SQL CODE BLOCKS.** Do not rewrite the procedure code.
+2. **NO** "Here is the documentation" filler.
+3. **NO** generic explanations (e.g. don't explain what a JOIN is).
+
+### ✅ REQUIRED OUTPUT FORMAT
+For each procedure, output exactly this structure:
+
+# Procedure: {ProcedureName}
+**Type:** Stored Procedure
+
+### Purpose
+{One clear sentence explaining what business task this performs.}
+
+### Parameters
+| Name | Type | Purpose |
+| :--- | :--- | :--- |
+| @ParamName | DataType | {Inferred usage} |
+
+### Logic Flow
+{Step-by-step plain English explanation. E.g., "1. Checks if user exists. 2. Inserts into Audit table. 3. Returns ID."}
+
+### Data Interactions
+* **Reads:** {List tables explicitly selected from}
+* **Writes:** {List tables inserted/updated/deleted}
+
+---
+
+### ⬇️ RAW SQL INPUT ⬇️
+CREATE PROCEDURE [dbo].[sp_TAMS_OCC_GetOCCAuthorisationByParameters_NEL_001]
+	@UserID		as int,
+	@Line AS nvarchar(10) = NULL,
+	@OperationDate as date,
+	@AccessDate as date,
+	@RosterCode as nvarchar(50)
+
+AS
+
+DECLARE @WorkflowId as int,
+		@OCCAuthID as int,
+		@EndorserID as int,
+		@EndorserLevel as int,
+		@EndorserTitle as nvarchar(250),
+		@WFStatus as nvarchar(50),
+		@ActionOn as datetime
+
+CREATE TABLE #TMP
+(
+	TractionPowerId int not null,	
+	StationName nvarchar(50)
+);
+
+CREATE TABLE #TMP_Endorser
+(
+	ID int not null,	
+	Line nvarchar(10),
+	[Level] int,
+	RoleId int,
+	Title nvarchar(250)
+);
+
+CREATE TABLE #TMP_OCCAuthNEL
+(
+	SNO int not null,
+	ID int not null,	
+	OCCAuthID int not null,
+	Remark nvarchar(1000),
+	--PFRRemark nvarchar(1000),
+	IsBuffer bit,
+	PowerOn bit,
+	Line nvarchar(10),
+	TractionPowerSection nvarchar(100),
+	HSCBName nvarchar(100),
+	--StationName nvarchar(50),
+	--TC nvarchar(10),
+	Train nvarchar(50),
+	TrainClearCert_TC nvarchar(8),
+	TrainClearCert_CC nvarchar(8),
+	MainlineTractionCurrentSwitchOff_Request_CC nvarchar(8),
+	MainlineTractionCurrentSwitchOff_TractionCurrentOff_PFR nvarchar(8),
+	MainlineTractionCurrentSwitchOff_TractionCurrentOff_RackOut_PFR nvarchar(8),
+	AuthForTrackAccess_CC nvarchar(8),
+	AuthForTrackAccess_TC nvarchar(8),
+	LineClearCertTOA_TC nvarchar(8),
+	LineClearCertSCD_TC nvarchar(8),
+	LineClearCert_CC nvarchar(8),
+	MainlineTractionCurrentSwitchOn_Request_CC nvarchar(8),
+	MainlineTractionCurrentSwitchOn_TractionCurrentOn_PFR nvarchar(8),
+	MainlineTractionCurrentSwitchOn_TractionCurrentOn_RackIn_PFR nvarchar(8),
+	AuthForTrainInsert_CC nvarchar(8),
+	AuthForTrainInsert_TC nvarchar(8),
+	Remarks nvarchar(1000)
+
+);
+
+BEGIN
+
+	SELECT @WorkflowId = ID FROM [TAMS_Workflow]
+						WHERE Line = @Line
+						AND  WorkflowType = 'OCCAuth'
+						AND IsActive = 1
+						AND EffectiveDate <= GETDATE()
+						AND ExpiryDate >= GETDATE()
+
+	INSERT INTO #TMP_Endorser(ID, Line, [Level], RoleId, Title)
+	SELECT ID, Line, [Level], RoleId, Title FROM [TAMS_Endorser]
+	WHERE Line = 'NEL'
+	AND WorkflowId = @WorkflowId
+	ORDER BY Level ASC
+	--AND RoleId = 13
+	--AND Level in (1,9,10,11,20)
+
+	INSERT INTO #TMP_OCCAuthNEL(
+	SNO, 
+	ID, 
+	OCCAuthID,
+	Remark,
+	--PFRRemark,
+	IsBuffer,
+	PowerOn,
+	Line, 
+	TractionPowerSection,  
+	HSCBName,
+	--StationName,
+	--TC,
+	Train,
+	TrainClearCert_TC,
+	TrainClearCert_CC,
+	MainlineTractionCurrentSwitchOff_Request_CC,
+	MainlineTractionCurrentSwitchOff_TractionCurrentOff_PFR,
+	MainlineTractionCurrentSwitchOff_TractionCurrentOff_RackOut_PFR,
+	AuthForTrackAccess_CC,
+	AuthForTrackAccess_TC,
+	LineClearCertTOA_TC,
+	LineClearCertSCD_TC,
+	LineClearCert_CC,
+	MainlineTractionCurrentSwitchOn_Request_CC,
+	MainlineTractionCurrentSwitchOn_TractionCurrentOn_PFR,
+	MainlineTractionCurrentSwitchOn_TractionCurrentOn_RackIn_PFR,
+	AuthForTrainInsert_CC,
+	AuthForTrainInsert_TC,
+	Remarks)
+	SELECT ROW_NUMBER() OVER(ORDER BY tp.ID ASC) AS SNO
+		  ,tp.[ID]
+		  ,oa.[ID]
+		  ,oa.[Remark]
+		  --,oa.[PFRRemark]
+		  ,oa.[IsBuffer]
+		  ,oa.[PowerOn]
+		  ,tp.[Line]
+		  ,[TractionPowerSection]
+		  ,[HSCBName]
+		  --,[StationName]
+		  --,[TC]
+		  ,[Train]
+		  ,'' AS TrainClearCert_TC
+		  ,'' AS TrainClearCert_CC
+		  ,'' AS MainlineTractionCurrentSwitchOff_Request_CC
+		  ,'' AS MainlineTractionCurrentSwitchOff_TractionCurrentOff_PFR
+		  ,'' AS MainlineTractionCurrentSwitchOff_TractionCurrentOff_RackOut_PFR
+		  ,'' AS AuthForTrackAccess_CC
+		  ,'' AS AuthForTrackAccess_TC
+		  ,'' AS LineClearCertTOA_TC
+		  ,'' AS LineClearCertSCD_TC
+		  ,'' AS LineClearCert_CC
+		  ,'' AS MainlineTractionCurrentSwitchOn_Request_CC
+		  ,'' AS MainlineTractionCurrentSwitchOn_TractionCurrentOn_PFR
+		  ,'' AS MainlineTractionCurrentSwitchOn_TractionCurrentOn_RackIn_PFR
+		  ,'' AS AuthForTrainInsert_CC
+		  ,'' AS AuthForTrainInsert_TC
+		  ,'' AS Remarks
+	  FROM [TAMS_Traction_Power] tp, [TAMS_OCC_Auth] oa
+	  WHERE tp.ID = oa.TractionPowerId
+	  AND EffectiveDate <= GETDATE() and ExpiryDate >= GETDATE()
+	  AND IsActive = 1
+	  AND oa.OperationDate = @OperationDate
+	  AND oa.AccessDate = @AccessDate
+	  AND oa.Line = @Line
+	  --AND TC in 
+	  --(SELECT RosterCode FROM TAMS_OCC_Duty_Roster 
+	  -- WHERE OperationDate = CAST(@OperationDate as DATE)
+	  -- and [shift] = 3
+	  -- and [IsActive] = 1
+	  -- and [DutyStaffId] = @UserID
+	  -- )
+
+
+	DECLARE cur CURSOR FOR
+	SELECT OCCAuthID FROM #TMP_OCCAuthNEL
+
+
+	OPEN cur;
+
+	FETCH NEXT FROM cur INTO @OCCAuthID
+	WHILE @@FETCH_STATUS = 0
+	BEGIN
+
+		DECLARE cur1 CURSOR FOR
+		SELECT ID, [Level], Title FROM #TMP_Endorser
+
+		OPEN Cur1;
+
+		FETCH NEXT FROM Cur1 INTO @EndorserID, @EndorserLevel, @EndorserTitle;
+		WHILE @@FETCH_STATUS = 0
+		BEGIN
+			IF @EndorserID = 117
+			BEGIN
+				SELECT @WFStatus = WFStatus, @ActionOn = ActionOn 
+				FROM [TAMS_OCC_Auth_Workflow] 
+				WHERE OCCAuthId = @OCCAuthID AND OCCAuthEndorserId = 117;
+				IF @WFStatus = 'Pending' AND @RosterCode = 'TC'
+				BEGIN
+					UPDATE #TMP_OCCAuthNEL
+					SET TrainClearCert_TC = @WFStatus
+					WHERE OCCAuthID = @OCCAuthID
+				END;
+				ELSE IF @WFStatus = 'Pending' AND @RosterCode != 'TC'
+				BEGIN
+					UPDATE #TMP_OCCAuthNEL
+					SET TrainClearCert_TC = ''
+					WHERE OCCAuthID = @OCCAuthID
+				END;
+				ELSE IF @WFStatus = 'Completed'
+				BEGIN
+					UPDATE #TMP_OCCAuthNEL
+					SET TrainClearCert_TC = CONVERT(TIME, @ActionOn)
+					WHERE OCCAuthID = @OCCAuthID
+				END;
+
+				SET @WFStatus = '';
+				SET @ActionOn = '';
+			END;
+
+			IF @EndorserID = 118
+			BEGIN
+				SELECT @WFStatus = WFStatus, @ActionOn = ActionOn 
+				FROM [TAMS_OCC_Auth_Workflow] 
+				WHERE OCCAuthId = @OCCAuthID AND OCCAuthEndorserId = 118;
+				IF @WFStatus = 'Pending' AND @RosterCode = 'CC'
+				BEGIN
+					UPDATE #TMP_OCCAuthNEL
+					SET TrainClearCert_CC = @WFStatus
+					WHERE OCCAuthID = @OCCAuthID
+				END;
+				ELSE IF @WFStatus = 'Pending' AND @RosterCode != 'CC'
+				BEGIN
+					UPDATE #TMP_OCCAuthNEL
+					SET TrainClearCert_CC = ''
+					WHERE OCCAuthID = @OCCAuthID
+				END;
+				ELSE IF @WFStatus = 'Completed'
+				BEGIN
+					UPDATE #TMP_OCCAuthNEL
+					SET TrainClearCert_CC = CONVERT(TIME, @ActionOn)
+					WHERE OCCAuthID = @OCCAuthID
+				END;
+				SET @WFStatus = '';
+				SET @ActionOn = '';
+			END;
+			IF @EndorserID = 119
+			BEGIN
+				SELECT @WFStatus = WFStatus, @ActionOn = ActionOn 
+				FROM [TAMS_OCC_Auth_Workflow] 
+				WHERE OCCAuthId = @OCCAuthID AND OCCAuthEndorserId = 119;
+				IF @WFStatus = 'Pending' AND @RosterCode = 'CC'
+				BEGIN
+					UPDATE #TMP_OCCAuthNEL
+					SET MainlineTractionCurrentSwitchOff_Request_CC = @WFStatus
+					WHERE OCCAuthID = @OCCAuthID
+				END;
+				ELSE IF @WFStatus = 'Pending' AND @RosterCode != 'CC'
+				BEGIN
+					UPDATE #TMP_OCCAuthNEL
+					SET MainlineTractionCurrentSwitchOff_Request_CC = ''
+					WHERE OCCAuthID = @OCCAuthID
+				END;
+				ELSE IF @WFStatus = 'Completed'
+				BEGIN
+					UPDATE #TMP_OCCAuthNEL
+					SET MainlineTractionCurrentSwitchOff_Request_CC = CONVERT(TIME, @ActionOn)
+					WHERE OCCAuthID = @OCCAuthID
+				END;
+				SET @WFStatus = '';
+				SET @ActionOn = '';
+			END;
+
+			IF @EndorserID = 120
+			BEGIN
+				SELECT @WFStatus = WFStatus, @ActionOn = ActionOn 
+				FROM [TAMS_OCC_Auth_Workflow] 
+				WHERE OCCAuthId = @OCCAuthID AND OCCAuthEndorserId = 120;
+				IF @WFStatus = 'Pending' AND @RosterCode = 'PFR'
+				BEGIN
+					UPDATE #TMP_OCCAuthNEL
+					SET MainlineTractionCurrentSwitchOff_TractionCurrentOff_PFR = @WFStatus
+					WHERE OCCAuthID = @OCCAuthID
+				END;
+				ELSE IF  @WFStatus = 'Pending' AND @RosterCode != 'PFR'
+				BEGIN
+					UPDATE #TMP_OCCAuthNEL
+					SET MainlineTractionCurrentSwitchOff_TractionCurrentOff_PFR = ''
+					WHERE OCCAuthID = @OCCAuthID
+				END;
+				ELSE IF @WFStatus = 'Completed'
+				BEGIN
+					UPDATE #TMP_OCCAuthNEL
+					SET MainlineTractionCurrentSwitchOff_TractionCurrentOff_PFR = CONVERT(TIME, @ActionOn)
+					WHERE OCCAuthID = @OCCAuthID
+				END;
+				SET @WFStatus = '';
+				SET @ActionOn = '';
+			END;
+
+			IF @EndorserID = 121
+			BEGIN
+				SELECT @WFStatus = WFStatus, @ActionOn = ActionOn 
+				FROM [TAMS_OCC_Auth_Workflow] 
+				WHERE OCCAuthId = @OCCAuthID AND OCCAuthEndorserId = 121;
+				IF @WFStatus = 'Pending' AND @RosterCode = 'PFR'
+				BEGIN
+					UPDATE #TMP_OCCAuthNEL
+					SET MainlineTractionCurrentSwitchOff_TractionCurrentOff_RackOut_PFR = @WFStatus
+					WHERE OCCAuthID = @OCCAuthID
+				END;
+				ELSE IF (@WFStatus = 'Completed' OR @WFStatus = 'N.A.') /*AND @RosterCode = 'PFR'*/
+				BEGIN
+					IF @WFStatus = 'Completed'
+					BEGIN
+						UPDATE #TMP_OCCAuthNEL
+						SET MainlineTractionCurrentSwitchOff_TractionCurrentOff_RackOut_PFR = CONVERT(TIME, @ActionOn)
+						WHERE OCCAuthID = @OCCAuthID
+					END;
+					ELSE IF @WFStatus = 'N.A.'
+					BEGIN
+						UPDATE #TMP_OCCAuthNEL
+						SET MainlineTractionCurrentSwitchOff_TractionCurrentOff_RackOut_PFR = 'N.A.'
+						WHERE OCCAuthID = @OCCAuthID
+					END;
+				END;
+				ELSE IF  @WFStatus = 'Pending' AND @RosterCode != 'PFR'
+				BEGIN
+					UPDATE #TMP_OCCAuthNEL
+					SET MainlineTractionCurrentSwitchOff_TractionCurrentOff_RackOut_PFR = ''
+					WHERE OCCAuthID = @OCCAuthID
+				END;
+				--ELSE IF @WFStatus = 'Completed'
+				--BEGIN
+				--	UPDATE #TMP_OCCAuthNEL
+				--	SET MainlineTractionCurrentSwitchOff_TractionCurrentOff_PFR = CONVERT(TIME, @ActionOn)
+				--	WHERE OCCAuthID = @OCCAuthID
+				--END;
+				SET @WFStatus = '';
+				SET @ActionOn = '';
+			END;
+
+			IF @EndorserID = 122
+			BEGIN
+				SELECT @WFStatus = WFStatus, @ActionOn = ActionOn 
+				FROM [TAMS_OCC_Auth_Workflow] 
+				WHERE OCCAuthId = @OCCAuthID AND OCCAuthEndorserId = 122;
+				IF @WFStatus = 'Pending' AND @RosterCode = 'CC'
+				BEGIN
+					UPDATE #TMP_OCCAuthNEL
+					SET AuthForTrackAccess_CC = @WFStatus
+					WHERE OCCAuthID = @OCCAuthID
+				END;
+				ELSE IF @WFStatus = 'Pending' AND @RosterCode != 'CC'
+				BEGIN
+					UPDATE #TMP_OCCAuthNEL
+					SET AuthForTrackAccess_CC = ''
+					WHERE OCCAuthID = @OCCAuthID
+				END;
+				ELSE IF @WFStatus = 'Completed'
+				BEGIN
+					UPDATE #TMP_OCCAuthNEL
+					SET AuthForTrackAccess_CC = CONVERT(TIME, @ActionOn)
+					WHERE OCCAuthID = @OCCAuthID
+				END;
+				SET @WFStatus = '';
+				SET @ActionOn = '';
+			END;
+
+			IF @EndorserID = 123
+			BEGIN
+				SELECT @WFStatus = WFStatus, @ActionOn = ActionOn 
+				FROM [TAMS_OCC_Auth_Workflow] 
+				WHERE OCCAuthId = @OCCAuthID AND OCCAuthEndorserId = 123;
+				IF @WFStatus = 'Pending' AND @RosterCode = 'TC'
+				BEGIN
+					UPDATE #TMP_OCCAuthNEL
+					SET AuthForTrackAccess_TC = @WFStatus
+					WHERE OCCAuthID = @OCCAuthID
+				END;
+				ELSE IF @WFStatus = 'Pending' AND @RosterCode != 'TC'
+				BEGIN
+					UPDATE #TMP_OCCAuthNEL
+					SET AuthForTrackAccess_TC = ''
+					WHERE OCCAuthID = @OCCAuthID
+				END;
+				ELSE IF @WFStatus = 'Completed'
+				BEGIN
+					UPDATE #TMP_OCCAuthNEL
+					SET AuthForTrackAccess_TC = CONVERT(TIME, @ActionOn)
+					WHERE OCCAuthID = @OCCAuthID
+				END;
+				SET @WFStatus = '';
+				SET @ActionOn = '';
+			END;
+
+			IF @EndorserID = 124 
+			BEGIN
+				SELECT @WFStatus = WFStatus, @ActionOn = ActionOn 
+				FROM [TAMS_OCC_Auth_Workflow] 
+				WHERE OCCAuthId = @OCCAuthID AND OCCAuthEndorserId = 124;
+				IF @WFStatus = 'Pending' AND @RosterCode = 'TC'
+				BEGIN
+					UPDATE #TMP_OCCAuthNEL
+					SET LineClearCertTOA_TC = @WFStatus
+					WHERE OCCAuthID = @OCCAuthID
+				END;
+				ELSE IF @WFStatus = 'Pending' AND @RosterCode != 'TC'
+				BEGIN
+					UPDATE #TMP_OCCAuthNEL
+					SET LineClearCertTOA_TC = ''
+					WHERE OCCAuthID = @OCCAuthID
+				END;
+				ELSE IF @WFStatus = 'Completed'
+				BEGIN
+					UPDATE #TMP_OCCAuthNEL
+					SET LineClearCertTOA_TC = CONVERT(TIME, @ActionOn)
+					WHERE OCCAuthID = @OCCAuthID
+				END;
+				SET @WFStatus = '';
+				SET @ActionOn = '';
+			END;
+
+			IF @EndorserID = 125
+			BEGIN
+				SELECT @WFStatus = WFStatus, @ActionOn = ActionOn 
+				FROM [TAMS_OCC_Auth_Workflow] 
+				WHERE OCCAuthId = @OCCAuthID AND OCCAuthEndorserId = 125;
+				IF @WFStatus = 'Pending' AND @RosterCode = 'TC'
+				BEGIN
+					UPDATE #TMP_OCCAuthNEL
+					SET LineClearCertSCD_TC = @WFStatus
+					WHERE OCCAuthID = @OCCAuthID
+				END;
+				ELSE IF @WFStatus = 'Pending' AND @RosterCode != 'TC'
+				BEGIN
+					UPDATE #TMP_OCCAuthNEL
+					SET LineClearCertSCD_TC = ''
+					WHERE OCCAuthID = @OCCAuthID
+				END;
+				ELSE IF @WFStatus = 'Completed'
+				BEGIN
+					UPDATE #TMP_OCCAuthNEL
+					SET LineClearCertSCD_TC = CONVERT(TIME, @ActionOn)
+					WHERE OCCAuthID = @OCCAuthID
+				END;
+				SET @WFStatus = '';
+				SET @ActionOn = '';
+			END;
+
+			IF @EndorserID = 126
+			BEGIN
+				SELECT @WFStatus = WFStatus, @ActionOn = ActionOn 
+				FROM [TAMS_OCC_Auth_Workflow] 
+				WHERE OCCAuthId = @OCCAuthID AND OCCAuthEndorserId = 126;
+				IF @WFStatus = 'Pending' AND @RosterCode = 'CC'
+				BEGIN
+					UPDATE #TMP_OCCAuthNEL
+					SET LineClearCert_CC = @WFStatus
+					WHERE OCCAuthID = @OCCAuthID
+				END;
+				ELSE IF @WFStatus = 'Pending' AND @RosterCode != 'CC'
+				BEGIN
+					UPDATE #TMP_OCCAuthNEL
+					SET LineClearCert_CC = ''
+					WHERE OCCAuthID = @OCCAuthID
+				END;
+				ELSE IF @WFStatus = 'Completed'
+				BEGIN
+					UPDATE #TMP_OCCAuthNEL
+					SET LineClearCert_CC = CONVERT(TIME, @ActionOn)
+					WHERE OCCAuthID = @OCCAuthID
+				END;
+				SET @WFStatus = '';
+				SET @ActionOn = '';
+			END;
+
+			IF @EndorserID = 127
+			BEGIN
+				SELECT @WFStatus = WFStatus, @ActionOn = ActionOn 
+				FROM [TAMS_OCC_Auth_Workflow] 
+				WHERE OCCAuthId = @OCCAuthID AND OCCAuthEndorserId = 127;
+				IF @WFStatus = 'Pending' AND @RosterCode = 'CC'
+				BEGIN
+					UPDATE #TMP_OCCAuthNEL
+					SET MainlineTractionCurrentSwitchOn_Request_CC = @WFStatus
+					WHERE OCCAuthID = @OCCAuthID
+				END;
+				ELSE IF @WFStatus = 'Pending' AND @RosterCode != 'CC'
+				BEGIN
+					UPDATE #TMP_OCCAuthNEL
+					SET MainlineTractionCurrentSwitchOn_Request_CC = ''
+					WHERE OCCAuthID = @OCCAuthID
+				END;
+				ELSE IF @WFStatus = 'Completed'
+				BEGIN
+					UPDATE #TMP_OCCAuthNEL
+					SET MainlineTractionCurrentSwitchOn_Request_CC = CONVERT(TIME, @ActionOn)
+					WHERE OCCAuthID = @OCCAuthID
+				END;
+				SET @WFStatus = '';
+				SET @ActionOn = '';
+			END;
+
+			IF @EndorserID = 128
+			BEGIN
+				SELECT @WFStatus = WFStatus, @ActionOn = ActionOn 
+				FROM [TAMS_OCC_Auth_Workflow] 
+				WHERE OCCAuthId = @OCCAuthID AND OCCAuthEndorserId = 128;
+				IF @WFStatus = 'Pending' AND @RosterCode = 'PFR'
+				BEGIN
+					UPDATE #TMP_OCCAuthNEL
+					SET MainlineTractionCurrentSwitchOn_TractionCurrentOn_RackIn_PFR = @WFStatus
+					WHERE OCCAuthID = @OCCAuthID
+				END;
+				ELSE IF (@WFStatus = 'Completed' OR @WFStatus = 'N.A.') /*AND @RosterCode = 'PFR'*/
+				BEGIN
+					IF @WFStatus = 'Completed'
+					BEGIN
+						UPDATE #TMP_OCCAuthNEL
+						SET MainlineTractionCurrentSwitchOn_TractionCurrentOn_RackIn_PFR = CONVERT(TIME, @ActionOn)
+						WHERE OCCAuthID = @OCCAuthID
+					END;
+					ELSE IF @WFStatus = 'N.A.'
+					BEGIN
+						UPDATE #TMP_OCCAuthNEL
+						SET MainlineTractionCurrentSwitchOn_TractionCurrentOn_RackIn_PFR = 'N.A.'
+						WHERE OCCAuthID = @OCCAuthID
+					END;
+				END;
+				ELSE IF  @WFStatus = 'Pending' AND @RosterCode != 'PFR'
+				BEGIN
+					UPDATE #TMP_OCCAuthNEL
+					SET MainlineTractionCurrentSwitchOn_TractionCurrentOn_RackIn_PFR = ''
+					WHERE OCCAuthID = @OCCAuthID
+				END;
+				--ELSE IF @WFStatus = 'Completed'
+				--BEGIN
+				--	UPDATE #TMP_OCCAuthNEL
+				--	SET MainlineTractionCurrentSwitchOff_TractionCurrentOff_PFR = CONVERT(TIME, @ActionOn)
+				--	WHERE OCCAuthID = @OCCAuthID
+				--END;
+				SET @WFStatus = '';
+				SET @ActionOn = '';
+			END;
+
+			IF @EndorserID = 129
+			BEGIN
+				SELECT @WFStatus = WFStatus, @ActionOn = ActionOn 
+				FROM [TAMS_OCC_Auth_Workflow] 
+				WHERE OCCAuthId = @OCCAuthID AND OCCAuthEndorserId = 129;
+				IF @WFStatus = 'Pending' AND @RosterCode = 'PFR'
+				BEGIN
+					UPDATE #TMP_OCCAuthNEL
+					SET MainlineTractionCurrentSwitchOn_TractionCurrentOn_PFR = @WFStatus
+					WHERE OCCAuthID = @OCCAuthID
+				END;
+				ELSE IF @WFStatus = 'Pending' AND @RosterCode != 'PFR'
+				BEGIN
+					UPDATE #TMP_OCCAuthNEL
+					SET MainlineTractionCurrentSwitchOn_TractionCurrentOn_PFR = ''
+					WHERE OCCAuthID = @OCCAuthID
+				END;
+				IF @WFStatus = 'Completed'
+				BEGIN
+					UPDATE #TMP_OCCAuthNEL
+					SET MainlineTractionCurrentSwitchOn_TractionCurrentOn_PFR = CONVERT(TIME, @ActionOn)
+					WHERE OCCAuthID = @OCCAuthID
+				END;
+				SET @WFStatus = '';
+				SET @ActionOn = '';
+			END;
+
+
+			IF @EndorserID = 130
+			BEGIN
+				SELECT @WFStatus = WFStatus, @ActionOn = ActionOn 
+				FROM [TAMS_OCC_Auth_Workflow] 
+				WHERE OCCAuthId = @OCCAuthID AND OCCAuthEndorserId = 130;
+				IF @WFStatus = 'Pending' AND @RosterCode = 'CC'
+				BEGIN
+					UPDATE #TMP_OCCAuthNEL
+					SET AuthForTrainInsert_CC = @WFStatus
+					WHERE OCCAuthID = @OCCAuthID
+				END;
+				ELSE IF @WFStatus = 'Pending' AND @RosterCode != 'CC'
+				BEGIN
+					UPDATE #TMP_OCCAuthNEL
+					SET AuthForTrainInsert_CC = ''
+					WHERE OCCAuthID = @OCCAuthID
+				END;
+				ELSE IF @WFStatus = 'Completed'
+				BEGIN
+					UPDATE #TMP_OCCAuthNEL
+					SET AuthForTrainInsert_CC = CONVERT(TIME, @ActionOn)
+					WHERE OCCAuthID = @OCCAuthID
+				END;
+				SET @WFStatus = '';
+				SET @ActionOn = '';
+			END;
+
+			IF @EndorserID = 131
+			BEGIN
+				SELECT @WFStatus = WFStatus, @ActionOn = ActionOn 
+				FROM [TAMS_OCC_Auth_Workflow] 
+				WHERE OCCAuthId = @OCCAuthID AND OCCAuthEndorserId = 131;
+				IF @WFStatus = 'Pending' AND @RosterCode = 'TC'
+				BEGIN
+					UPDATE #TMP_OCCAuthNEL
+					SET AuthForTrainInsert_TC = @WFStatus
+					WHERE OCCAuthID = @OCCAuthID
+				END;
+				ELSE IF @WFStatus = 'Pending' AND @RosterCode != 'TC'
+				BEGIN
+					UPDATE #TMP_OCCAuthNEL
+					SET AuthForTrainInsert_TC = ''
+					WHERE OCCAuthID = @OCCAuthID
+				END;
+				ELSE IF @WFStatus = 'Completed'
+				BEGIN
+					UPDATE #TMP_OCCAuthNEL
+					SET AuthForTrainInsert_TC = CONVERT(TIME, @ActionOn)
+					WHERE OCCAuthID = @OCCAuthID
+				END;
+				SET @WFStatus = '';
+				SET @ActionOn = '';
+			END;
+			FETCH NEXT FROM Cur1 INTO @EndorserID, @EndorserLevel, @EndorserTitle;
+		END
+
+		CLOSE Cur1;
+		DEALLOCATE Cur1;
+
+		FETCH NEXT FROM cur INTO @OCCAuthID;
+
+	END;
+
+	CLOSE cur;
+	DEALLOCATE cur;
+
+
+	SELECT * FROM #TMP_OCCAuthNEL;
+	--SELECT * FROM #TMP;
+
+END
+
+
+DROP TABLE #TMP_Endorser;
+
+DROP TABLE #TMP_OCCAuthNEL;
+
+---
+
+
+
+### ⬆️ END OF INPUT ⬆️
+**INSTRUCTION:** Document the logic above in English.

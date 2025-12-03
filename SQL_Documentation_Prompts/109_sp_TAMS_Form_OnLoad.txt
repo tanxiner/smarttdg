@@ -1,0 +1,233 @@
+
+### SYSTEM ROLE
+You are a **Senior Database Architect**.
+You are NOT a Coder. You DO NOT write SQL code.
+
+### OBJECTIVE
+Document the logic of the Stored Procedure provided below.
+
+### 🛑 STRICT CONSTRAINTS
+1. **NO SQL CODE BLOCKS.** Do not rewrite the procedure code.
+2. **NO** "Here is the documentation" filler.
+3. **NO** generic explanations.
+4. **DO NOT EXPAND ACRONYMS.**
+   (Treat these as proper nouns: ["22KV", "DTL", "ID", "NEL", "VALUE"])
+
+### ✅ REQUIRED OUTPUT FORMAT
+Output exactly this structure:
+
+# Procedure: sp_TAMS_Form_OnLoad
+
+### Purpose
+{One clear sentence explaining what business task this performs.}
+
+### Parameters
+| Name | Type | Purpose |
+| :--- | :--- | :--- |
+| @ParamName | DataType | {Inferred usage} |
+
+### Logic Flow
+{Step-by-step plain English explanation.}
+
+### Data Interactions
+* **Reads:** {List tables explicitly selected from}
+* **Writes:** {List tables inserted/updated/deleted}
+
+---
+
+### ⬇️ RAW SQL INPUT ⬇️
+CREATE procedure  [dbo].[sp_TAMS_Form_OnLoad]
+	@Line		AS NVARCHAR(10) = NULL,
+	@TrackType	AS NVARCHAR(50) = NULL,
+	@AccessDate	AS NVARCHAR(20) = NULL,
+	@AccessType	AS NVARCHAR(20) = NULL,
+	@Sectors	AS NVARCHAR(2000) = NULL,
+	@PowerSelTxt	AS NVARCHAR(100) = NULL
+AS
+BEGIN
+
+	SELECT ParaValue1, ParaValue2 
+		FROM TAMS_Parameters
+			WHERE ParaCode = 'Company'
+				AND ParaValue1 = @Line
+				AND CONVERT(DATETIME, @AccessDate, 103) BETWEEN EffectiveDate AND ExpiryDate
+			ORDER BY [Order]
+
+	SELECT ROW_NUMBER() OVER(ORDER BY ID) as Sno, ID, OperationRequirement, IsAttachment 
+		FROM TAMS_Access_Requirement
+			WHERE Line = @Line
+			AND TrackType= @TrackType
+				AND IsPowerReq = 0
+				AND IsActive = 1
+			ORDER BY [Order]
+
+	IF @AccessType = 'Protection'
+		BEGIN
+			SELECT ID, OperationRequirement 
+				FROM TAMS_Access_Requirement
+					WHERE Line = @Line
+					and TrackType = @TrackType
+						AND IsPowerReq = 1
+						AND OperationRequirement <> 'Traction Power ON'
+						AND IsActive = 1
+					ORDER BY [Order]
+		END
+	ELSE
+		BEGIN
+			SELECT ID, OperationRequirement 
+				FROM TAMS_Access_Requirement
+					WHERE Line = @Line
+					AND TrackType = @TrackType
+						AND IsPowerReq = 1
+						AND IsActive = 1
+					ORDER BY [Order]
+		END
+	
+	SELECT ID, TypeOfWork, ColourCode 
+		FROM [dbo].[TAMS_Type_Of_Work]
+			WHERE Line = @Line
+			and TrackType = @TrackType
+				AND ForSelection = 1
+				AND IsActive = 1
+			ORDER BY [Order]
+
+	DECLARE @HODRole	 NVARCHAR(50)
+	SET @HODRole = ''
+	SET @HODRole = @Line + '_ApplicantHOD'
+
+	SELECT a.Userid, a.LoginId, a.[Name] AS EmpName 
+		FROM TAMS_User a, TAMS_User_Role b, TAMS_Role c
+			WHERE a.Userid = b.UserID
+				AND b.RoleID = c.ID
+				AND b.Line = c.Line
+				and c.TrackType = @TrackType
+				AND c.Line = @Line
+				AND c.Role = @HODRole
+				AND a.IsActive = 1
+				AND c.IsActive = 1
+	ORDER BY 3
+
+	DECLARE @SelSectorNotGap	NVARCHAR(1000)
+	DECLARE @SelSectorGap		NVARCHAR(1000)
+	DECLARE @EntryStation		NVARCHAR(1000)
+	
+	SET @SelSectorNotGap = ''
+	SET @SelSectorGap = ''
+	SET @EntryStation = ''
+
+	-- EXEC sp_TAMS_Form_OnLoad 'NEL', '01/02/2021', 'Possession', '143;144;145;180;181;182'
+
+	-- >> Selected Sector IsGap = 0
+	SELECT @SelSectorNotGap = @SelSectorNotGap + ISNULL(Sector + ', ', '') 
+		FROM TAMS_Sector
+			WHERE ID IN (SELECT [VALUE] FROM [dbo].[SPLIT](';', @Sectors))
+			AND ISNULL(IsGap, 0) = 0
+		GROUP BY Sector
+
+	IF LEN(LTRIM(RTRIM(@SelSectorNotGap))) > 0
+		BEGIN
+			SET @SelSectorNotGap = LEFT(LTRIM(RTRIM(@SelSectorNotGap)), LEN(LTRIM(RTRIM(@SelSectorNotGap))) - 1)
+		END
+
+	-- >> Selected Sector IsGap = 1
+	SELECT @SelSectorGap = @SelSectorGap + ISNULL(Sector + ', ', '') 
+		FROM TAMS_Sector
+			WHERE ID IN (SELECT [VALUE] FROM [dbo].[SPLIT](';', @Sectors))
+			AND ISNULL(IsGap, 0) = 1
+		GROUP BY Sector
+
+	IF LEN(LTRIM(RTRIM(@SelSectorGap))) > 0
+		BEGIN
+			SET @SelSectorGap = LEFT(LTRIM(RTRIM(@SelSectorGap)), LEN(LTRIM(RTRIM(@SelSectorGap))) - 1)
+		END
+
+	SELECT @EntryStation = @EntryStation + ISNULL(StationCode + ', ', '') 
+			FROM TAMS_Station a, TAMS_Entry_Station b	
+				WHERE a.ID = b.StationId
+					AND a.IsActive = 1
+					AND b.IsActive = 1
+					AND a.IsStation = 1
+					AND b.SectorId IN (SELECT [VALUE] FROM [dbo].[SPLIT](';', @Sectors))
+		GROUP BY StationCode		
+
+	IF LEN(LTRIM(RTRIM(@EntryStation))) > 0
+		BEGIN
+			SET @EntryStation = LEFT(LTRIM(RTRIM(@EntryStation)), LEN(LTRIM(RTRIM(@EntryStation))) - 1)
+		END
+
+	SELECT @SelSectorNotGap AS SelSectorNotGap,
+		@SelSectorGap AS SelSectorGap,
+		@EntryStation AS EntryStation
+
+	DECLARE @DTLSelSectors	NVARCHAR(4000)
+	SET @DTLSelSectors = ''
+
+	CREATE TABLE #TmpPossPowSector 
+		(PowerSector	NVARCHAR(4000),
+		PowerOnOff		NVARCHAR(5),
+		NoOFSCD			INT,
+		BreakerOut		NVARCHAR(5))
+	
+	TRUNCATE TABLE #TmpPossPowSector
+
+	DECLARE @StrPowerOnOff NVARCHAR(5)
+	DECLARE @StrBreakerOut NVARCHAR(5)
+	DECLARE @PowerOnInd	INT
+
+	SET @StrPowerOnOff = ''
+	SET @StrBreakerOut = ''
+
+	SET @StrPowerOnOff = CASE WHEN @PowerSelTxt = 'Traction Power ON' THEN 'Y' ELSE 'N' END
+	SET @PowerOnInd = CASE WHEN @PowerSelTxt = 'Traction Power ON' THEN 1 ELSE 0 END
+	SET @StrBreakerOut = CASE WHEN @PowerSelTxt LIKE '%With Rack Out%' THEN 'Y' ELSE 'N' END
+
+	IF @Line = 'DTL'
+		BEGIN
+			SELECT @DTLSelSectors = @DTLSelSectors + ISNULL(Sector + ', ', '') 
+				FROM [dbo].[TAMS_Sector]
+					WHERE ID IN (SELECT [VALUE] FROM [dbo].[SPLIT](';', @Sectors))
+						AND IsActive = 1
+						ORDER BY ID
+
+			INSERT INTO #TmpPossPowSector
+				VALUES (@DTLSelSectors, @StrPowerOnOff, 0, @StrBreakerOut)
+		END
+	ELSE
+		BEGIN
+			INSERT INTO #TmpPossPowSector
+			SELECT ps.PowerSector, @StrPowerOnOff, CASE WHEN @StrBreakerOut = 'Y' THEN 1 ELSE 0 END, @StrBreakerOut FROM 
+			(SELECT a.ID, a.Line, a.Direction, a.Sector, 
+			ISNULL(a.IsGap, 0) IsGap, a.IsEndSector, a.SameSector, a.[Order] OrderInd,
+			b.IsBuffer,	ISNULL(b.PowerOn, 0) PowerOn, 
+			c.PowerSector, c.PowerSection
+				FROM TAMS_Sector a, TAMS_Track_Power_Sector b, TAMS_Power_Sector c
+			WHERE a.Line = 'NEL'
+				AND a.ID = b.SectorId
+				AND b.PowerSectorId = c.ID
+				AND a.IsActive = 1
+				AND b.IsActive = 1
+				AND c.IsActive = 1
+				--AND (ISNULL(b.PowerOn, 0) = @PowerOnInd
+				AND ( b.PowerOn is null or 
+				 b.PowerOn = @PowerOnInd
+				)
+				AND a.ID IN (SELECT [VALUE] FROM [dbo].[SPLIT](';', @Sectors))) ps
+			GROUP BY ps.PowerSector
+			ORDER BY ps.PowerSector
+		END
+
+		SELECT PowerSector, PowerOnOff, NoOFSCD, BreakerOut 
+			FROM #TmpPossPowSector
+
+/*
+EXEC sp_TAMS_Form_OnLoad 'DTL', '01/02/2021', 'Possession', '143;144;145;180;181;182', 'Traction Power ON'
+EXEC sp_TAMS_Form_OnLoad 'DTL', '01/02/2021', 'Possession', '143;144;145;180;181;182', 'Power Off With Rack Out / 22KV Isolation'
+
+EXEC sp_TAMS_Form_OnLoad 'NEL', '01/02/2021', 'Possession', '143;144;145;180;181;182', 'Traction Power ON'
+EXEC sp_TAMS_Form_OnLoad 'NEL', '01/02/2021', 'Possession', '143;144;145;180;181;182', 'Power Off With Rack Out / 22KV Isolation'
+	
+*/
+END
+
+### ⬆️ END OF INPUT ⬆️
+**INSTRUCTION:** Document the logic above in English.

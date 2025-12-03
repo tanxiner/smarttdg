@@ -1,0 +1,310 @@
+
+### SYSTEM ROLE
+You are a **Senior Database Architect**.
+You are NOT a Coder. You DO NOT write SQL code.
+
+### OBJECTIVE
+Document the logic of the Stored Procedure provided below.
+
+### 🛑 STRICT CONSTRAINTS
+1. **NO SQL CODE BLOCKS.** Do not rewrite the procedure code.
+2. **NO** "Here is the documentation" filler.
+3. **NO** generic explanations.
+4. **DO NOT EXPAND ACRONYMS.**
+   (Treat these as proper nouns: ["CSAPEX57", "ID", "NEL", "TAMS_TAR", "TARID"])
+
+### ✅ REQUIRED OUTPUT FORMAT
+Output exactly this structure:
+
+# Procedure: sp_TAMS_TAR_View_Detail_OnLoad
+
+### Purpose
+{One clear sentence explaining what business task this performs.}
+
+### Parameters
+| Name | Type | Purpose |
+| :--- | :--- | :--- |
+| @ParamName | DataType | {Inferred usage} |
+
+### Logic Flow
+{Step-by-step plain English explanation.}
+
+### Data Interactions
+* **Reads:** {List tables explicitly selected from}
+* **Writes:** {List tables inserted/updated/deleted}
+
+---
+
+### ⬇️ RAW SQL INPUT ⬇️
+CREATE PROCEDURE [dbo].[sp_TAMS_TAR_View_Detail_OnLoad]
+	@TARID		BIGINT,
+	@LogInUser	NVARCHAR(20)
+AS
+
+BEGIN
+
+	DECLARE @Line		NVARCHAR(10)
+	DECLARE @AccessDate	DATE
+
+	SELECT @Line = Line,
+		@AccessDate = AccessDate
+	FROM TAMS_TAR
+		WHERE ID = @TARID
+
+	-- >> Table[0]
+	SELECT [Id], [Line], [TARNo], [TARType],
+		[Company], [Designation], [Name], [OfficeNo], [MobileNo], [Email],
+		[SubmitDate], [AccessDate], [AccessTimeFrom], [AccessTimeTo], [AccessLocation], [AccessType],
+		[IsNeutralGap], [IsExclusive],
+		[DescOfWork], [ARRemark], 
+		[TARStatusId],
+		[InvolvePower], [PowerOn], [Is13ASocket],
+		[CrossOver]
+	FROM TAMS_TAR
+		WHERE ID = @TARID
+
+-- >> Sector
+
+	DECLARE @SelSectorNotGap	NVARCHAR(1000)
+	DECLARE @SelSectorGap		NVARCHAR(1000)
+	DECLARE @EntryStation		NVARCHAR(1000)
+	
+	SET @SelSectorNotGap = ''
+	SET @SelSectorGap = ''
+	SET @EntryStation = ''
+
+	-- EXEC sp_TAMS_Form_OnLoad 'NEL', '01/02/2021', 'Possession', '143;144;145;180;181;182'
+
+	-- >> Selected Sector IsGap = 0
+	SELECT @SelSectorNotGap = @SelSectorNotGap + ISNULL(b.Sector + ', ', '') 
+		FROM TAMS_TAR_Sector a, TAMS_Sector b
+			WHERE a.TARId = @TARID
+				AND a.IsBuffer = 0
+				AND a.SectorId = b.ID
+				AND ISNULL(b.IsGap, 0) = 0
+			GROUP BY b.Sector
+			-- >> ORDER BY b.[Order]
+
+	IF LEN(LTRIM(RTRIM(@SelSectorNotGap))) > 0
+		BEGIN
+			SET @SelSectorNotGap = LEFT(LTRIM(RTRIM(@SelSectorNotGap)), LEN(LTRIM(RTRIM(@SelSectorNotGap))) - 1)
+		END
+
+	-- >> Selected Sector IsGap = 1
+	SELECT @SelSectorGap = @SelSectorGap + ISNULL(Sector + ', ', '') 
+		FROM TAMS_TAR_Sector a, TAMS_Sector b
+			WHERE a.TARId = @TARID
+				AND a.IsBuffer = 0
+				AND a.SectorId = b.ID
+				AND ISNULL(b.IsGap, 0) = 1
+			GROUP BY b.Sector
+			-- >> ORDER BY b.[Order]
+
+	IF LEN(LTRIM(RTRIM(@SelSectorGap))) > 0
+		BEGIN
+			SET @SelSectorGap = LEFT(LTRIM(RTRIM(@SelSectorGap)), LEN(LTRIM(RTRIM(@SelSectorGap))) - 1)
+		END
+
+	SELECT @EntryStation = @EntryStation + ISNULL(b.StationCode + ', ', '') 
+		FROM TAMS_TAR_Station a, TAMS_Station b
+			WHERE a.StationId = b.ID
+				AND a.TARId = @TARID
+				AND b.IsActive = 1
+			GROUP BY b.StationCode
+			-- >> ORDER BY b.[Order]
+	
+	IF LEN(LTRIM(RTRIM(@EntryStation))) > 0
+		BEGIN
+			SET @EntryStation = LEFT(LTRIM(RTRIM(@EntryStation)), LEN(LTRIM(RTRIM(@EntryStation))) - 1)
+		END
+
+	DECLARE @IsGap	NVARCHAR(5)
+
+	SET @IsGap = CASE WHEN @SelSectorGap = '' THEN 'No' ELSE 'Yes' END
+
+	-- >> Table[1]
+	SELECT @SelSectorNotGap AS SelSectorNotGap,
+		@SelSectorGap AS SelSectorGap,
+		@EntryStation AS EntryStation,
+		@IsGap AS IsGap
+
+
+	-- >> Table[2]
+	SELECT a.IsSelected, b.OperationRequirement, a.IsAttachment, 0 AS Sno, 0 AS ID 
+	FROM [dbo].[TAMS_TAR_AccessReq] a, [dbo].[TAMS_Access_Requirement] b
+		WHERE a.TARId = @TARID
+			AND a.IsSelected = 1
+			AND a.IsPower = 0
+			AND a.OperationRequirement = b.ID
+			AND b.IsActive = 1
+		ORDER BY a.[Order]
+
+	-- >> Table[3]
+	SELECT a.IsSelected, b.OperationRequirement 
+	FROM [dbo].[TAMS_TAR_AccessReq] a, [dbo].[TAMS_Access_Requirement] b
+		WHERE a.TARId = @TARID
+			AND a.IsSelected = 1
+			AND a.IsPower = 1
+			AND a.OperationRequirement = b.ID
+			AND b.IsActive = 1
+		ORDER BY a.[Order]
+
+	DECLARE @PossID		INT
+	DECLARE @PowerOnOff	INT
+	DECLARE @TypeOfWork	INT
+
+	SELECT @PossID = [ID],
+		@PowerOnOff = [PowerOnOff],
+		@TypeOfWork = [TypeOfWorkId]
+	  FROM [dbo].[TAMS_Possession]
+		WHERE TARId = @TARID
+
+	-- >> Table[4]
+	SELECT [ID], [TARId],
+		[Summary], [WorkDesc], [TypeOfWorkId], 
+		[WorkWithinPossession], [TakePossession], [GiveUpPossession],
+		[Remarks], 
+		[PowerOnOff],
+		[EngTrainFormation],
+		[EngTrainArriveLoc], [EngTrainArriveTime],
+		[EngTrainDepartLoc], [EngTrainDepartTime],
+		[PCName]
+	  FROM [dbo].[TAMS_Possession]
+		WHERE TARId = @TARID
+
+	-- >> Table[5]
+	SELECT ID, TypeOfProtectionLimit, RedFlashingLampsLoc 
+		FROM [dbo].[TAMS_Possession_Limit]
+			WHERE PossessionId = @PossID
+				ORDER BY ID
+
+	-- >> Table[6]
+	SELECT ID, RedFlashingLampsLoc 
+		FROM [dbo].[TAMS_Possession_WorkingLimit]
+			WHERE PossessionId = @PossID
+				ORDER BY ID
+
+	-- >> Table[7]
+	SELECT ID, OtherProtection 
+		FROM [dbo].[TAMS_Possession_OtherProtection]
+			WHERE PossessionId = @PossID
+				ORDER BY ID
+
+	-- >> Table[8]
+	SELECT ID, PowerSector, @PowerOnOff AS PowerOnOff, NoOFSCD, BreakerOut 
+		FROM [dbo].[TAMS_Possession_PowerSector]
+			WHERE PossessionId = @PossID
+				ORDER BY ID
+			
+	-- >> Table[9]
+	SELECT TypeOfWork 
+		FROM TAMS_Type_Of_Work
+			WHERE ID = @TypeOfWork
+				AND IsActive = 1
+
+	-- >> For Approval and Showing of Level
+
+	DECLARE @MaxWFCtr		INT
+	DECLARE @PendingWFCtr	INT
+	DECLARE @ApprovedWFCtr	INT
+
+	-- >> Get Max Workflow
+	SELECT @MaxWFCtr = MAX(b.Level)
+		FROM TAMS_TAR_Workflow a, TAMS_Endorser b
+			WHERE a.WorkflowId = b.WorkflowId
+				AND a.EndorserId = b.ID
+				AND a.TARId = @TARID
+
+	SELECT @ApprovedWFCtr = COUNT(*)
+		FROM TAMS_TAR_Workflow a, TAMS_Endorser b
+			WHERE a.WorkflowId = b.WorkflowId
+				AND a.EndorserId = b.ID
+				AND a.TARId = @TARID
+				AND a.WFStatus = 'Approved'
+
+	SELECT @PendingWFCtr = COUNT(*)
+		FROM TAMS_TAR_Workflow a, TAMS_Endorser b
+			WHERE a.WorkflowId = b.WorkflowId
+				AND a.EndorserId = b.ID
+				AND a.TARId = @TARID
+				AND a.WFStatus = 'Pending'
+
+	-- >> Table[10]
+	SELECT @MaxWFCtr AS MaxWFCtr, @ApprovedWFCtr AS AppWFCtr, @PendingWFCtr AS PendWFCtr
+
+	-- >> Table[11]
+	-- >> Workflow -- Approved
+	SELECT a.TARId, a.UserId, a.WFStatus, a.Remark, a.ActionOn, a.ActionBy, 
+			b.RoleId, b.Title, b.RequireValidation, b.RequireTVF, b.WFStatusId 
+		FROM TAMS_TAR_Workflow a, TAMS_Endorser b
+			WHERE a.WorkflowId = b.WorkflowId
+				AND a.EndorserId = b.ID
+				AND a.TARId = @TARID
+				AND a.WFStatus = 'Approved'
+			ORDER BY a.ID
+
+	-- >> Table[12]
+	-- >> Workflow -- Pending
+	SELECT a.TARId, a.UserId, a.WFStatus, a.Remark, a.ActionOn, a.ActionBy, 
+			b.RoleId, b.Title, b.RequireValidation, b.RequireTVF, b.WFStatusId 
+		FROM TAMS_TAR_Workflow a, TAMS_Endorser b
+			WHERE a.WorkflowId = b.WorkflowId
+				AND a.EndorserId = b.ID
+				AND a.TARId = @TARID
+				AND a.WFStatus = 'Pending'
+			ORDER BY a.ID
+
+	--EXEC sp_TAMS_Approval_OnLoad 5, 'CSAPEX57'
+	--EXEC sp_TAMS_Approval_OnLoad 4, 'CSAPEX57'
+	
+	-- >> Buffer Zone -- Additional
+	-- >> Table[13]
+	SELECT sect.Sector,
+			sect.ID 
+		FROM TAMS_Sector sect
+			WHERE sect.ID NOT IN (SELECT SectorId 
+					FROM TAMS_TAR_Sector ts LEFT JOIN TAMS_TAR t ON t.Id = ts.TARId
+						WHERE (t.Id = @TarID OR
+							(t.TARStatusId = 8 
+								AND t.AccessDate = @AccessDate
+								AND t.Line = @Line)))
+				AND sect.Line = @Line
+				AND sect.IsActive = 1
+				AND @AccessDate BETWEEN sect.EffectiveDate AND sect.ExpiryDate
+			ORDER BY sect.ID
+
+	-- >> Exception
+
+	CREATE TABLE #TmpExc 
+	(TARID			BIGINT,
+	TARNo			NVARCHAR(20),
+	TARType			NVARCHAR(10),
+	AccessDate		NVARCHAR(20),
+	AccessType		NVARCHAR(20),
+	IsExclusive		INT,
+	SectorID		INT,
+	SectorStr		NVARCHAR(50),
+	IsBuffer		INT)
+
+	CREATE TABLE #TmpExcSector 
+	(TARID			BIGINT,
+	TARNo			NVARCHAR(20),
+	TARType			NVARCHAR(10),
+	AccessDate		NVARCHAR(20),
+	AccessType		NVARCHAR(20),
+	IsExclusive		INT,
+	SectorID		INT,
+	SectorStr		NVARCHAR(50),
+	IsBuffer		INT)
+
+	TRUNCATE TABLE #TmpExc
+	TRUNCATE TABLE #TmpExcSector
+
+	SELECT * FROM TAMS_TAR_Sector
+		WHERE TARId = @TARID
+
+
+END
+
+### ⬆️ END OF INPUT ⬆️
+**INSTRUCTION:** Document the logic above in English.

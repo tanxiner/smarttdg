@@ -1,0 +1,285 @@
+
+### SYSTEM ROLE
+You are a **Senior Database Architect**.
+You are NOT a Coder. You DO NOT write SQL code.
+
+### OBJECTIVE
+Document the logic of the Stored Procedure provided below.
+
+### 🛑 STRICT CONSTRAINTS
+1. **NO SQL CODE BLOCKS.** Do not rewrite the procedure code.
+2. **NO** "Here is the documentation" filler.
+3. **NO** generic explanations.
+4. **DO NOT EXPAND ACRONYMS.**
+   (Treat these as proper nouns: ["BCC", "CC", "DCC", "ID", "TAMS", "TAR"])
+
+### ✅ REQUIRED OUTPUT FORMAT
+Output exactly this structure:
+
+# Procedure: sp_TAMS_Update_UserRegModule_SysOwnerApproval
+
+### Purpose
+{One clear sentence explaining what business task this performs.}
+
+### Parameters
+| Name | Type | Purpose |
+| :--- | :--- | :--- |
+| @ParamName | DataType | {Inferred usage} |
+
+### Logic Flow
+{Step-by-step plain English explanation.}
+
+### Data Interactions
+* **Reads:** {List tables explicitly selected from}
+* **Writes:** {List tables inserted/updated/deleted}
+
+---
+
+### ⬇️ RAW SQL INPUT ⬇️
+CREATE PROCEDURE [dbo].[sp_TAMS_Update_UserRegModule_SysOwnerApproval] 	
+	@RegModID		INT,
+	@UpdatedBy		INT
+	
+AS
+BEGIN
+	BEGIN TRY
+		BEGIN TRANSACTION;
+
+		DECLARE @NextStageTitle NVARCHAR(100);
+		DECLARE @NextStageID	INT;
+		DECLARE @IsExternal		INT;
+		DECLARE @RegID			INT;
+		DECLARE @Line			NVARCHAR(10);
+		DECLARE @TrackType			NVARCHAR(50);
+		DECLARE @Module			NVARCHAR(10);
+
+		DECLARE @WorkflowID INT;
+		DECLARE @WorkFlowType NVARCHAR(20);
+		DECLARE @NewWFStatusID INT;
+		DECLARE @NewWFRoleID INT;
+		DECLARE @EndorserID	INT;
+		DECLARE @WFStatus   NVARCHAR(50);
+		DECLARE @RegStatus INT;
+
+
+
+		SELECT @IsExternal = IsExternal FROM TAMS_Registration WHERE ID = (SELECT RegID FROM TAMS_Reg_Module WHERE ID = @RegModID)
+
+
+		SELECT @RegID = rm.RegID, @Line = rm.Line,@TrackType = rm.TrackType, @Module = rm.Module, @IsExternal = r.IsExternal, @RegStatus = rm.RegStatus
+		FROM TAMS_Reg_Module rm, TAMS_Registration r 
+		WHERE rm.ID = @RegModID
+		AND r.ID = rm.RegId;
+
+		IF @IsExternal = 1
+		BEGIN
+			SET @WorkFlowType = 'ExtUser';
+		END
+		ELSE
+		BEGIN
+			IF @Module = 'TAR'
+			BEGIN
+				SET @WorkFlowType = 'TARIntUser';
+			END
+			ELSE if @Module='DCC'
+			BEGIN
+				SET @WorkFlowType='DCCIntUser';
+			END
+			ELSE
+			BEGIN
+				SET @WorkFlowType = 'OCCIntUser';
+			END
+		END
+
+		--SELECT @RegID = RegID, @Line = Line, @Module = Module 
+		--FROM TAMS_Reg_Module
+		--WHERE ID = @RegModID;
+
+		
+
+		-- System Owner is the last stage. Hard Coded to Approved
+		SELECT @NextStageID = WFStatusId,  @WFStatus = WFStatus
+		FROM TAMS_WFStatus 
+		WHERE WFType = 'UserRegStatus' 
+		AND Line = (SELECT Line FROM TAMS_Reg_Module WHERE ID = @RegModID)
+		AND WFStatus = 'Approved'
+
+		SELECT @WorkflowID = ID 
+		FROM TAMS_Workflow
+		WHERE Line = @Line 
+		AND WorkFlowType = @WorkFlowType
+		AND GETDATE() >= EffectiveDate 
+		AND GETDATE() <= ExpiryDate 
+		AND IsActive = 1
+
+		SELECT @NewWFStatusID = WFStatusID, @NewWFRoleID = RoleID, @EndorserID = ID
+		FROM TAMS_Endorser 
+		WHERE WorkflowID = @WorkflowID
+		AND Line = @Line
+		AND GETDATE() >= EffectiveDate
+		AND GETDATE() <= ExpiryDate
+		AND IsActive = 1
+		AND [Level] = 
+		(
+			SELECT [Level] + 1 
+			FROM TAMS_Endorser
+			WHERE WorkflowID = @WorkflowID
+			AND Line = @Line
+			AND WFStatusID = (SELECT WFStatusID FROM TAMS_WFStatus WHERE ID = @RegStatus)
+			AND GETDATE() >= EffectiveDate
+			AND GETDATE() <= ExpiryDate
+			AND IsActive = 1
+		)
+
+		IF EXISTS (SELECT * FROM TAMS_Reg_Module WHERE ID = @RegModID)
+		BEGIN
+
+			--SELECT @RegID, @Line, @Module, @NextStageID, @WorkflowID, @EndorserID, 'Approved', @WFStatus, GETDATE(), @UpdatedBy, GETDATE(), @UpdatedBy;
+
+			INSERT INTO TAMS_Reg_Module 
+			VALUES (@RegID, @Line,@TrackType, @Module, @NextStageID, @WorkflowID, @EndorserID, 'Approved', @WFStatus, GETDATE(), 1, GETDATE(), @UpdatedBy);
+
+			UPDATE TAMS_Reg_Module 
+			SET WFStatus = 'Approved',
+				UpdatedOn = GETDATE(), 
+				UpdatedBy = @UpdatedBy 
+			WHERE ID = @RegModID
+
+			IF NOT EXISTS(SELECT * FROM TAMS_User WHERE LoginID = (SELECT LoginID FROM TAMS_Registration WHERE ID = (SELECT RegID FROM TAMS_Reg_Module WHERE ID = @RegModID )))
+			BEGIN
+				IF @IsExternal = 0
+				BEGIN
+					INSERT INTO TAMS_User (LoginID, Name, Email, OfficeNo, MobileNo, SAPNo, Department, ValidFrom, ValidTo,
+						IsExternal, IsActive, LastLogin, CreatedOn, CreatedBy, UpdatedOn, UpdatedBy) 
+						SELECT LoginId, Name, Email, OfficeNo, MobileNo, SAPNo, Department, ValidFrom, ValidTo, 0, 1, 
+							GETDATE(), GETDATE(), @UpdatedBy, GETDATE(), @UpdatedBy 
+						FROM TAMS_Registration 
+						WHERE ID = (SELECT RegID FROM TAMS_Reg_Module WHERE ID = @RegModID)
+				END
+				ELSE
+				BEGIN
+
+					INSERT INTO TAMS_User (LoginID, Name, Email, OfficeNo, MobileNo, SAPNo, Department, ValidFrom, ValidTo, IsExternal,
+						Password, CompanyID, SBSTContactPersonName, SBSTContactPersonDept, SBSTContactPersonOfficeNo, IsActive, 
+						LastLogin, PasswordChangedDate, CreatedOn, CreatedBy, UpdatedOn, UpdatedBy)
+					SELECT LoginID, Name, Email, OfficeNo, MobileNo, '', Department, ValidFrom, ValidTo, IsExternal, Password, 
+						CompanyID, SBSTContactPersonName, SBSTContactPersonDept, SBSTContactPersonOfficeNo, 1, GETDATE(),  GETDATE(), GETDATE(), @UpdatedBy, 
+						GETDATE(), @UpdatedBy 
+					FROM TAMS_Registration
+					WHERE ID = (SELECT RegID FROM TAMS_Reg_Module WHERE ID = @RegModID)
+				END
+				
+			END
+			
+			-- Insert Audit Log
+			INSERT INTO TAMS_Action_Log VALUES 
+			(
+				@Line, 
+				@Module, 
+				'UserReg-Registration', 
+				@RegID, 
+				'System Owner approved module for User Registration', 
+				GETDATE(), 
+				@UpdatedBy
+			)
+
+			-- Sends email
+			DECLARE @Sender NVARCHAR (100);
+			DECLARE @SysID NVARCHAR(10);
+			DECLARE @Subject NVARCHAR(500);    
+			DECLARE @Sys NVARCHAR(100);
+			DECLARE @Greetings  NVARCHAR(20);     
+			DECLARE @ToList NVARCHAR(MAX);
+			DECLARE @CCList NVARCHAR(MAX);
+			DECLARE @BCCList NVARCHAR(MAX);
+			DECLARE @Separator NVARCHAR(10);        
+			DECLARE @AlertMsg NVARCHAR(MAX);
+			DECLARE @AlertID AS INTEGER; 
+
+			DECLARE @Body VARCHAR(max);
+			DECLARE @Body1 VARCHAR(max);
+			DECLARE @Body2 VARCHAR(max);
+			DECLARE @Body3 VARCHAR(max);
+			DECLARE @Link NVARCHAR(MAX);
+
+			DECLARE @LoginPage	NVARCHAR(500)
+					
+			DECLARE @SendTo	NVARCHAR(200);	
+
+			-- Get Send to list
+			SELECT @ToList = Email FROM TAMS_Registration WHERE ID = @RegID;
+			
+
+			SET @Sender = 'TAMS Admin';
+			SET @SysID = 'TAMS';
+			SET @Subject = 'For your information: User Registration Request has been approved'
+			SET @Sys = 'Track Access Management System'   
+			SET @Greetings = 'Dear Sir/Madam, '  
+			--SET @ToList = ''
+			SET @CCList = ''   
+			SET @BCCList = ''
+			SET @Separator = ','    
+			SET @CCList = ''
+			--SET @ToList = '';
+
+			SET @Body1 = ''
+			SET @Body2 = ''
+			SET @Body3 = ''
+			
+			SET @Body1 = @Body1 + '<table width="100%">'
+			SET @Body1 = @Body1 + '<tr align="left" valign="middle" style="font-size:10pt; font-face:Arial;">'
+			SET @Body1 = @Body1 + '<td>You can now access TAMS.</td>'
+			SET @Body1 = @Body1 + '</tr>'
+			SET @Body1 = @Body1 + '</table>'
+			 SET @LoginPage = 'https://sbstweb.sbstransit.com.sg/TAMS/Login.aspx'
+			
+		 
+			IF @IsExternal = 1
+			BEGIN
+				SET @LoginPage = 'https://sbstweb.sbstransit.com.sg/TAMS/ExternalLogin.aspx'
+
+			END
+
+			SET @Body2 = @Body2 + '<br>'
+			SET @Body2 = @Body2 + '<table width="100%">'
+			SET @Body2 = @Body2 + '<tr align="left" valign="middle" style="font-size:10pt; font-face:Arial;">'
+			SET @Body2 = @Body2 + '<td>Click on the link <a href=' + @LoginPage + '>here</a> to access tams.</td>'
+			SET @Body2 = @Body2 + '</tr>'
+			SET @Body2 = @Body2 + '</table>'
+
+			SET @Body3 = @Body3 + '<br>'
+			SET @Body3 = @Body3 + '<table width="100%">'
+			SET @Body3 = @Body3 + '<tr align="left" valign="middle" style="font-size:10pt; font-face:Arial;">'
+			SET @Body3 = @Body3 + '<td>***********************************************<br>Do Not reply. This is a computer generated Email. <br>***********************************************</td>'
+			SET @Body3 = @Body3 + '</tr>'
+			SET @Body3 = @Body3 + '</table>'
+
+			SET @Body = ''
+			SET @Body = @Body1 + @Body2 + @Body3
+
+			SET @BCCList = ''
+
+			EXEC [dbo].EAlertQ_EnQueue 
+				@Sender = @Sender, 
+				@UserId = @SysID, 
+				@Subject = @Subject,        
+				@Sys = @Sys,  
+				@Greetings = @Greetings, 
+				@AlertMsg = @Body, 
+				@SendTo = @ToList,        
+				@CC = @CCList, 
+				@BCC= @BCCList, 
+				@Separator = @Separator, 
+				@AlertID =  @AlertID output
+		END
+
+		COMMIT TRANSACTION;
+	END TRY
+	BEGIN CATCH
+		ROLLBACK TRANSACTION;
+	END CATCH
+
+END;
+
+### ⬆️ END OF INPUT ⬆️
+**INSTRUCTION:** Document the logic above in English.

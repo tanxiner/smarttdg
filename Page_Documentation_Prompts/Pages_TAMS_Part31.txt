@@ -1,0 +1,399 @@
+
+### SYSTEM ROLE
+You are a **Technical Writer** specializing in Legacy Web Applications.
+You are NOT a Developer. You DO NOT write code.
+
+### OBJECTIVE
+Analyze the "Code Behind" files to create a **Page Functionality Reference**.
+
+### 🛑 HARD NEGATIVE CONSTRAINTS
+1. **NO** C# or SQL code blocks.
+2. **NO** "Installation" or "Setup" sections.
+3. **NO** explanation of standard ASP.NET concepts (e.g., don't explain what Page_Load is; explain what *this specific page* does inside it).
+4. **NO** mentions of `.designer.cs` or auto-generated controls.
+
+### ✅ STRICT OUTPUT FORMAT
+For every Page/Control found in the input, output this structure:
+
+# Page: {PageName}
+**File:** {Filename}
+
+### 1. User Purpose
+{One sentence explaining what the user does here. E.g., "Users fill out this form to request x."}
+
+### 2. Key Events & Logic
+| Event / Method | Business Logic Summary |
+| :--- | :--- |
+| {MethodName} | {Plain English description of what happens. E.g., "Validates inputs, calls DAO to save, sends email."} |
+
+### 3. Data Interactions
+* **Reads:** {List entities/tables loaded (e.g., User, BlockedTar)}
+* **Writes:** {List entities/tables saved or updated}
+
+---
+
+### ⬇️ RAW CODE BEHIND INPUT ⬇️
+{
+  "file": "ViewProfile.aspx.cs",
+  "language": "C#",
+  "namespaces": [
+    "TAMS"
+  ],
+  "classes": [
+    {
+      "name": "ViewProfile",
+      "modifiers": "public partial",
+      "baseType": "System.Web.UI.Page",
+      "interfaces": []
+    }
+  ],
+  "methods": [
+    "protected Page_Load(sender: object, e: EventArgs): void",
+    "private SetupPage(): void",
+    "private ResetPage(): void",
+    "private buildSystemSelectiondata(isExternal: bool): DataTable",
+    "private UpdateGVRows(dr: DataRow, isExternal: bool): void",
+    "protected btn_externalNext_Click(sender: object, e: EventArgs): void",
+    "protected btn_internalNewSave_Click(sender: object, e: EventArgs): void"
+  ],
+  "ir": {
+    "file": "ViewProfile.aspx.cs",
+    "path": "tams-dev\\TAMS\\UserForms\\ViewProfile.aspx.cs",
+    "namespaces": [
+      "TAMS"
+    ],
+    "types": [
+      {
+        "kind": "ClassDeclaration",
+        "name": "ViewProfile",
+        "namespaceName": "TAMS",
+        "modifiers": "public partial",
+        "baseTypes": [
+          "System.Web.UI.Page"
+        ],
+        "methods": [
+          {
+            "name": "Page_Load",
+            "modifiers": "protected",
+            "returnType": "void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "EventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "SetupPage",
+            "modifiers": "private",
+            "returnType": "void",
+            "parameters": []
+          },
+          {
+            "name": "ResetPage",
+            "modifiers": "private",
+            "returnType": "void",
+            "parameters": []
+          },
+          {
+            "name": "buildSystemSelectiondata",
+            "modifiers": "private",
+            "returnType": "DataTable",
+            "parameters": [
+              {
+                "name": "isExternal",
+                "type": "bool",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "UpdateGVRows",
+            "modifiers": "private",
+            "returnType": "void",
+            "parameters": [
+              {
+                "name": "dr",
+                "type": "DataRow",
+                "defaultValue": null
+              },
+              {
+                "name": "isExternal",
+                "type": "bool",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "btn_externalNext_Click",
+            "modifiers": "protected",
+            "returnType": "void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "EventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "btn_internalNewSave_Click",
+            "modifiers": "protected",
+            "returnType": "void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "EventArgs",
+                "defaultValue": null
+              }
+            ]
+          }
+        ],
+        "properties": [],
+        "fields": [
+          {
+            "name": "relPath",
+            "modifiers": "",
+            "type": "string"
+          }
+        ],
+        "sql": []
+      }
+    ]
+  },
+  "sql_usages": []
+}
+{
+  "file": "ViewSignUpStatus.aspx.cs",
+  "language": "C#",
+  "namespaces": [
+    "TAMS"
+  ],
+  "classes": [
+    {
+      "name": "ViewSignUpStatus",
+      "modifiers": "public partial",
+      "baseType": "System.Web.UI.Page",
+      "interfaces": []
+    }
+  ],
+  "methods": [
+    "protected Page_Load(sender: object, e: EventArgs): void",
+    "private SetupPage(dsUser: DataSet): void",
+    "private ResetPage(): void",
+    "protected btn_externalBack_Click(sender: object, e: EventArgs): void",
+    "protected btn_internalBack_Click(sender: object, e: EventArgs): void",
+    "protected btn_resendRegistrationLink_Click(sender: object, e: EventArgs): void"
+  ],
+  "ir": {
+    "file": "ViewSignUpStatus.aspx.cs",
+    "path": "tams-dev\\TAMS\\UserForms\\ViewSignUpStatus.aspx.cs",
+    "namespaces": [
+      "TAMS"
+    ],
+    "types": [
+      {
+        "kind": "ClassDeclaration",
+        "name": "ViewSignUpStatus",
+        "namespaceName": "TAMS",
+        "modifiers": "public partial",
+        "baseTypes": [
+          "System.Web.UI.Page"
+        ],
+        "methods": [
+          {
+            "name": "Page_Load",
+            "modifiers": "protected",
+            "returnType": "void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "EventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "SetupPage",
+            "modifiers": "private",
+            "returnType": "void",
+            "parameters": [
+              {
+                "name": "dsUser",
+                "type": "DataSet",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "ResetPage",
+            "modifiers": "private",
+            "returnType": "void",
+            "parameters": []
+          },
+          {
+            "name": "btn_externalBack_Click",
+            "modifiers": "protected",
+            "returnType": "void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "EventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "btn_internalBack_Click",
+            "modifiers": "protected",
+            "returnType": "void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "EventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "btn_resendRegistrationLink_Click",
+            "modifiers": "protected",
+            "returnType": "void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "EventArgs",
+                "defaultValue": null
+              }
+            ]
+          }
+        ],
+        "properties": [],
+        "fields": [
+          {
+            "name": "relPath",
+            "modifiers": "",
+            "type": "string"
+          }
+        ],
+        "sql": []
+      }
+    ]
+  },
+  "sql_usages": []
+}
+{
+  "file": "ViewSwitcher.ascx.cs",
+  "language": "C#",
+  "namespaces": [
+    "TAMS"
+  ],
+  "classes": [
+    {
+      "name": "ViewSwitcher",
+      "modifiers": "public partial",
+      "baseType": "System.Web.UI.UserControl",
+      "interfaces": []
+    }
+  ],
+  "methods": [
+    "protected Page_Load(sender: object, e: EventArgs): void"
+  ],
+  "ir": {
+    "file": "ViewSwitcher.ascx.cs",
+    "path": "tams-dev\\TAMS\\ViewSwitcher.ascx.cs",
+    "namespaces": [
+      "TAMS"
+    ],
+    "types": [
+      {
+        "kind": "ClassDeclaration",
+        "name": "ViewSwitcher",
+        "namespaceName": "TAMS",
+        "modifiers": "public partial",
+        "baseTypes": [
+          "System.Web.UI.UserControl"
+        ],
+        "methods": [
+          {
+            "name": "Page_Load",
+            "modifiers": "protected",
+            "returnType": "void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "EventArgs",
+                "defaultValue": null
+              }
+            ]
+          }
+        ],
+        "properties": [
+          {
+            "name": "CurrentView",
+            "modifiers": "protected",
+            "type": "string"
+          },
+          {
+            "name": "AlternateView",
+            "modifiers": "protected",
+            "type": "string"
+          },
+          {
+            "name": "SwitchUrl",
+            "modifiers": "protected",
+            "type": "string"
+          }
+        ],
+        "fields": [],
+        "sql": []
+      }
+    ]
+  },
+  "sql_usages": []
+}
+
+
+### ⬆️ END OF INPUT ⬆️
+**INSTRUCTION:** Document the page logic above. Focus on User Actions and Data Flow.

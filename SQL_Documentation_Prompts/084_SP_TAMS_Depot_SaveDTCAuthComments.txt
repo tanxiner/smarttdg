@@ -1,0 +1,127 @@
+
+### SYSTEM ROLE
+You are a **Senior Database Architect**.
+You are NOT a Coder. You DO NOT write SQL code.
+
+### OBJECTIVE
+Document the logic of the Stored Procedure provided below.
+
+### 🛑 STRICT CONSTRAINTS
+1. **NO SQL CODE BLOCKS.** Do not rewrite the procedure code.
+2. **NO** "Here is the documentation" filler.
+3. **NO** generic explanations.
+4. **DO NOT EXPAND ACRONYMS.**
+   (Treat these as proper nouns: ["INSERTING"])
+
+### ✅ REQUIRED OUTPUT FORMAT
+Output exactly this structure:
+
+# Procedure: SP_TAMS_Depot_SaveDTCAuthComments
+
+### Purpose
+{One clear sentence explaining what business task this performs.}
+
+### Parameters
+| Name | Type | Purpose |
+| :--- | :--- | :--- |
+| @ParamName | DataType | {Inferred usage} |
+
+### Logic Flow
+{Step-by-step plain English explanation.}
+
+### Data Interactions
+* **Reads:** {List tables explicitly selected from}
+* **Writes:** {List tables inserted/updated/deleted}
+
+---
+
+### ⬇️ RAW SQL INPUT ⬇️
+CREATE PROCEDURE [dbo].[SP_TAMS_Depot_SaveDTCAuthComments]
+	-- Add the parameters for the stored procedure here
+	--@authid as int,
+	@str TAMS_DTC_AUTH_COMMENTS readonly,
+	@success as bit=NULL OUTPUT,
+	@Message AS NVARCHAR(500) = NULL OUTPUT
+AS
+BEGIN
+	-- SET NOCOUNT ON added to prevent extra result sets from
+	-- interfering with SELECT statements.
+	SET NOCOUNT ON;
+
+	
+	DECLARE	@IntrnlTrans	TINYINT
+	SELECT 	@IntrnlTrans 	= 0	
+
+	IF (@@TRANCOUNT = 0) 
+	BEGIN
+		SET @IntrnlTrans = 1
+		BEGIN TRAN
+	END
+
+			-- insert comments
+
+		DECLARE @authid as int;
+		DECLARE @comments as nvarchar(max);
+
+		DECLARE C CURSOR FOR
+		SELECT authid,comments from @str 
+		OPEN C;
+
+		FETCH NEXT FROM C INTO @authid, @comments
+		WHILE @@FETCH_STATUS=0
+		BEGIN 
+		
+			DECLARE @remarkid as int=-1;
+			Select @remarkid=RemarkID from TAMS_Depot_Auth where id=@authid and RemarkID is not null
+
+			if @remarkid<>-1
+			BEGIN
+				UPDATE TAMS_Depot_Auth_Remark
+				SET Remark=@comments
+				where RemarkID=@remarkid
+			END
+			ELSE
+			BEGIN
+				INSERT INTO TAMS_Depot_Auth_Remark
+				VALUES(@comments)
+
+				SET @remarkid=SCOPE_IDENTITY();
+
+				UPDATE TAMS_Depot_Auth
+				SET RemarkID=@remarkid
+				where id=@authid;
+			END
+		
+	
+		FETCH NEXT FROM C INTO @authid, @comments
+	END
+	CLOSE C;
+	DEALLOCATE C;
+
+		
+	IF @@ERROR <> 0 BEGIN
+		SET @Message = 'ERROR INSERTING INTO Depot Authorization module.'
+		
+		PRINT 'trap error'
+		GOTO TRAP_ERROR
+	END
+
+	FORCE_EXIT_PROC:	
+	
+		PRINT 'trap error 1'
+		IF @IntrnlTrans = 1 COMMIT TRAN
+		set @success=1;
+		RETURN;
+		--RETURN @Message 
+
+	TRAP_ERROR:
+	
+		PRINT 'trap error 2'
+		IF @IntrnlTrans = 1 ROLLBACK TRAN
+		set @success=0;
+		RETURN;
+		--RETURN @Message
+END
+
+### ⬆️ END OF INPUT ⬆️
+**INSTRUCTION:** Document the logic above in English.

@@ -1,0 +1,58 @@
+
+### SYSTEM ROLE
+You are a **Senior Database Architect**.
+You are NOT a Coder. You DO NOT write SQL code.
+
+### OBJECTIVE
+Document the logic of the Stored Procedure provided below.
+
+### 🛑 STRICT CONSTRAINTS
+1. **NO SQL CODE BLOCKS.** Do not rewrite the procedure code.
+2. **NO** "Here is the documentation" filler.
+3. **NO** generic explanations.
+4. **DO NOT EXPAND ACRONYMS.**
+   (Treat these as proper nouns: ["ID", "SPKSID"])
+
+### ✅ REQUIRED OUTPUT FORMAT
+Output exactly this structure:
+
+# Procedure: SP_TAMS_Depot_GetDTCAuthSPKS
+
+### Purpose
+{One clear sentence explaining what business task this performs.}
+
+### Parameters
+| Name | Type | Purpose |
+| :--- | :--- | :--- |
+| @ParamName | DataType | {Inferred usage} |
+
+### Logic Flow
+{Step-by-step plain English explanation.}
+
+### Data Interactions
+* **Reads:** {List tables explicitly selected from}
+* **Writes:** {List tables inserted/updated/deleted}
+
+---
+
+### ⬇️ RAW SQL INPUT ⬇️
+CREATE PROCEDURE [dbo].[SP_TAMS_Depot_GetDTCAuthSPKS]
+	-- Add the parameters for the stored procedure here
+	@accessDate as Date
+AS
+BEGIN
+	-- SET NOCOUNT ON added to prevent extra result sets from
+	-- interfering with SELECT statements.
+	SET NOCOUNT ON;
+
+	Select AuthID,TAMS_Depot_DTCAuth_SPKS.SPKSID,TAMS_Depot_DTCAuth_SPKS.ProtectOffType,TAMS_Depot_DTCAuth_SPKS.ProtectOffTiming,TAMS_Depot_DTCAuth_SPKS.ProtectOnType,TAMS_Depot_DTCAuth_SPKS.ProtectOnTiming,TAMS_Depot_DTCAuth_SPKS.StatusID,ProtectOffActionBy.Name as ProtectOffActionBy,ProtectOnActionBy.Name as ProtectOnActionBy,Z.ID as workflowid from TAMS_Depot_Auth 
+	LEFT JOIN TAMS_Depot_DTCAuth_SPKS ON TAMS_Depot_Auth.ID=TAMS_Depot_DTCAuth_SPKS.AuthID
+	LEFT JOIN (Select * from TAMS_WFStatus where WFType='DTCAuth') Z ON Z.WFStatusId=StatusID
+	LEFT JOIN TAMS_User ProtectOffActionBy ON ProtectOffActionBy.LoginId=ProtectOffActionBy
+	LEFT JOIN TAMS_User ProtectOnActionBy ON ProtectOnActionBy.LoginId=ProtectOnActionBy
+	where TAMS_Depot_Auth.AccessDate=@accessDate
+
+END
+
+### ⬆️ END OF INPUT ⬆️
+**INSTRUCTION:** Document the logic above in English.

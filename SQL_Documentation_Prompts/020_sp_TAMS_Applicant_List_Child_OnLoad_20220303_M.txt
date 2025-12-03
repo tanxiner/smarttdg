@@ -1,0 +1,124 @@
+
+### SYSTEM ROLE
+You are a **Senior Database Architect**.
+You are NOT a Coder. You DO NOT write SQL code.
+
+### OBJECTIVE
+Document the logic of the Stored Procedure provided below.
+
+### 🛑 STRICT CONSTRAINTS
+1. **NO SQL CODE BLOCKS.** Do not rewrite the procedure code.
+2. **NO** "Here is the documentation" filler.
+3. **NO** generic explanations.
+4. **DO NOT EXPAND ACRONYMS.**
+   (Treat these as proper nouns: ["BB", "ID", "NB", "TAMS_TAR", "TARID"])
+
+### ✅ REQUIRED OUTPUT FORMAT
+Output exactly this structure:
+
+# Procedure: sp_TAMS_Applicant_List_Child_OnLoad_20220303_M
+
+### Purpose
+{One clear sentence explaining what business task this performs.}
+
+### Parameters
+| Name | Type | Purpose |
+| :--- | :--- | :--- |
+| @ParamName | DataType | {Inferred usage} |
+
+### Logic Flow
+{Step-by-step plain English explanation.}
+
+### Data Interactions
+* **Reads:** {List tables explicitly selected from}
+* **Writes:** {List tables inserted/updated/deleted}
+
+---
+
+### ⬇️ RAW SQL INPUT ⬇️
+CREATE PROCEDURE [dbo].[sp_TAMS_Applicant_List_Child_OnLoad_20220303_M]
+	@Line			AS NVARCHAR(10) = NULL,
+	@ToAccessDate	AS NVARCHAR(20) = NULL,
+	@FromAccessDate	AS NVARCHAR(20) = NULL,
+	@TARType		AS NVARCHAR(20) = NULL,
+	@SectorID		AS INT
+AS
+
+BEGIN
+
+DECLARE @CurrDate	DATETIME
+SET @CurrDate = CONVERT(DATETIME, CONVERT(NVARCHAR(20), GETDATE(), 103), 103)
+
+CREATE TABLE #TmpSector 
+(Line		NVARCHAR(10),
+SectorID	INT,
+SectorStr	NVARCHAR(50),
+SectorOrder	INT,
+Direction	INT)
+
+CREATE TABLE #TmpAppList 
+(TARID			BIGINT,
+TARNo			NVARCHAR(20),
+TARType			NVARCHAR(10),
+AccessType		NVARCHAR(20),
+Company			NVARCHAR(200),
+WFStatus		NVARCHAR(100),
+AccessDate		NVARCHAR(20),
+SectorID		INT,
+SectorStr		NVARCHAR(50),
+Direction		INT,
+ColorCode		NVARCHAR(50))
+
+TRUNCATE TABLE #TmpSector
+TRUNCATE TABLE #TmpAppList
+
+INSERT INTO #TmpSector 
+	(Line, SectorID, SectorStr, SectorOrder, Direction)
+SELECT Line, ID, Sector, [Order], CASE WHEN Direction IN ('BB', 'NB') THEN 1 ELSE 2 END
+	FROM TAMS_Sector
+		WHERE Line = @Line
+			AND IsActive = 1
+			AND @CurrDate BETWEEN EffectiveDate AND ExpiryDate
+		ORDER BY [Order]
+
+INSERT INTO #TmpAppList
+SELECT t.Id, t.TARNo, t.TARType, t.AccessType, t.Company, ws.WFStatus, t.AccessDate, ts.SectorId, s.Sector, CASE WHEN s.Direction IN ('BB', 'NB') THEN 1 ELSE 2 END, ISNULL(ts.ColourCode, '')
+	FROM TAMS_TAR t, TAMS_TAR_Sector ts, TAMS_WFStatus ws, TAMS_Sector s
+		WHERE t.Id = ts.TARId
+			AND t.TARStatusId = ws.WFStatusId
+			AND t.Line = ws.Line
+			AND ts.SectorId = s.ID
+			AND ws.WFType = 'TARWFStatus'
+			AND t.Line = @Line
+			AND t.TARStatusId <> 0
+			AND s.IsActive = 1
+			AND @CurrDate BETWEEN s.EffectiveDate AND s.ExpiryDate
+			AND (t.AccessDate >= CONVERT(DATE, @ToAccessDate, 103) AND t.AccessDate <= CONVERT(DATE, @FromAccessDate, 103))
+			AND (t.TARType = @TARType OR ISNULL(@TARType, '') = '')
+			-- >>AND (a.AccessDate = CONVERT(DATE, @AccessDate, 103) OR ISNULL(@AccessDate, '') = '')
+
+SELECT b.TARID, b.TARNo, b.TARType, b.AccessDate, b.AccessType, b.Company, b.WFStatus, b.ColorCode 
+	FROM #TmpAppList b
+		WHERE b.SectorID = @SectorID
+	GROUP BY b.TARID, b.TARNo, b.TARType, b.AccessDate, b.AccessType, b.Company, b.WFStatus  
+	ORDER BY b.TARID
+
+--SELECT a.Line, a.SectorID, a.SectorStr, a.Direction, 
+--		b.TARID, b.TARNo, b.TARType, b.AccessDate, b.AccessType, b.Company, b.WFStatus 
+--	FROM #TmpSector a LEFT OUTER JOIN #TmpAppList b ON a.SectorID = b.SectorID
+--		WHERE a.Direction = 1
+--	ORDER BY a.SectorOrder
+
+--SELECT a.Line, a.SectorID, a.SectorStr, a.Direction, 
+--		b.TARID, b.TARNo, b.TARType, b.AccessDate, b.AccessType, b.Company, b.WFStatus
+--	FROM #TmpSector a LEFT OUTER JOIN #TmpAppList b ON a.SectorID = b.SectorID
+--		WHERE a.Direction = 2
+--	ORDER BY a.SectorOrder
+
+DROP TABLE #TmpSector
+DROP TABLE #TmpAppList
+
+END
+
+### ⬆️ END OF INPUT ⬆️
+**INSTRUCTION:** Document the logic above in English.

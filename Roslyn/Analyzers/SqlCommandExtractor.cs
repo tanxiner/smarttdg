@@ -25,17 +25,18 @@ namespace Roslyn.Analyzers
 
 		public class SqlUsage
 		{
-			public string FilePath { get; set; }
-			public string Namespace { get; set; }
-			public string ClassName { get; set; }
-			public string MethodName { get; set; }
-			public string MethodSignature { get; set; }
+			// Initialize string properties to non-null defaults to satisfy the compiler
+			public string FilePath { get; set; } = "";
+			public string Namespace { get; set; } = "";
+			public string ClassName { get; set; } = "";
+			public string MethodName { get; set; } = "";
+			public string MethodSignature { get; set; } = "";
 			public int Line { get; set; }
-			public string Kind { get; set; }           // "SqlCommandCtor", "CommandTextAssignment", "DapperInvocation", "EFInvocation"
-			public string SqlText { get; set; }        // resolved text if available (literal/const), else null
+			public string Kind { get; set; } = "";           // "SqlCommandCtor", "CommandTextAssignment", "DapperInvocation", "EFInvocation"
+			public string? SqlText { get; set; } = null;     // resolved text if available (literal/const), else null
 			public bool CommandTypeIsStoredProcedure { get; set; } = false;
 			public List<string> InferredStoredProcedures { get; set; } = new List<string>();
-			public string RawSnippet { get; set; }
+			public string RawSnippet { get; set; } = "";
 		}
 
 		/// <summary>

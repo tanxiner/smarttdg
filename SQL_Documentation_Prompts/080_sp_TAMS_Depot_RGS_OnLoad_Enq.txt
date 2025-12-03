@@ -1,0 +1,179 @@
+
+### SYSTEM ROLE
+You are a **Senior Database Architect**.
+You are NOT a Coder. You DO NOT write SQL code.
+
+### OBJECTIVE
+Document the logic of the Stored Procedure provided below.
+
+### 🛑 STRICT CONSTRAINTS
+1. **NO SQL CODE BLOCKS.** Do not rewrite the procedure code.
+2. **NO** "Here is the documentation" filler.
+3. **NO** generic explanations.
+4. **DO NOT EXPAND ACRONYMS.**
+   (Treat these as proper nouns: ["DEPOT", "DTL", "ID", "IIF", "NEL", "TAMS_TAR", "TAMS_TOA", "TARID", "TIME", "TOA", "TOAID"])
+
+### ✅ REQUIRED OUTPUT FORMAT
+Output exactly this structure:
+
+# Procedure: sp_TAMS_Depot_RGS_OnLoad_Enq
+
+### Purpose
+{One clear sentence explaining what business task this performs.}
+
+### Parameters
+| Name | Type | Purpose |
+| :--- | :--- | :--- |
+| @ParamName | DataType | {Inferred usage} |
+
+### Logic Flow
+{Step-by-step plain English explanation.}
+
+### Data Interactions
+* **Reads:** {List tables explicitly selected from}
+* **Writes:** {List tables inserted/updated/deleted}
+
+---
+
+### ⬇️ RAW SQL INPUT ⬇️
+CREATE PROCEDURE  [dbo].[sp_TAMS_Depot_RGS_OnLoad_Enq]
+	@Line	NVARCHAR(20) = NULL,
+	@TrackType nvarchar(50) = null,
+	@accessDate	Date = NULL
+AS
+
+BEGIN
+
+DECLARE @NewLine AS NVARCHAR(6)
+SET @NewLine = '<br />'
+
+DECLARE @RGSPossBG			NVARCHAR(20)
+DECLARE @RGSProtBG			NVARCHAR(20)
+DECLARE @RGSCancBG			NVARCHAR(20)
+
+--DECLARE @trainLine as NVARCHAR(10)
+--SET @trainLine='DTL'
+--DECLARE @trackType as nvarchar(10)
+--SET @trackType='mainline'
+
+--DECLARE @accessDate as Date
+DECLARE @OperationDate as Date
+
+DECLARE @CurDate		DATE
+DECLARE @CurTime		TIME
+
+SET @CurDate =  GETDATE()
+SET @CurTime = CONVERT(TIME, GETDATE(), 108)
+
+
+DECLARE @CutOff	TIME
+SET @CutOff = '06:00:00'
+
+
+SET @OperationDate	= @CurDate--DateAdd(day,-1,@CurDate)
+--SET @AccessDate		= @CurDate--DateAdd(day,-1,@CurDate)--@CurDate
+
+	
+--SET @OperationDate = '2023-11-17'
+--SET @AccessDate = '2023-11-18'
+
+SELECT @RGSPossBG = ParaValue2 
+	FROM TAMS_Parameters
+		WHERE ParaCode = 'RGSPossessionBG'
+			AND ParaValue1 = @Line
+
+SELECT @RGSProtBG = ParaValue2 
+	FROM TAMS_Parameters
+		WHERE ParaCode = 'RGSProtectionBG'
+			AND ParaValue1 = @Line
+
+SELECT @RGSCancBG = ParaValue2 
+	FROM TAMS_Parameters
+		WHERE ParaCode = 'RGSCancelledBG'
+			AND ParaValue1 = @Line
+
+
+DECLARE @TOACallBackTime	NVARCHAR(10)
+SET @TOACallBackTime = '18:00'
+
+
+			
+
+SELECT ROW_NUMBER() OVER (ORDER BY (SELECT 1)) as Sno,a.TARNo as TARNo, dbo.TAMS_Get_ES_NoBufferZone(a.Id) as ElectricalSections,
+		CASE WHEN (a.Line='NEL' AND a.PowerOn = 1 AND a.AccessType='Possession')THEN (
+			''
+		)  WHEN (a.Line='NEL' ) THEN (
+			(SELECT  ISNULL(CONVERT(NVARCHAR(5), max(dauthpz.PowerOffTiming), 108), '')
+					FROM TAMS_Depot_Auth dauth INNER JOIN TAMS_Depot_Auth_Powerzone dauthpz ON
+						dauth.ID=dauthpz.AuthID
+						WHERE -- dauth.OperationDate = @OperationDate
+							--AND 
+							dauth.AccessDate = @accessDate
+							and dauth.TarID=a.Id
+							 AND dauthpz.PowerOffTiming is not null  and dauthpz.PowerOffType = 'Completed' 
+							 
+			)
+		) END as PowerOffTime, 
+					(SELECT  ISNULL(CONVERT(NVARCHAR(5), max(dauthpz.RackedOutTiming), 108), '')
+					FROM TAMS_Depot_Auth dauth INNER JOIN TAMS_Depot_Auth_Powerzone dauthpz ON
+						dauth.ID=dauthpz.AuthID INNER JOIN (
+					SELECT i11.TARId 
+					FROM TAMS_TAR_AccessReq i11, TAMS_Access_Requirement j11
+						WHERE i11.IsPower = 1
+							AND i11.OperationRequirement = j11.ID
+							AND j11.ID = 48	-- >> 27 FOR NEL
+							AND i11.IsSelected = 1
+						) j2 on j2.TARId=a.Id
+						WHERE 
+							 dauth.TarID=a.Id
+							--AND dauth.OperationDate = @OperationDate
+							AND dauth.AccessDate = @accessDate
+							 AND dauthpz.RackedOutTiming is not null and dauthpz.RackedOutType = 'Completed' 
+						)
+					as CircuitBreakOutTime,
+						dbo.TAMS_Get_TOA_Parties(b.Id) as PartiesName,
+						b.NoOfParties  as NoOfPersons,a.DescOfWork as WorkDescription, (b.MobileNo + @NewLine + b.TetraRadioNo) as ContactNo
+						,ISNULL(b.TOANo, '') as TOANo,
+		TOACallbackTime as CallBackTime,
+		ISNULL(CONVERT(NVARCHAR(5), b.GrantTOATime, 108), '') as RadioMsgTime,
+		ISNULL(CONVERT(NVARCHAR(5), b.AckSurrenderTime, 108), '') as LineClearMsgTime,
+		[dbo].[SP_TAMS_RGS_Comments](a.Id,b.Id,'NEL','depot') as Remarks,
+		b.TOAStatus,
+		CONVERT(bit,
+			(SELECT IIF(EXISTS(SELECT *
+					FROM TAMS_Depot_Auth aa1 
+							where 
+							--aa1.OperationDate = @OperationDate
+							--AND 
+							aa1.AccessDate = @accessDate
+							 AND aa1.DepotAuthStatusId >= 8 and TarID=a.ID) 
+							 ,1,0)
+		)) as IsTOAAuth,
+		CASE WHEN TOAStatus=6 THEN @RGSCancBG ELSE CASE WHEN a.AccessType='Possession' THEN @RGSPossBG ELSE @RGSProtBG END END as ColourCode,
+		--Grant TOA
+		CONVERT(bit,1) as IsGrantTOAEnable,
+		--CONVERT(bit,IIF(b.TOAStatus=6,1,IIF(a.Line='DTL',IIF(a.AccessType='Possession',1, IIF(@possession_ctrl=1,1,0)),1))) as IsGrantTOAEnable,
+		ISNULL(CONVERT(NVARCHAR(5), b.UpdateQTSTime, 108), '') as UpdQTSTime,
+		a.AccessType as AccessType,
+		ISNULL(CONVERT(NVARCHAR(8), b.AckGrantTOATime, 108), '') as AckGrantTOATime,
+		ISNULL(CONVERT(NVARCHAR(5), b.AckProtectionLimitTime, 108), '') as AckProtLimitTIme, 
+		a.Id as TARID,
+		b.Id as TOAID,
+		dbo.DecryptString(b.InChargeNRIC) as InChargeNRIC
+	FROM TAMS_TAR a, TAMS_TOA b
+		WHERE a.Id = b.TARId
+			AND a.AccessDate = @accessDate
+			and UPPER(a.TrackType) = 'DEPOT'
+			AND b.TOAStatus <> 0
+			AND a.Line = @Line
+	-- >> ORDER BY a.AccessType, b.TOAType, a.Id
+	ORDER BY a.AccessType,a.TARNo
+
+		
+SELECT --CONVERT(NVARCHAR(20), @OperationDate, 105) AS OperationDate,  
+	CONVERT(NVARCHAR(20), @AccessDate, 105) AS AccessDate
+
+END
+
+### ⬆️ END OF INPUT ⬆️
+**INSTRUCTION:** Document the logic above in English.

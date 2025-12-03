@@ -1,0 +1,122 @@
+
+### SYSTEM ROLE
+You are a **Senior Database Architect**.
+You are NOT a Coder. You DO NOT write SQL code.
+
+### OBJECTIVE
+Document the logic of the Stored Procedure provided below.
+
+### 🛑 STRICT CONSTRAINTS
+1. **NO SQL CODE BLOCKS.** Do not rewrite the procedure code.
+2. **NO** "Here is the documentation" filler.
+3. **NO** generic explanations.
+4. **DO NOT EXPAND ACRONYMS.**
+   (Treat these as proper nouns: ["HOL", "LOG", "LSQLQRY", "REG", "SPIN", "TEMP", "TO_CHAR", "YYYY"])
+
+### ✅ REQUIRED OUTPUT FORMAT
+Output exactly this structure:
+
+# Procedure: sp_TAMS_Batch_Populate_Calendar
+
+### Purpose
+{One clear sentence explaining what business task this performs.}
+
+### Parameters
+| Name | Type | Purpose |
+| :--- | :--- | :--- |
+| @ParamName | DataType | {Inferred usage} |
+
+### Logic Flow
+{Step-by-step plain English explanation.}
+
+### Data Interactions
+* **Reads:** {List tables explicitly selected from}
+* **Writes:** {List tables inserted/updated/deleted}
+
+---
+
+### ⬇️ RAW SQL INPUT ⬇️
+CREATE PROCEDURE [dbo].[sp_TAMS_Batch_Populate_Calendar]
+(@Year	NVARCHAR(4),
+	@YrFlag INT)
+-- -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-- Procedure Name 	: sp_TAMS_Batch_Populate_Calendar
+-- Author		: jeffrey
+-- Date Created		: 26/08/2021
+-- Purpose		: 
+AS
+
+BEGIN
+		
+SET NOCOUNT ON
+
+DECLARE @LSQLQRY VARCHAR(4000)
+DECLARE @YearCnt INT
+DECLARE @CalID INT
+DECLARE @CalendarDayCnt INT
+DECLARE @CalendarID NVARCHAR(100)
+
+	IF ISNULL(@Year, '') = ''
+		BEGIN
+			SET @Year = DATEPART(yyyy, GETDATE())
+		END
+
+	IF ISNULL(@YrFlag, '') = ''
+		BEGIN
+			SET @YrFlag = 0
+		END
+
+	IF @YrFlag > 0
+		BEGIN
+			SET @Year = @Year + @YrFlag
+		END
+
+	------SELECT @Year, @YrFlag
+
+	TRUNCATE TABLE TAMS_TR_CALENDAR_REF -- >> TEMP TABLE
+
+	INSERT INTO TAMS_TR_CALENDAR_REF
+		SELECT * FROM OPENQUERY(SPIN, 'SELECT * FROM TR_CALENDAR_REF')
+			ORDER BY 1 
+
+	SELECT @CalendarDayCnt = COUNT(*)
+		FROM TAMS_Calendar
+			WHERE DATEPART(YEAR, CalendarDate) = @Year
+
+	IF @CalendarDayCnt > 0
+		BEGIN
+			DELETE FROM TAMS_Calendar
+			WHERE DATEPART(YEAR, CalendarDate) = @Year
+		END
+
+			INSERT INTO [dbo].[TAMS_Calendar]
+			([CalendarDate], [CalendarDay], [CalendarWeek], [HolidayCode], 
+				[CreatedOn], [CreatedBy], [UpdatedOn], [UpdatedBy])
+			SELECT FR_CALENDAR_REF_DATE, FR_CALENDAR_REF_DAY, FR_CALENDAR_REF_WEEK, FR_CALENDAR_REF_HOLIDAY,
+				GETDATE(), 1, GETDATE(), 1 FROM TAMS_TR_CALENDAR_REF
+				WHERE DATEPART(YEAR, FR_CALENDAR_REF_DATE) = @Year
+		/*
+				SET @LSQLQRY='SELECT FR_CALENDAR_REF_DATE,
+					CASE FR_CALENDAR_REF_HOL WHEN ''1'' THEN ''HOL'' ELSE ''REG'' END AS EarnCode
+						FROM TR_CALENDAR_REF WHERE TO_CHAR(FR_CALENDAR_REF_DATE, ''YYYY'') = ' + @Year + ' ORDER BY FR_CALENDAR_REF_DATE'
+
+				SET @LSQLQRY = 'INSERT INTO CALENDAR_DAY
+					(CalendarID, CalendarDay, EarnCode, Hours, 
+						LastUpdateOn, LastUpdatedBy, CreatedOn, CreatedBy, Active)
+					SELECT ' + @CalendarID + ', FR_CALENDAR_REF_DATE, EarnCode, 8.000000,
+						GETDATE(), system_user, GETDATE(), system_user, 1
+						FROM OPENQUERY(SPIN,' + dbo.TA_Quotestring(@LSQLQRY) + ')'
+
+				EXEC (@LSQLQRY)
+               	
+				IF @@ERROR <> 0
+					BEGIN
+						RAISERROR('Inserting into table CALENDAR_DAY failed' , 16, 1 ) --WITH LOG
+						RETURN
+					END
+		*/
+
+END
+
+### ⬆️ END OF INPUT ⬆️
+**INSTRUCTION:** Document the logic above in English.

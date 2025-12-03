@@ -1,0 +1,272 @@
+
+### SYSTEM ROLE
+You are a **Senior Database Architect**.
+You are NOT a Coder. You DO NOT write SQL code.
+
+### OBJECTIVE
+Document the logic of the Stored Procedure provided below.
+
+### 🛑 STRICT CONSTRAINTS
+1. **NO SQL CODE BLOCKS.** Do not rewrite the procedure code.
+2. **NO** "Here is the documentation" filler.
+3. **NO** generic explanations.
+4. **DO NOT EXPAND ACRONYMS.**
+   (Treat these as proper nouns: ["ALERT", "APPROVED", "DTL", "EID", "EMAIL", "EMTARID", "ID", "INSERTING", "LRT", "NEL", "ROLE", "TAMS_TAR", "TAR", "TARID", "TARWFID", "TVF", "WF", "WFID", "_PFR"])
+
+### ✅ REQUIRED OUTPUT FORMAT
+Output exactly this structure:
+
+# Procedure: sp_TAMS_Approval_Endorse_20230410
+
+### Purpose
+{One clear sentence explaining what business task this performs.}
+
+### Parameters
+| Name | Type | Purpose |
+| :--- | :--- | :--- |
+| @ParamName | DataType | {Inferred usage} |
+
+### Logic Flow
+{Step-by-step plain English explanation.}
+
+### Data Interactions
+* **Reads:** {List tables explicitly selected from}
+* **Writes:** {List tables inserted/updated/deleted}
+
+---
+
+### ⬇️ RAW SQL INPUT ⬇️
+CREATE PROCEDURE [dbo].[sp_TAMS_Approval_Endorse_20230410]
+	@TARID		AS INTEGER,						-- >> TAR ID
+	@TARWFID	AS INTEGER,						-- >> Current WF ID
+	@EID		AS INTEGER,						-- >> Current Endorser ID
+	@ELevel		AS INTEGER,						-- >> Current Endorser Level
+	@Remarks	AS NVARCHAR(1000) = NULL,		-- >> Remarks -- Mandatory for Reject / Optional for Approved / Endorse
+	@TVFRunMode			AS NVARCHAR(50) = NULL,	-- >> New Column to be confirmed with Adeline
+	@TVFRunModeUpdInd	AS NVARCHAR(5) = NULL,	-- >> Indicator to Update TVF Run Mode or Not.
+	@UserLI		AS NVARCHAR(100) = NULL,			-- >> User Login ID	
+	@Message	AS NVARCHAR(500) = NULL OUTPUT
+AS
+
+BEGIN
+
+DECLARE	@IntrnlTrans	TINYINT
+SELECT 	@IntrnlTrans 	= 0	
+
+IF (@@TRANCOUNT = 0) 
+BEGIN
+	SET @IntrnlTrans = 1
+	BEGIN TRAN
+END
+
+-- >>
+SET @Message = ''
+DECLARE @UserID		INTEGER
+DECLARE @UserName	NVARCHAR(500)
+
+DECLARE @EMTARID		INTEGER
+DECLARE @EMTARStatus	NVARCHAR(20)
+DECLARE @EMTARNo		NVARCHAR(50)
+DECLARE @EMRemarks		NVARCHAR(1000)
+DECLARE @EMActor		NVARCHAR(100)
+DECLARE @EMToSend		NVARCHAR(1000)
+DECLARE @EMCCSend		NVARCHAR(1000)
+DECLARE @EMCompany		NVARCHAR(100)
+DECLARE @EMMsg			NVARCHAR(500)
+
+DECLARE @TARDate		DATE
+
+SELECT @UserID = Userid, @UserName = [Name]
+FROM TAMS_User
+	WHERE LoginId = @UserLI
+
+UPDATE TAMS_TAR_Workflow
+	SET WFStatus = 'Approved',
+		ActionBy = @UserID,
+		ActionOn = GETDATE(),
+		Remark = @Remarks
+	WHERE ID =  @TARWFID
+
+IF @TVFRunModeUpdInd = 1
+	BEGIN
+		UPDATE TAMS_TAR
+			SET TVFMode = @TVFRunMode
+		WHERE ID = @TARID
+	END
+
+DECLARE @NextEndID		INTEGER
+DECLARE @NextEndTitle	NVARCHAR(100)
+DECLARE @NextWFID		INTEGER
+DECLARE @NextWFStatID	INTEGER
+DECLARE @NextRoleID		INTEGER
+DECLARE @TARType	NVARCHAR(20)
+DECLARE @WFID		INTEGER
+DECLARE @Line		NVARCHAR(10)
+
+SELECT @TARType = TARType,
+		@Line = Line,
+		@EMToSend = Email,		-- >> ToSendEmail
+		@EMCCSend = Email,
+		@EMTARID = Id,
+		@EMTARNo = TARNo,
+		@EMRemarks = ARRemark,
+		@EMCompany = Company,
+		@TARDate = AccessDate
+	FROM TAMS_TAR
+		WHERE ID = @TARID
+
+SELECT @WFID = WorkflowId 
+	FROM TAMS_TAR_Workflow
+		WHERE ID = @TARWFID
+
+-- >> Current Level Endorser
+SELECT @EMActor = Title
+	FROM TAMS_Endorser
+		WHERE WorkflowId = @WFID
+			AND [Level] = @ELevel
+
+-- >> Next Level Endorser
+SELECT @NextEndID = ID, 
+		@NextEndTitle = Title,
+		@NextWFID = WorkflowId,
+		@NextWFStatID = WFStatusId,
+		@NextRoleID = RoleId
+	FROM TAMS_Endorser
+		WHERE WorkflowId = @WFID
+			AND [Level] = @ELevel + 1
+
+IF ISNULL(@NextEndTitle, '') = ''
+	BEGIN
+		-- >> Last Level Approved TAR
+		
+		-- >> If NEL Approved = 9 Else DTL or LRT = 8
+		UPDATE TAMS_TAR
+			SET TARStatusId = CASE WHEN @Line = 'NEL' THEN 9 ELSE 8 END,
+				UpdatedOn = GETDATE(),
+				UpdatedBy = @UserID
+			WHERE ID = @TARID
+
+		IF @TARType = 'Urgent'
+			BEGIN
+				-- >> APPROVED EMAIL
+				-- >> PRINT 'Urgent Email'
+				SET @EMTARStatus = 'Approved'
+				SET @EMMsg = ''
+
+				EXEC sp_TAMS_Email_Urgent_TAR @EMTARID, @EMTARStatus, @EMTARNo, @EMRemarks, @EMActor, @EMToSend, @EMMsg OUTPUT
+			END
+
+	END
+ELSE
+	BEGIN
+		IF (SELECT COUNT(*) FROM TAMS_TAR_Workflow
+			WHERE TARId = @TARID
+				AND WorkflowId = @NextWFID
+				AND EndorserId = @NextEndID) = 0
+			BEGIN	
+				INSERT INTO [dbo].[TAMS_TAR_Workflow]
+					([TARId], [WorkflowId], [EndorserId], [UserId], [WFStatus], [Remark], [ActionOn], [ActionBy])
+				VALUES
+					(@TARID, @NextWFID, @NextEndID, NULL, 'Pending', '', GETDATE(), @UserID)
+			END
+
+		UPDATE TAMS_TAR
+			SET TARStatusId = @NextWFStatID,
+				UpdatedOn = GETDATE(),
+				UpdatedBy = @UserID
+			WHERE Id = @TARID
+
+		IF @TARType = 'Urgent'
+			BEGIN
+				-- >> NEXT ROLE ID EMAIL ALERT
+				-- >> PRINT 'Urgent Email'
+				DECLARE @RoleEmail	NVARCHAR(1000)
+				SET @RoleEmail = ''
+				SET @EMMsg = ''
+
+				SELECT @RoleEmail = @RoleEmail + ISNULL(a.Email + ', ', '') 
+					FROM TAMS_User a, TAMS_User_Role b
+						WHERE a.Userid = b.UserID
+							AND a.IsActive = 1
+							AND @TARDate BETWEEN a.ValidFrom AND a.ValidTo
+							-- >> AND b.RoleID = @NextEndID -- >> Orig, Wrongone
+							AND b.RoleID = @NextRoleID
+
+				IF LEN(LTRIM(RTRIM(@RoleEmail))) > 0
+					BEGIN
+						SET @RoleEmail = LEFT(LTRIM(RTRIM(@RoleEmail)), LEN(LTRIM(RTRIM(@RoleEmail))) - 1)
+					END
+
+				-- >> Select all email where role id = next role id
+				SET @EMToSend = @RoleEmail
+
+				EXEC sp_TAMS_Email_Apply_Urgent_TAR 2, @EMCompany, @EMTARNo, @NextEndTitle, @EMToSend, @EMCCSend, @EMMsg OUTPUT
+			END
+	END
+
+-- >> Action Log
+DECLARE @LogMsg	NVARCHAR(100)
+-- >> SET @LogMsg = 'TAR Form has approved by : ' + '' + ' On ' + GETDATE()	
+	SET @LogMsg = 'TAR Form Approved by : ' + CAST(@UserName AS NVARCHAR(500)) + ' On ' + CAST(CONVERT(NVARCHAR(20), GETDATE(), 103) AS NVARCHAR(20)) + ' ' + CAST(CONVERT(NVARCHAR(20), GETDATE(), 108) AS NVARCHAR(20))
+		
+INSERT INTO [dbo].[TAMS_Action_Log]
+	([Line], [Module], [Function], [TransactionID], [LogMessage], [CreatedOn], [CreatedBy])
+VALUES 
+	(@Line, 'TAR', 'Approved TAR', @TARID, @LogMsg, GETDATE(), @UserID)
+
+DECLARE @WFType	NVARCHAR(50)
+DECLARE @InvPow	BIT
+
+SELECT @WFType = WorkflowType,
+		@InvPow = InvolvePower 
+	FROM TAMS_Workflow
+		WHERE ID = @WFID
+
+IF @WFType = 'UrgentAfter' AND @InvPow = 1 AND @ELevel = 2
+	BEGIN
+		-- >> TAMS_DTL_PFR
+		-- >> PRINT 'EMAIL'
+
+		DECLARE @OCCEmail	NVARCHAR(1000)
+		DECLARE @OCCRole	NVARCHAR(50)
+
+		SET @OCCEmail = ''
+		SET @OCCRole = @Line + '_PFR'
+		SET @EMTARStatus = 'Approved'
+		SET @EMMsg = ''
+
+		SELECT @OCCEmail = @OCCEmail + ISNULL(a.Email + ', ', '') 
+			FROM TAMS_User a, TAMS_User_Role b, TAMS_Role c
+				WHERE a.Userid = b.UserID
+					AND b.RoleID = c.ID
+					AND a.IsActive = 1
+					AND @TARDate BETWEEN a.ValidFrom AND a.ValidTo
+					AND c.Role = @OCCRole
+
+		IF LEN(LTRIM(RTRIM(@OCCEmail))) > 0
+			BEGIN
+				SET @OCCEmail = LEFT(LTRIM(RTRIM(@OCCEmail)), LEN(LTRIM(RTRIM(@OCCEmail))) - 1)
+			END
+
+		EXEC sp_TAMS_Email_Urgent_TAR_OCC @TARID, @EMTARStatus, @EMTARNo, @Remarks, @OCCEmail, @EMMsg OUTPUT
+	END
+
+-- >>
+
+IF @@ERROR <> 0 BEGIN
+	SET @Message = 'ERROR INSERTING INTO TAMS_TAR'
+	GOTO TRAP_ERROR
+END
+
+FORCE_EXIT_PROC:	
+	IF @IntrnlTrans = 1 COMMIT TRAN
+	RETURN @Message 
+
+TRAP_ERROR:
+	IF @IntrnlTrans = 1 ROLLBACK TRAN
+	RETURN @Message
+
+END
+
+### ⬆️ END OF INPUT ⬆️
+**INSTRUCTION:** Document the logic above in English.

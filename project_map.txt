@@ -1,0 +1,537 @@
+PROJECT STRUCTURE MAP (Use for Context references)
+
+Namespace: TAMS.Business | File: BlockedTar.cs | Class: BlockedTar
+
+Namespace: TAMS.Business | File: DepotTar.cs | Class: DepotTarHeader
+
+Namespace: TAMS.Business | File: DepotTar.cs | Class: DepotTar
+
+Namespace: TAMS.Business | File: DepotTarPossessionPowerSector.cs | Class: DepotTarPossessionPowerSector
+
+Namespace: TAMS.Business | File: DepotTarSector.cs | Class: DepotTarSector
+
+Namespace: TAMS.Business | File: DutyOCCRoster.cs | Class: DutyOCCRoster
+
+Namespace: TAMS.Business | File: Menu.cs | Class: Menu
+
+Namespace: TAMS.Business | File: OCCRoster.cs | Class: OCCRoster
+
+Namespace: TAMS.Business | File: OCCTarTVF.cs | Class: OCCTarTVF
+
+Namespace: TAMS.Business | File: OCCTrainAuthCC.cs | Class: OCCTrainAuthCC
+
+Namespace: TAMS.Business | File: OCCTrainAuthNEL.cs | Class: OCCTrainAuthNEL
+
+Namespace: TAMS.Business | File: OCCTrainAuthPFR.cs | Class: OCCTrainAuthPFR
+
+Namespace: TAMS.Business | File: OCCTrainAuthPreview_DTL.cs | Class: OCCTrainAuthPreview_DTL
+
+Namespace: TAMS.Business | File: OCCTrainAuthPreview_NEL.cs | Class: OCCTrainAuthPreview_NEL
+
+Namespace: TAMS.Business | File: OCCTrainAuthTC.cs | Class: OCCTrainAuthTC
+
+Namespace: TAMS.Business | File: OCCTVFAck.cs | Class: OCCTVFAck
+
+Namespace: TAMS.Business | File: OCCTVFAckRemark.cs | Class: OCCTVFAckRemark
+
+Namespace: TAMS.Business | File: Parameter.cs | Class: Parameter
+
+Namespace: TAMS.Business | File: RosterRole.cs | Class: RosterRole
+
+Namespace: TAMS.Business | File: Sector.cs | Class: Sector
+
+Namespace: TAMS.Business | File: Tar.cs | Class: TarHeader
+
+Namespace: TAMS.Business | File: Tar.cs | Class: Tar
+
+Namespace: TAMS.Business | File: TarAccessRequirement.cs | Class: TarAccessRequirement
+
+Namespace: TAMS.Business | File: TarApproval.cs | Class: TarApproval
+
+Namespace: TAMS.Business | File: TarOtherProtection.cs | Class: TarOtherProtection
+
+Namespace: TAMS.Business | File: TarPossessionLimit.cs | Class: TarPossessionLimit
+
+Namespace: TAMS.Business | File: TarPossessionPlan.cs | Class: TarPossessionPlan
+
+Namespace: TAMS.Business | File: TarPossessionPowerSector.cs | Class: TarPossessionPowerSector
+
+Namespace: TAMS.Business | File: TarSector.cs | Class: TarSector
+
+Namespace: TAMS.Business | File: TarStation.cs | Class: TarStation
+
+Namespace: TAMS.Business | File: TarWorkingLimit.cs | Class: TarWorkingLimit
+
+Namespace: TAMS.Business | File: TractionPower.cs | Class: TractionPower
+
+Namespace: TAMS.Business | File: TractionPowerDetail.cs | Class: TractionPowerDetail
+
+Namespace: TAMS.Business | File: TypeOfWork.cs | Class: TypeOfWork
+
+Namespace: TAMS.Business | File: User.cs | Class: User
+
+Namespace: TAMS.Business | File: User.cs | Class: UserRail
+
+Namespace: TAMS.Business | File: User.cs | Class: UserRegistration
+
+Namespace: TAMS.Business | File: User.cs | Class: Company
+
+Namespace: TAMS.Business | File: User.cs | Class: SystemAccess
+
+Namespace: TAMS.Business | File: User.cs | Class: SystemAccessRoles
+
+Namespace: TAMS.Business | File: User.cs | Class: Role
+
+Namespace: TAMS.Business | File: WFStatus.cs | Class: WFStatus
+
+Namespace: TAMS.Data | File: BlockedTarDao.cs | Class: BlockedTarDao
+
+Namespace: TAMS.Data | File: Db.cs | Class: Db
+
+Namespace: TAMS.Data | File: Db.cs | Class: DbExtentions
+
+Namespace: TAMS.Data | File: DepotBlockedTarDao.cs | Class: DepotBlockedTarDao
+
+Namespace: TAMS.Data | File: DepotTarDao.cs | Class: DepotTarDao
+
+Namespace: TAMS.Data | File: DepotTarPossessionPowerSectorDao.cs | Class: DepotTarPossessionPowerSectorDao
+
+Namespace: TAMS.Data | File: DepotTarSectorDao.cs | Class: DepotTarSectorDao
+
+Namespace: TAMS.Data | File: DutyOCCRosterDao.cs | Class: DutyOCCRosterDao
+
+Namespace: TAMS.Data | File: Extension.cs | Class: Extensions
+
+Namespace: TAMS.Data | File: MenuDao.cs | Class: MenuDao
+
+Namespace: TAMS.Data | File: OCCRosterDao.cs | Class: OCCRosterDao
+
+Namespace: TAMS.Data | File: OCCTarTVFDao.cs | Class: OCCTarTVFDao
+
+Namespace: TAMS.Data | File: OCCTrainAuthCCDao.cs | Class: OCCTrainAuthCCDao
+
+Namespace: TAMS.Data | File: OCCTrainAuthDao_NEL.cs | Class: OCCTrainAuthDao_NEL
+
+Namespace: TAMS.Data | File: OCCTrainAuthPFRDao.cs | Class: OCCTrainAuthPFRDao
+
+Namespace: TAMS.Data | File: OCCTrainAuthPreviewDao_DTL.cs | Class: OCCTrainAuthPreviewDao_DTL
+
+Namespace: TAMS.Data | File: OCCTrainAuthPreviewDao_NEL.cs | Class: OCCTrainAuthPreviewDao_NEL
+
+Namespace: TAMS.Data | File: OCCTrainAuthTCDao.cs | Class: OCCTrainAuthTCDao
+
+Namespace: TAMS.Data | File: OCCTVFAckDao.cs | Class: OCCTVFAckDao
+
+Namespace: TAMS.Data | File: ParameterDao.cs | Class: ParameterDao
+
+Namespace: TAMS.Data | File: RosterRoleDao.cs | Class: RosterRoleDao
+
+Namespace: TAMS.Data | File: SectorDao.cs | Class: SectorDao
+
+Namespace: TAMS.Data | File: TarAccessRequirementDao.cs | Class: TarAccessRequirementDao
+
+Namespace: TAMS.Data | File: TarApprovalDao.cs | Class: TarApprovalDao
+
+Namespace: TAMS.Data | File: TarDao.cs | Class: TarDao
+
+Namespace: TAMS.Data | File: TarOtherProtectionDao.cs | Class: TarOtherProtectionDao
+
+Namespace: TAMS.Data | File: TarPossessionLimitDao.cs | Class: TarPossessionLimitDao
+
+Namespace: TAMS.Data | File: TarPossessionPlanDao.cs | Class: TarPossessionPlanDao
+
+Namespace: TAMS.Data | File: TarPossessionPowerSectorDao.cs | Class: TarPossessionPowerSectorDao
+
+Namespace: TAMS.Data | File: TarSectorDao.cs | Class: TarSectorDao
+
+Namespace: TAMS.Data | File: TarStationDao.cs | Class: TarStationDao
+
+Namespace: TAMS.Data | File: TarWorkingLimitDao.cs | Class: TarWorkingLimitDao
+
+Namespace: TAMS.Data | File: TractionPowerDao.cs | Class: TractionPowerDao
+
+Namespace: TAMS.Data | File: TractionPowerDetailDao.cs | Class: TractionPowerDetailDao
+
+Namespace: TAMS.Data | File: TypeOfWorkDao.cs | Class: TypeOfWorkDao
+
+Namespace: TAMS.Data | File: UserDao.cs | Class: UserDao
+
+Namespace: TAMS.Data | File: WFStatusDao.cs | Class: WFStatusDao
+
+Namespace: TAMS.Rule | File: ValidateTarTypeAndDate.cs | Class: ValidateTarTypeAndDate
+
+Namespace: TAMS.Rule | File: ValidateUserRole.cs | Class: ValidateUserRole
+
+Namespace: TAMS.Rule | File: WeekRule.cs | Class: WeekRule
+
+Namespace: TAMS | File: AnonymousSite.Master.cs | Class: AnonymousSite
+
+Namespace: TAMS | File: AnonymousSite.Master.designer.cs | Class: AnonymousSite
+
+Namespace: TAMS | File: BundleConfig.cs | Class: BundleConfig
+
+Namespace: TAMS | File: RouteConfig.cs | Class: RouteConfig
+
+Namespace: TAMS | File: BasePage.aspx.cs | Class: Basepage
+
+Namespace: TAMS | File: BasePage.aspx.designer.cs | Class: BasePage
+
+Namespace: TAMS.DAL | File: DBAccess.cs | Class: DBAccess
+
+Namespace: TAMS.DAL | File: oAppList.cs | Class: oAppList
+
+Namespace: TAMS.DAL | File: oBlockDate.cs | Class: oBlockDate
+
+Namespace: TAMS.DAL | File: oCompany.cs | Class: oCompany
+
+Namespace: TAMS.DAL | File: oDepotAppList.cs | Class: oDepotAppList
+
+Namespace: TAMS.DAL | File: oDepotForm.cs | Class: oDepotForm
+
+Namespace: TAMS.DAL | File: oDepotFormApp.cs | Class: oDepotFormApp
+
+Namespace: TAMS.DAL | File: oDepotInbox.cs | Class: oDepotInbox
+
+Namespace: TAMS.DAL | File: oDepotSectorBooking.cs | Class: oDepotSectorBooking
+
+Namespace: TAMS.DAL | File: oDepotTarForm.cs | Class: oDepotTarForn
+
+Namespace: TAMS.DAL | File: oEncryptionUtil.cs | Class: EncryptionUtil
+
+Namespace: TAMS.DAL | File: oForm.cs | Class: oForm
+
+Namespace: TAMS.DAL | File: oFormApp.cs | Class: oFormApp
+
+Namespace: TAMS.DAL | File: oInbox.cs | Class: oInbox
+
+Namespace: TAMS.DAL | File: oLANUtil.cs | Class: LANUtil
+
+Namespace: TAMS.DAL | File: oMenu.cs | Class: oMenu
+
+Namespace: TAMS.DAL | File: oOPD.cs | Class: oOPD
+
+Namespace: TAMS.DAL | File: oPagePermission.cs | Class: oPagePermission
+
+Namespace: TAMS.DAL | File: oParameter.cs | Class: oParameter
+
+Namespace: TAMS.DAL | File: oRGS.cs | Class: oRGS
+
+Namespace: TAMS.DAL | File: oSectorBooking.cs | Class: oSectorBooking
+
+Namespace: TAMS.DAL | File: oTOAReg.cs | Class: oTOAReg
+
+Namespace: TAMS.DAL | File: oTrafficBulletin.cs | Class: oTrafficBulletin
+
+Namespace: TAMS.DAL | File: oUser.cs | Class: oUser
+
+Namespace: TAMS.DAL | File: oUserRegistration.cs | Class: oUserRegistration
+
+Namespace: TAMS | File: Default.aspx.cs | Class: _Default
+
+Namespace: TAMS | File: Default.aspx.designer.cs | Class: _Default
+
+Namespace: TAMS | File: DepotTARApplication.aspx.cs | Class: DepotTARApplication
+
+Namespace: TAMS | File: DepotTARApplication.aspx.designer.cs | Class: DepotTARApplication
+
+Namespace: TAMS | File: DepotTARAppList.aspx.cs | Class: DepotTARAppList
+
+Namespace: TAMS | File: DepotTARAppList.aspx.designer.cs | Class: DepotTARAppList
+
+Namespace: TAMS | File: DepotTAREnquiry.aspx.cs | Class: DepotTAREnquiry
+
+Namespace: TAMS | File: DepotTAREnquiry.aspx.designer.cs | Class: DepotTAREnquiry
+
+Namespace: TAMS | File: DepotTAREnquiry_Detail.aspx.cs | Class: DepotTAREnquiry_Detail
+
+Namespace: TAMS | File: DepotTAREnquiry_Detail.aspx.designer.cs | Class: DepotTAREnquiry_Detail
+
+Namespace: TAMS | File: DepotTAREnquiry_Print.aspx.cs | Class: DepotTAREnquiry_Print
+
+Namespace: TAMS | File: DepotTAREnquiry_Print.aspx.designer.cs | Class: DepotTAREnquiry_Print
+
+Namespace: TAMS | File: DepotTARForm.aspx.cs | Class: DepotTARForm
+
+Namespace: TAMS | File: DepotTARForm.aspx.designer.cs | Class: DepotTARForm
+
+Namespace: TAMS | File: DepotTARForm_App.aspx.cs | Class: DepotTARForm_App
+
+Namespace: TAMS | File: DepotTARForm_App.aspx.designer.cs | Class: DepotTARForm_App
+
+Namespace: TAMS | File: DepotTARInbox.aspx.cs | Class: DepotTARInbox
+
+Namespace: TAMS | File: DepotTARInbox.aspx.designer.cs | Class: DepotTARInbox
+
+Namespace: TAMS | File: DepotTARSectorBooking.aspx.cs | Class: DepotTARSectorBooking
+
+Namespace: TAMS | File: DepotTARSectorBooking.aspx.designer.cs | Class: DepotTARSectorBooking
+
+Namespace: TAMS | File: DTCAuth.aspx.cs | Class: DTCAuth
+
+Namespace: TAMS | File: DTCAuth.aspx.designer.cs | Class: DTCAuth
+
+Namespace: TAMS | File: ExternalLogin.aspx.cs | Class: ExternalLogin
+
+Namespace: TAMS | File: ExternalLogin.aspx.designer.cs | Class: ExternalLogin
+
+Namespace: TAMS | File: GenQRCode.aspx.cs | Class: GenQRCode
+
+Namespace: TAMS | File: GenQRCode.aspx.designer.cs | Class: GenQRCode
+
+Namespace: TAMS | File: Global.asax.cs | Class: Global
+
+Namespace: TAMS | File: Login.aspx.cs | Class: ApiResponse
+
+Namespace: TAMS | File: Login.aspx.cs | Class: Login
+
+Namespace: TAMS | File: Login.aspx.designer.cs | Class: Login
+
+Namespace: TAMS | File: Logout.aspx.cs | Class: Logout
+
+Namespace: TAMS | File: Logout.aspx.designer.cs | Class: Logout
+
+Namespace: TAMS | File: OCC_HoursAuthorisation.aspx.cs | Class: OCC_HoursAuthorisation
+
+Namespace: TAMS | File: OCC_HoursAuthorisation.aspx.designer.cs | Class: OCC_HoursAuthorisation
+
+Namespace: TAMS | File: OCC_HoursAuthorisation_Preview.aspx.cs | Class: OCC_HoursAuthorisation_Preview
+
+Namespace: TAMS | File: OCC_HoursAuthorisation_Preview.aspx.designer.cs | Class: OCC_HoursAuthorisation_Preview
+
+Namespace: TAMS | File: OCCSearch_Roster.aspx.cs | Class: OCCSearch_Roster
+
+Namespace: TAMS | File: OCCSearch_Roster.aspx.designer.cs | Class: OCCSearch_Roster
+
+Namespace: TAMS | File: OCCUpdate_Roster.aspx.cs | Class: OCCUpdate_Roster
+
+Namespace: TAMS | File: OCCUpdate_Roster.aspx.designer.cs | Class: OCCUpdate_Roster
+
+Namespace: TAMS | File: OPD.aspx.cs | Class: OPD
+
+Namespace: TAMS | File: OPD.aspx.designer.cs | Class: OPD
+
+Namespace: TAMS | File: RGS.aspx.cs | Class: RGS
+
+Namespace: TAMS | File: RGS.aspx.designer.cs | Class: RGS
+
+Namespace: TAMS | File: RGSAckSMS.aspx.cs | Class: RGSAckSMS
+
+Namespace: TAMS | File: RGSAckSMS.aspx.designer.cs | Class: RGSAckSMS
+
+Namespace: TAMS | File: RGSEnquiry.aspx.cs | Class: RGSEnquiry
+
+Namespace: TAMS | File: RGSEnquiry.aspx.designer.cs | Class: RGSEnquiry
+
+Namespace: TAMS | File: RGSPrint.aspx.cs | Class: RGSPrint
+
+Namespace: TAMS | File: RGSPrint.aspx.designer.cs | Class: RGSPrint
+
+Namespace: TAMS | File: Site.Master.cs | Class: SiteMaster
+
+Namespace: TAMS | File: Site.Master.designer.cs | Class: SiteMaster
+
+Namespace: TAMS | File: Site.Mobile.Master.cs | Class: Site_Mobile
+
+Namespace: TAMS | File: Site.Mobile.Master.designer.cs | Class: Site_Mobile
+
+Namespace: TAMS | File: SummaryReport.aspx.cs | Class: SummaryReport
+
+Namespace: TAMS | File: SummaryReport.aspx.designer.cs | Class: SummaryReport
+
+Namespace: TAMS | File: TARApplication.aspx.cs | Class: TARApplication
+
+Namespace: TAMS | File: TARApplication.aspx.designer.cs | Class: TARApplication
+
+Namespace: TAMS | File: TARAppList.aspx.cs | Class: TARAppList
+
+Namespace: TAMS | File: TARAppList.aspx.designer.cs | Class: TARAppList
+
+Namespace: TAMS | File: TARBlockDate.aspx.cs | Class: TARBlockDate
+
+Namespace: TAMS | File: TARBlockDate.aspx.designer.cs | Class: TARBlockDate
+
+Namespace: TAMS | File: TARBlockDate_Add.aspx.cs | Class: TARBlockDate_Add
+
+Namespace: TAMS | File: TARBlockDate_Add.aspx.designer.cs | Class: TARBlockDate_Add
+
+Namespace: TAMS | File: TAREnquiry.aspx.cs | Class: TAREnquiry
+
+Namespace: TAMS | File: TAREnquiry.aspx.designer.cs | Class: TAREnquiry
+
+Namespace: TAMS | File: TAREnquiry_Detail.aspx.cs | Class: TAREnquiry_Detail
+
+Namespace: TAMS | File: TAREnquiry_Detail.aspx.designer.cs | Class: TAREnquiry_Detail
+
+Namespace: TAMS | File: TAREnquiry_Print.aspx.cs | Class: TAREnquiry_Print
+
+Namespace: TAMS | File: TAREnquiry_Print.aspx.designer.cs | Class: TAREnquiry_Print
+
+Namespace: TAMS | File: TARForm.aspx.cs | Class: TARForm
+
+Namespace: TAMS | File: TARForm.aspx.designer.cs | Class: TARForm
+
+Namespace: TAMS | File: TARForm_App.aspx.cs | Class: TARForm_App
+
+Namespace: TAMS | File: TARForm_App.aspx.designer.cs | Class: TARForm_App
+
+Namespace: TAMS | File: TARInbox.aspx.cs | Class: TARInbox
+
+Namespace: TAMS | File: TARInbox.aspx.designer.cs | Class: TARInbox
+
+Namespace: TAMS | File: TARSectorBooking.aspx.cs | Class: TARSectorBooking
+
+Namespace: TAMS | File: TARSectorBooking.aspx.designer.cs | Class: TARSectorBooking
+
+Namespace: TAMS | File: TARViewDetails.aspx.cs | Class: TARViewDetails
+
+Namespace: TAMS | File: TARViewDetails.aspx.designer.cs | Class: TARViewDetails
+
+Namespace: TAMS | File: Test.aspx.cs | Class: Test
+
+Namespace: TAMS | File: Test.aspx.designer.cs | Class: Test
+
+Namespace: TAMS | File: TOA.Master.cs | Class: TOA
+
+Namespace: TAMS | File: TOA.Master.designer.cs | Class: TOA
+
+Namespace: TAMS | File: TOAAddParties.aspx.cs | Class: TOAAddParties
+
+Namespace: TAMS | File: TOAAddParties.aspx.designer.cs | Class: TOAAddParties
+
+Namespace: TAMS | File: TOAApplication.aspx.cs | Class: TOAApplication
+
+Namespace: TAMS | File: TOAApplication.aspx.designer.cs | Class: TOAApplication
+
+Namespace: TAMS | File: TOABookIn.aspx.cs | Class: TOABookIn
+
+Namespace: TAMS | File: TOABookIn.aspx.designer.cs | Class: TOABookIn
+
+Namespace: TAMS | File: TOABookOut.aspx.cs | Class: TOABookOut
+
+Namespace: TAMS | File: TOABookOut.aspx.designer.cs | Class: TOABookOut
+
+Namespace: TAMS | File: TOAError.aspx.cs | Class: TOAError
+
+Namespace: TAMS | File: TOAError.aspx.designer.cs | Class: TOAError
+
+Namespace: TAMS | File: TOAGenURL.aspx.cs | Class: TOAGenURL
+
+Namespace: TAMS | File: TOAGenURL.aspx.designer.cs | Class: TOAGenURL
+
+Namespace: TAMS | File: TrafficBulletin.aspx.cs | Class: TrafficBulletin
+
+Namespace: TAMS | File: TrafficBulletin.aspx.designer.cs | Class: TrafficBulletin
+
+Namespace: TAMS | File: TVFAcknowledgement.aspx.cs | Class: TVFAcknowledgement
+
+Namespace: TAMS | File: TVFAcknowledgement.aspx.designer.cs | Class: TVFAcknowledgement
+
+Namespace: TAMS | File: TVFAcknowledgement_Enquiry.aspx.cs | Class: TVFAcknowledgement_Enquiry
+
+Namespace: TAMS | File: TVFAcknowledgement_Enquiry.aspx.designer.cs | Class: TVFAcknowledgement_Enquiry
+
+Namespace: TAMS.UserControls | File: menu.ascx.cs | Class: menu
+
+Namespace: TAMS.UserControls | File: menu.ascx.designer.cs | Class: menu
+
+Namespace: TAMS.UserControls | File: OCCAuth_NEL.ascx.cs | Class: OCCAuth_NEL
+
+Namespace: TAMS.UserControls | File: OCCAuth_NEL.ascx.designer.cs | Class: OCCAuth_NEL
+
+Namespace: TAMS.UserControls | File: OCCAuth_NEL_bak.ascx.cs | Class: OCCAuth_NEL_bak
+
+Namespace: TAMS.UserControls | File: OCCAuth_NEL_bak.ascx.designer.cs | Class: OCCAuth_NEL_bak
+
+Namespace: TAMS.UserControls | File: OCCAuthCC_DTL.ascx.cs | Class: OCCAuthCC_DTL
+
+Namespace: TAMS.UserControls | File: OCCAuthCC_DTL.ascx.designer.cs | Class: OCCAuthCC_DTL
+
+Namespace: TAMS.UserControls | File: OCCAuthPFR_DTL.ascx.cs | Class: OCCAuthPFR_DTL
+
+Namespace: TAMS.UserControls | File: OCCAuthPFR_DTL.ascx.designer.cs | Class: OCCAuthPFR_DTL
+
+Namespace: TAMS.UserControls | File: OCCAuthPreview.ascx.cs | Class: OCCAuthPreview
+
+Namespace: TAMS.UserControls | File: OCCAuthPreview.ascx.designer.cs | Class: OCCAuthPreview
+
+Namespace: TAMS.UserControls | File: OCCAuthPreview_NEL.ascx.cs | Class: OCCAuthPreview_NEL
+
+Namespace: TAMS.UserControls | File: OCCAuthPreview_NEL.ascx.designer.cs | Class: OCCAuthPreview_NEL
+
+Namespace: TAMS.UserControls | File: OCCAuthPreview_Roster.ascx.cs | Class: OCCAuthPreview_Roster
+
+Namespace: TAMS.UserControls | File: OCCAuthPreview_Roster.ascx.designer.cs | Class: OCCAuthPreview_Roster
+
+Namespace: TAMS.UserControls | File: OCCAuthTC_DTL.ascx.cs | Class: OCCAuthTC_DTL
+
+Namespace: TAMS.UserControls | File: OCCAuthTC_DTL.ascx.designer.cs | Class: OCCAuthTC_DTL
+
+Namespace: TAMS.UserControls | File: OCCTVF_Ack.ascx.cs | Class: OCCTVF_Ack
+
+Namespace: TAMS.UserControls | File: OCCTVF_Ack.ascx.designer.cs | Class: OCCTVF_Ack
+
+Namespace: TAMS.UserControls | File: OCCTVF_Ack_Preview.ascx.cs | Class: OCCTVF_Ack_Preview
+
+Namespace: TAMS.UserControls | File: OCCTVF_Ack_Preview.ascx.designer.cs | Class: OCCTVF_Ack_Preview
+
+Namespace: TAMS | File: UserDetailViewFrmEmail.aspx.cs | Class: UserDetailViewFrmEmail
+
+Namespace: TAMS | File: UserDetailViewFrmEmail.aspx.designer.cs | Class: UserDetailViewFrmEmail
+
+Namespace: TAMS | File: AddCompany.aspx.cs | Class: AddCompany
+
+Namespace: TAMS | File: AddCompany.aspx.designer.cs | Class: AddCompany
+
+Namespace: TAMS | File: MaintainCompany.aspx.cs | Class: MaintainCompany
+
+Namespace: TAMS | File: MaintainCompany.aspx.designer.cs | Class: MaintainCompany
+
+Namespace: TAMS | File: MaintainCompanyDetails.aspx.cs | Class: MaintainCompanyDetails
+
+Namespace: TAMS | File: MaintainCompanyDetails.aspx.designer.cs | Class: MaintainCompanyDetails
+
+Namespace: TAMS | File: MaintainUser.aspx.cs | Class: MaintainUser
+
+Namespace: TAMS | File: MaintainUser.aspx.designer.cs | Class: MaintainUser
+
+Namespace: TAMS | File: MaintainUserDetails.aspx.cs | Class: MaintainUserDetails
+
+Namespace: TAMS | File: MaintainUserDetails.aspx.designer.cs | Class: MaintainUserDetails
+
+Namespace: TAMS | File: NewUserSignUp.aspx.cs | Class: NewUserSignUp
+
+Namespace: TAMS | File: NewUserSignUp.aspx.designer.cs | Class: NewUserSignUp
+
+Namespace: TAMS | File: RegistrationInbox.aspx.cs | Class: RegistrationInbox
+
+Namespace: TAMS | File: RegistrationInbox.aspx.designer.cs | Class: RegistrationInbox
+
+Namespace: TAMS | File: RegistrationRequest.aspx.cs | Class: RegistrationRequest
+
+Namespace: TAMS | File: RegistrationRequest.aspx.designer.cs | Class: RegistrationRequest
+
+Namespace: TAMS | File: ResetPassword.aspx.cs | Class: ResetPassword
+
+Namespace: TAMS | File: ResetPassword.aspx.designer.cs | Class: ResetPassword
+
+Namespace: TAMS | File: SignUpNewSystem.aspx.cs | Class: SignUpNewSystem
+
+Namespace: TAMS | File: SignUpNewSystem.aspx.designer.cs | Class: SignUpNewSystem
+
+Namespace: TAMS | File: UserDetailView.aspx.cs | Class: UserDetailView
+
+Namespace: TAMS | File: UserDetailView.aspx.designer.cs | Class: UserDetailView
+
+Namespace: TAMS | File: ViewProfile.aspx.cs | Class: ViewProfile
+
+Namespace: TAMS | File: ViewProfile.aspx.designer.cs | Class: ViewProfile
+
+Namespace: TAMS | File: ViewSignUpStatus.aspx.cs | Class: ViewSignUpStatus
+
+Namespace: TAMS | File: ViewSignUpStatus.aspx.designer.cs | Class: ViewSignUpStatus
+
+Namespace: TAMS.Util | File: PageEventHelper.cs | Class: PageEventHelper
+
+Namespace: TAMS | File: ViewSwitcher.ascx.cs | Class: ViewSwitcher
+
+Namespace: TAMS | File: ViewSwitcher.ascx.designer.cs | Class: ViewSwitcher

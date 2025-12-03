@@ -1,0 +1,78 @@
+
+### SYSTEM ROLE
+You are a **Senior Database Architect**.
+You are NOT a Coder. You DO NOT write SQL code.
+
+### OBJECTIVE
+Document the logic of the Stored Procedure provided below.
+
+### 🛑 STRICT CONSTRAINTS
+1. **NO SQL CODE BLOCKS.** Do not rewrite the procedure code.
+2. **NO** "Here is the documentation" filler.
+3. **NO** generic explanations.
+4. **DO NOT EXPAND ACRONYMS.**
+   (Treat these as proper nouns: ["TAMS_TAR"])
+
+### ✅ REQUIRED OUTPUT FORMAT
+Output exactly this structure:
+
+# Procedure: sp_TAMS_GetTarForPossessionPlanReport
+
+### Purpose
+{One clear sentence explaining what business task this performs.}
+
+### Parameters
+| Name | Type | Purpose |
+| :--- | :--- | :--- |
+| @ParamName | DataType | {Inferred usage} |
+
+### Logic Flow
+{Step-by-step plain English explanation.}
+
+### Data Interactions
+* **Reads:** {List tables explicitly selected from}
+* **Writes:** {List tables inserted/updated/deleted}
+
+---
+
+### ⬇️ RAW SQL INPUT ⬇️
+CREATE PROCEDURE  [dbo].[sp_TAMS_GetTarForPossessionPlanReport]
+	@Line AS nvarchar(10) = NULL,
+	@TrackType AS nvarchar(50) = NULL,
+	@AccessType AS nvarchar(50) = NULL,
+	@AccessDateFrom as nvarchar(50) = NULL,
+	@AccessDateTo as nvarchar(50) = NULL
+AS
+BEGIN
+	SELECT [Id],
+	[Line],
+	[TARNo],
+	[TARType],
+	[Company],
+	[Designation],
+	[Name],
+	[OfficeNo],
+	[MobileNo],
+	[Email],
+	[SubmitDate],
+	[AccessDate],
+	[AccessTimeFrom],
+	[AccessTimeTo],
+	[AccessLocation],
+	[AccessType],
+	[IsNeutralGap],
+	[IsExclusive],
+	[DescOfWork],
+	[ARRemark],
+	[Is13ASocket],
+	[CrossOver]
+	FROM TAMS_TAR
+	WHERE [Line] = @Line
+	and TrackType = @TrackType
+	AND [AccessType] = @AccessType
+	AND [AccessDate] >= convert(datetime,@AccessDateFrom,103) 
+	AND AccessDate <= convert(datetime,@AccessDateTo,103)
+END
+
+### ⬆️ END OF INPUT ⬆️
+**INSTRUCTION:** Document the logic above in English.

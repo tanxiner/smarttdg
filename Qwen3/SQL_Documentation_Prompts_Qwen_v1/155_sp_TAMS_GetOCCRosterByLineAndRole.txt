@@ -1,0 +1,110 @@
+
+### SYSTEM ROLE
+You are a **Senior Database Architect**.
+You are NOT a Coder. You DO NOT write SQL code.
+
+### OBJECTIVE
+Document the logic of the Stored Procedure provided below.
+
+### 🛑 STRICT CONSTRAINTS
+1. **NO SQL CODE BLOCKS.** Do not rewrite the procedure code.
+2. **NO** "Here is the documentation" filler.
+3. **NO** generic explanations.
+4. **DO NOT EXPAND ACRONYMS.**
+   (Treat these as proper nouns: ["CC", "DTL", "DTL_PFR", "ID", "NEL", "NEL_PFR", "OCC", "PFR", "SCO", "TC", "TC1", "TC2", "TC3", "TC4", "TC5"])
+
+### ✅ REQUIRED OUTPUT FORMAT
+Output exactly this structure:
+
+# Procedure: sp_TAMS_GetOCCRosterByLineAndRole
+
+### Purpose
+{One clear sentence explaining what business task this performs.}
+
+### Parameters
+| Name | Type | Purpose |
+| :--- | :--- | :--- |
+| @ParamName | DataType | {Inferred usage} |
+
+### Logic Flow
+{Step-by-step plain English explanation.}
+
+### Data Interactions
+* **Reads:** {List tables explicitly selected from}
+* **Writes:** {List tables inserted/updated/deleted}
+
+---
+
+### ⬇️ RAW SQL INPUT ⬇️
+CREATE PROCEDURE  [dbo].[sp_TAMS_GetOCCRosterByLineAndRole]
+	@Line AS nvarchar(10) = NULL,
+	@TrackType AS nvarchar(50) = NULL,
+	@Role AS nvarchar(50) = NULL
+AS
+BEGIN
+ 
+ declare @RoleID as integer; 
+ Select @RoleID = RoleId
+ From TAMS_Roster_Role
+ WHERE RosterCode = @Role 
+ and Line = @Line
+ and TrackType = @TrackType;
+
+
+ Select u.userid, ur.Line, [name]
+ From TAMS_User u
+ Inner join TAMS_User_Role ur
+ ON u.Userid = ur.UserID
+ and ur.RoleID = @RoleID 
+ and u.IsActive = 1 and u.ValidTo > GETDATE()
+ order by [name]
+
+
+ 
+
+
+  --if @Line = 'DTL'
+  --begin
+	 -- if @Role = 'CC'
+	 -- begin
+		--select @OCCRole = [Role] from TAMS_Role where Line = @Line and TrackType = @TrackType and Module = 'OCC' and [Role] = 'DTL_ChiefController' and IsActive = 1;
+	 -- end
+	 -- else if @Role = 'TC1' or @Role = 'TC2' or @Role = 'TC3' or @Role = 'TC4' or @Role = 'TC5' or @Role = 'SCO'
+	 -- begin
+		--select @OCCRole = [Role] from TAMS_Role where Line = @Line and TrackType = @TrackType and Module = 'OCC' and [Role] = 'DTL_TrafficController' and IsActive = 1;
+	 -- end
+	 -- else if @Role = 'PFR'
+	 -- begin
+		--select @OCCRole = [Role] from TAMS_Role where Line = @Line and TrackType = @TrackType and Module = 'OCC' and [Role] = 'DTL_PFR' and IsActive = 1;
+	 -- end
+  -- end;
+  -- else if @Line = 'NEL'
+  -- begin
+	 -- if @Role = 'CC'
+	 -- begin
+		--select @OCCRole = [Role] from TAMS_Role where Line = @Line and TrackType = @TrackType and Module = 'OCC' and [Role] = 'NEL_ChiefController' and IsActive = 1;
+	 -- end
+	 -- else if @Role = 'TC' or @Role = 'SCO'
+	 -- begin
+		--select @OCCRole = [Role] from TAMS_Role where Line = @Line  and TrackType = @TrackType and Module = 'OCC' and [Role] = 'NEL_TrafficController' and IsActive = 1;
+	 -- end
+	 -- else if @Role = 'PFR'
+	 -- begin
+		--select @OCCRole = [Role] from TAMS_Role where Line = @Line and   TrackType = @TrackType and Module = 'OCC' and [Role] = 'NEL_PFR' and IsActive = 1;
+	 -- end
+  -- end
+
+  --select u.userid, ur.Line, [name]
+  --from tams_user u
+  --inner join tams_user_role ur
+  --on u.Userid = ur.UserID
+  --inner join tams_role r
+  --on ur.RoleID = r.ID
+  --where ur.Line = @Line 
+  --and r.Role = @OCCRole
+  --AND u.IsActive = 1  AND u.ValidTo > GETDATE()
+
+END
+
+### ⬆️ END OF INPUT ⬆️
+**INSTRUCTION:** Document the logic above in English.

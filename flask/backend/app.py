@@ -21,72 +21,98 @@ UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 def analyze_zip(zip_path: str) -> dict:
-    temp_dir = tempfile.mkdtemp(prefix="smarttdg_")
+    # create a short temp base on the same drive as the system temp to avoid very long paths
+    sys_tmp = Path(tempfile.gettempdir())
+    short_base = os.path.join(sys_tmp.drive + os.sep, "sdtg_tmp")
+    os.makedirs(short_base, exist_ok=True)
+
+    temp_dir = tempfile.mkdtemp(prefix="smarttdg_", dir=short_base)
     try:
         with zipfile.ZipFile(zip_path, 'r') as z:
             print("Files in ZIP:", [f.filename for f in z.infolist()])
             z.extractall(temp_dir)
             print("Extracted files:", list(Path(temp_dir).rglob("*")))
 
-        # Recursively collect .cs and .vb files
+        # Recursively collect files we want to analyze (code-behind and markup)
         all_paths = list(Path(temp_dir).rglob("*"))
         dirs = [p for p in all_paths if p.is_dir()]
-        cs_files = [
+
+        # include code and markup extensions commonly used by the analyzer
+        desired_suffixes = {
+            ".cs", ".vb",          # code-behind / source files
+            ".cshtml", ".vbhtml",  # Razor views
+            ".aspx", ".ascx", ".master"  # WebForms markup
+        }
+
+        files_to_analyze = [
             p for p in all_paths
-            if p.is_file() and p.suffix.lower() in (".cs", ".vb")
+            if p.is_file() and p.suffix.lower() in desired_suffixes
         ]
-        cs_files.sort(key=lambda p: str(p.relative_to(temp_dir)).lower())
-        
-        if not cs_files:
+        files_to_analyze.sort(key=lambda p: str(p.relative_to(temp_dir)).lower())
+
+        if not files_to_analyze:
             return {
                 "status": "ok",
-                "message": "No .cs or .vb files found in archive.",
+                "message": "No supported source or markup files found in archive.",
                 "filesDiscovered": 0,
                 "filesAnalyzed": 0,
                 "foldersVisited": len(dirs),
                 "results": []
             }
-        
-        # Collect all file paths as strings
-        file_paths = [str(p) for p in cs_files]
-        
-        # Call analyzer ONCE with ALL files
+
+        # Prepare to call analyzer with short, relative paths to avoid long command-line / path issues
+        rel_paths = [str(p.relative_to(temp_dir)) for p in files_to_analyze]
+
+        # Debug: print command length estimates
+        total_length = sum(len(p) + 1 for p in rel_paths)
+        print(f"[Debug] Calling analyzer from cwd='{temp_dir}' with {len(rel_paths)} files (approx cmd length={total_length})")
+
+        analysis_result = None
+        cwd_before = os.getcwd()
         try:
-            analysis_result = run_analyzer(*file_paths)  # Pass all files as separate arguments
-            
-            # Build results array with relative paths
-            results = []
-            for p in cs_files:
-                rel = str(p.relative_to(temp_dir))
-                results.append({
-                    "file": rel,
-                    "result": "analyzed"  # or extract individual result if available
-                })
-            
-        except Exception as ex:
-            return {
-                "status": "error",
-                "message": f"Analysis failed: {str(ex)}",
-                "filesDiscovered": len(cs_files),
-                "filesAnalyzed": 0,
-                "foldersVisited": len(dirs),
-                "results": []
-            }
-        
+            # run analyzer from inside temp_dir so arguments are short relative paths
+            os.chdir(temp_dir)
+            # call analyzer with relative paths
+            analysis_result = run_analyzer(*rel_paths)
+        finally:
+            # always restore cwd
+            try:
+                os.chdir(cwd_before)
+            except Exception:
+                pass
+
+        # Build results array with relative paths
+        results = []
+        for p in files_to_analyze:
+            rel = str(p.relative_to(temp_dir))
+            results.append({
+                "file": rel,
+                "result": "analyzed"
+            })
+
         # Diagnostics
-        discovered_sample = [str(p.relative_to(temp_dir)) for p in cs_files[:10]]
-        folders_with_cs = sorted({str(p.parent.relative_to(temp_dir)) for p in cs_files})[:10]
-        
+        discovered_sample = [str(p.relative_to(temp_dir)) for p in files_to_analyze[:10]]
+        folders_with_cs = sorted({str(p.parent.relative_to(temp_dir)) for p in files_to_analyze})[:10]
+
         return {
             "status": "ok",
             "message": "Analysis complete",
-            "filesDiscovered": len(cs_files),
+            "filesDiscovered": len(rel_paths),
             "filesAnalyzed": len(results),
             "foldersVisited": len(dirs),
             "foldersWithCsSample": folders_with_cs,
             "discoveredSample": discovered_sample,
             "results": results,
             "analysisOutput": analysis_result  # Include the actual analysis result
+        }
+    except Exception as ex:
+        return {
+            "status": "error",
+            "message": f"Analysis failed: {str(ex)}",
+            "filesDiscovered": len(files_to_analyze) if 'files_to_analyze' in locals() else 0,
+            "filesAnalyzed": 0,
+            "foldersVisited": len(dirs) if 'dirs' in locals() else 0,
+            "results": []
         }
     finally:
         try:

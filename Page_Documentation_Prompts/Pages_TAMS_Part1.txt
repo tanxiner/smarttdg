@@ -1,0 +1,500 @@
+
+### SYSTEM ROLE
+You are a **Technical Writer** specializing in Legacy Web Applications.
+You are NOT a Developer. You DO NOT write code.
+
+### OBJECTIVE
+Analyze the "Code Behind" files to create a **Page Functionality Reference**.
+
+### 🛑 HARD NEGATIVE CONSTRAINTS
+1. **NO** C# or SQL code blocks.
+2. **NO** "Installation" or "Setup" sections.
+3. **NO** explanation of standard ASP.NET concepts (e.g., don't explain what Page_Load is; explain what *this specific page* does inside it).
+4. **NO** mentions of `.designer.cs` or auto-generated controls.
+
+### ✅ STRICT OUTPUT FORMAT
+For every Page/Control found in the input, output this structure:
+
+# Page: {PageName}
+**File:** {Filename}
+
+### 1. User Purpose
+{One sentence explaining what the user does here. E.g., "Users fill out this form to request x."}
+
+### 2. Key Events & Logic
+| Event / Method | Business Logic Summary |
+| :--- | :--- |
+| {MethodName} | {Plain English description of what happens. E.g., "Validates inputs, calls DAO to save, sends email."} |
+
+### 3. Data Interactions
+* **Reads:** {List entities/tables loaded (e.g., User, BlockedTar)}
+* **Writes:** {List entities/tables saved or updated}
+
+---
+
+### ⬇️ RAW CODE BEHIND INPUT ⬇️
+{
+  "file": "AddCompany.aspx.cs",
+  "language": "C#",
+  "namespaces": [
+    "TAMS"
+  ],
+  "classes": [
+    {
+      "name": "AddCompany",
+      "modifiers": "public partial",
+      "baseType": "System.Web.UI.Page",
+      "interfaces": []
+    }
+  ],
+  "methods": [
+    "protected Page_Load(sender: object, e: EventArgs): void",
+    "private setupPage(UserRegID: int): void",
+    "protected btn_externalSave_Click(sender: object, e: EventArgs): void",
+    "protected btn_externalCancel_Click(sender: object, e: EventArgs): void"
+  ],
+  "ir": {
+    "file": "AddCompany.aspx.cs",
+    "path": "tams-dev\\TAMS\\UserForms\\AddCompany.aspx.cs",
+    "namespaces": [
+      "TAMS"
+    ],
+    "types": [
+      {
+        "kind": "ClassDeclaration",
+        "name": "AddCompany",
+        "namespaceName": "TAMS",
+        "modifiers": "public partial",
+        "baseTypes": [
+          "System.Web.UI.Page"
+        ],
+        "methods": [
+          {
+            "name": "Page_Load",
+            "modifiers": "protected",
+            "returnType": "void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "EventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "setupPage",
+            "modifiers": "private",
+            "returnType": "void",
+            "parameters": [
+              {
+                "name": "UserRegID",
+                "type": "int",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "btn_externalSave_Click",
+            "modifiers": "protected",
+            "returnType": "void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "EventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "btn_externalCancel_Click",
+            "modifiers": "protected",
+            "returnType": "void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "EventArgs",
+                "defaultValue": null
+              }
+            ]
+          }
+        ],
+        "properties": [],
+        "fields": [
+          {
+            "name": "relPath",
+            "modifiers": "",
+            "type": "string"
+          }
+        ],
+        "sql": []
+      }
+    ]
+  },
+  "sql_usages": []
+}
+{
+  "file": "AnonymousSite.Master.cs",
+  "language": "C#",
+  "namespaces": [
+    "TAMS"
+  ],
+  "classes": [
+    {
+      "name": "AnonymousSite",
+      "modifiers": "public partial",
+      "baseType": "System.Web.UI.MasterPage",
+      "interfaces": []
+    }
+  ],
+  "methods": [
+    "protected Page_Load(sender: object, e: EventArgs): void"
+  ],
+  "ir": {
+    "file": "AnonymousSite.Master.cs",
+    "path": "tams-dev\\TAMS\\AnonymousSite.Master.cs",
+    "namespaces": [
+      "TAMS"
+    ],
+    "types": [
+      {
+        "kind": "ClassDeclaration",
+        "name": "AnonymousSite",
+        "namespaceName": "TAMS",
+        "modifiers": "public partial",
+        "baseTypes": [
+          "System.Web.UI.MasterPage"
+        ],
+        "methods": [
+          {
+            "name": "Page_Load",
+            "modifiers": "protected",
+            "returnType": "void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "EventArgs",
+                "defaultValue": null
+              }
+            ]
+          }
+        ],
+        "properties": [],
+        "fields": [],
+        "sql": []
+      }
+    ]
+  },
+  "sql_usages": []
+}
+{
+  "file": "BasePage.aspx.cs",
+  "language": "C#",
+  "namespaces": [
+    "TAMS"
+  ],
+  "classes": [
+    {
+      "name": "Basepage",
+      "modifiers": "public partial",
+      "baseType": "System.Web.UI.Page",
+      "interfaces": []
+    }
+  ],
+  "methods": [
+    "protected Page_Load(sender: object, e: System.EventArgs): void",
+    "public GetSqlConnection(): SqlConnection",
+    "protected GetSqlCommand(cmdStr: string): SqlCommand",
+    "protected GetSqlDataAdapter(cmd: SqlCommand): SqlDataAdapter",
+    "public static QuoteRemove(s: string): string"
+  ],
+  "ir": {
+    "file": "BasePage.aspx.cs",
+    "path": "tams-dev\\TAMS\\BasePage.aspx.cs",
+    "namespaces": [
+      "TAMS"
+    ],
+    "types": [
+      {
+        "kind": "ClassDeclaration",
+        "name": "Basepage",
+        "namespaceName": "TAMS",
+        "modifiers": "public partial",
+        "baseTypes": [
+          "System.Web.UI.Page"
+        ],
+        "methods": [
+          {
+            "name": "Page_Load",
+            "modifiers": "protected",
+            "returnType": "void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "System.EventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "GetSqlConnection",
+            "modifiers": "public",
+            "returnType": "SqlConnection",
+            "parameters": []
+          },
+          {
+            "name": "GetSqlCommand",
+            "modifiers": "protected",
+            "returnType": "SqlCommand",
+            "parameters": [
+              {
+                "name": "cmdStr",
+                "type": "string",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "GetSqlDataAdapter",
+            "modifiers": "protected",
+            "returnType": "SqlDataAdapter",
+            "parameters": [
+              {
+                "name": "cmd",
+                "type": "SqlCommand",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "QuoteRemove",
+            "modifiers": "public static",
+            "returnType": "string",
+            "parameters": [
+              {
+                "name": "s",
+                "type": "string",
+                "defaultValue": null
+              }
+            ]
+          }
+        ],
+        "properties": [],
+        "fields": [
+          {
+            "name": "Fac",
+            "modifiers": "protected",
+            "type": "string"
+          },
+          {
+            "name": "BaseErrMsg",
+            "modifiers": "protected",
+            "type": "string"
+          },
+          {
+            "name": "DBErrMsg",
+            "modifiers": "protected",
+            "type": "string"
+          },
+          {
+            "name": "StrConn",
+            "modifiers": "protected",
+            "type": "string"
+          },
+          {
+            "name": "SqlConn",
+            "modifiers": "protected",
+            "type": "SqlConnection"
+          },
+          {
+            "name": "SqlDA",
+            "modifiers": "protected",
+            "type": "SqlDataAdapter"
+          },
+          {
+            "name": "SqlReader",
+            "modifiers": "protected",
+            "type": "SqlDataReader"
+          },
+          {
+            "name": "SqlCmd",
+            "modifiers": "protected",
+            "type": "SqlCommand"
+          },
+          {
+            "name": "SqlTrans",
+            "modifiers": "protected",
+            "type": "SqlTransaction"
+          },
+          {
+            "name": "SqlCmdBuilder",
+            "modifiers": "protected",
+            "type": "SqlCommandBuilder"
+          },
+          {
+            "name": "StrErrMsg",
+            "modifiers": "protected",
+            "type": "string"
+          },
+          {
+            "name": "StrCfgName",
+            "modifiers": "protected",
+            "type": "string"
+          },
+          {
+            "name": "StrKeyName",
+            "modifiers": "protected",
+            "type": "string"
+          },
+          {
+            "name": "CfgFile",
+            "modifiers": "protected",
+            "type": "FileStream"
+          },
+          {
+            "name": "Xmldoc",
+            "modifiers": "protected",
+            "type": "XmlDocument"
+          }
+        ],
+        "sql": [
+          {
+            "Line": 63,
+            "Kind": "SqlCommandCtor",
+            "sql": null,
+            "CommandTypeIsStoredProcedure": false,
+            "inferred": [],
+            "raw": "new SqlCommand(cmdStr, SqlConn)"
+          }
+        ]
+      }
+    ]
+  },
+  "sql_usages": [
+    {
+      "file": "BasePage.aspx.cs",
+      "Namespace": "TAMS",
+      "ClassName": "Basepage",
+      "MethodName": "GetSqlCommand",
+      "MethodSignature": "TAMS.Basepage.GetSqlCommand(string)",
+      "Line": 63,
+      "Kind": "SqlCommandCtor",
+      "SqlText": null,
+      "CommandTypeIsStoredProcedure": false,
+      "InferredStoredProcedures": [],
+      "RawSnippet": "new SqlCommand(cmdStr, SqlConn)"
+    }
+  ]
+}
+{
+  "file": "DTCAuth.aspx.cs",
+  "language": "C#",
+  "namespaces": [
+    "TAMS"
+  ],
+  "classes": [
+    {
+      "name": "DTCAuth",
+      "modifiers": "public partial",
+      "baseType": "System.Web.UI.Page",
+      "interfaces": []
+    }
+  ],
+  "methods": [
+    "protected Page_Load(sender: object, e: EventArgs): void",
+    "public SessionExpire(sender: object, e: EventArgs): void",
+    "public GenerateToken(): string"
+  ],
+  "ir": {
+    "file": "DTCAuth.aspx.cs",
+    "path": "tams-dev\\TAMS\\DTCAuth.aspx.cs",
+    "namespaces": [
+      "TAMS"
+    ],
+    "types": [
+      {
+        "kind": "ClassDeclaration",
+        "name": "DTCAuth",
+        "namespaceName": "TAMS",
+        "modifiers": "public partial",
+        "baseTypes": [
+          "System.Web.UI.Page"
+        ],
+        "methods": [
+          {
+            "name": "Page_Load",
+            "modifiers": "protected",
+            "returnType": "void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "EventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "SessionExpire",
+            "modifiers": "public",
+            "returnType": "void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "EventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "GenerateToken",
+            "modifiers": "public",
+            "returnType": "string",
+            "parameters": []
+          }
+        ],
+        "properties": [],
+        "fields": [],
+        "sql": []
+      }
+    ]
+  },
+  "sql_usages": []
+}
+
+
+### ⬆️ END OF INPUT ⬆️
+**INSTRUCTION:** Document the page logic above. Focus on User Actions and Data Flow.

@@ -1,0 +1,66 @@
+
+### SYSTEM ROLE
+You are a **Senior Database Architect**.
+You are NOT a Coder. You DO NOT write SQL code.
+
+### OBJECTIVE
+Document the logic of the Stored Procedure provided below.
+
+### 🛑 STRICT CONSTRAINTS
+1. **NO SQL CODE BLOCKS.** Do not rewrite the procedure code.
+2. **NO** "Here is the documentation" filler.
+3. **NO** generic explanations.
+4. **DO NOT EXPAND ACRONYMS.**
+   (Treat these as proper nouns: ["ID"])
+
+### ✅ REQUIRED OUTPUT FORMAT
+Output exactly this structure:
+
+# Procedure: SP_CheckPagePermission
+
+### Purpose
+{One clear sentence explaining what business task this performs.}
+
+### Parameters
+| Name | Type | Purpose |
+| :--- | :--- | :--- |
+| @ParamName | DataType | {Inferred usage} |
+
+### Logic Flow
+{Step-by-step plain English explanation.}
+
+### Data Interactions
+* **Reads:** {List tables explicitly selected from}
+* **Writes:** {List tables inserted/updated/deleted}
+
+---
+
+### ⬇️ RAW SQL INPUT ⬇️
+CREATE PROCEDURE [dbo].[SP_CheckPagePermission]
+	-- Add the parameters for the stored procedure here
+	@userid as nvarchar(50),
+	@menuid as nvarchar(50),
+	@res as bit OUTPUT
+AS
+BEGIN
+	-- SET NOCOUNT ON added to prevent extra result sets from
+	-- interfering with SELECT statements.
+	SET NOCOUNT ON;
+
+	IF EXISTS(Select DISTINCT MenuID from TAMS_Menu_Role 
+	INNER JOIN TAMS_Role ON TAMS_Role.ID=TAMS_Menu_Role.RoleId
+	INNER JOIN TAMS_User_Role ON TAMS_Menu_Role.RoleId=TAMS_User_Role.RoleID
+	INNER JOIN TAMS_User ON TAMS_User_Role.UserID=TAMS_User.Userid
+	where Loginid=@userid and MenuID=@menuid)
+	BEGIN
+		SET @RES=1;
+	END
+	ELSE
+	BEGIN
+		SET @RES=0;
+	END
+
+END
+
+### ⬆️ END OF INPUT ⬆️
+**INSTRUCTION:** Document the logic above in English.

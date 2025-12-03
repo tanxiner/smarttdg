@@ -1,0 +1,516 @@
+
+### SYSTEM ROLE
+You are a **Senior Database Architect**.
+You are NOT a Coder. You DO NOT write SQL code.
+
+### OBJECTIVE
+Document the logic of the Stored Procedure provided below.
+
+### 🛑 STRICT CONSTRAINTS
+1. **NO SQL CODE BLOCKS.** Do not rewrite the procedure code.
+2. **NO** "Here is the documentation" filler.
+3. **NO** generic explanations.
+4. **DO NOT EXPAND ACRONYMS.**
+   (Treat these as proper nouns: ["BCC", "CC", "DATENAME", "DTL", "HOD", "ID", "INSERTING", "NEL", "OCC", "PH", "SAT", "SUN", "TAMS", "TAMS_TAR", "TAR", "TARID", "TIME", "VALUE", "WFID"])
+
+### ✅ REQUIRED OUTPUT FORMAT
+Output exactly this structure:
+
+# Procedure: sp_TAMS_Form_Submit
+
+### Purpose
+{One clear sentence explaining what business task this performs.}
+
+### Parameters
+| Name | Type | Purpose |
+| :--- | :--- | :--- |
+| @ParamName | DataType | {Inferred usage} |
+
+### Logic Flow
+{Step-by-step plain English explanation.}
+
+### Data Interactions
+* **Reads:** {List tables explicitly selected from}
+* **Writes:** {List tables inserted/updated/deleted}
+
+---
+
+### ⬇️ RAW SQL INPUT ⬇️
+CREATE PROCEDURE  [dbo].[sp_TAMS_Form_Submit]
+	@Line			AS NVARCHAR(10) = NULL,
+	@TrackType		AS NVARCHAR(50) = NULL,
+	@AccessDate		AS NVARCHAR(20) = NULL,
+	@AccessType		AS NVARCHAR(20) = NULL,
+	@TARType		AS NVARCHAR(10) = NULL,	
+	@Sectors		AS NVARCHAR(2000) = NULL,
+	@PowerSelVal	AS NVARCHAR(10) = NULL,
+	@PowerSelTxt	AS NVARCHAR(100) = NULL,
+	@IsExclusive	AS INT = NULL,
+	@HODForApp		AS NVARCHAR(20) = NULL,
+	@UserID			AS NVARCHAR(100) = NULL,
+	@TARID			AS BIGINT = 0,
+	@Message		AS NVARCHAR(500) = NULL OUTPUT
+AS
+
+BEGIN
+
+DECLARE	@IntrnlTrans	TINYINT		
+SELECT 	@IntrnlTrans 	= 0	
+
+IF (@@TRANCOUNT = 0) 
+BEGIN
+	SET @IntrnlTrans = 1
+	BEGIN TRAN
+END
+
+DECLARE @UserIDID	INT = 1;
+
+SELECT @UserIDID = Userid
+	FROM TAMS_User
+		WHERE LoginId = @UserID
+
+		print '@UserIDID';
+		print @UserIDID;
+
+	-- >> TAMS_TAR_Sector
+	DECLARE @SecColourCode	NVARCHAR(20)
+
+	SET @SecColourCode = ''
+
+	IF @AccessType = 'Protection' AND @IsExclusive = 1
+		BEGIN
+			SELECT @SecColourCode = ColourCode 
+				FROM TAMS_Type_Of_Work
+					WHERE Line = @Line
+					and TrackType = @TrackType
+						AND TypeOfWork = 'Exclusive Protection'
+						AND IsActive = 1
+		END
+
+
+	INSERT INTO [dbo].[TAMS_TAR_Sector]
+		([TARId], [SectorId], [IsBuffer], [ColourCode], [IsAddedBuffer])
+	SELECT @TARID, ID, 0, @SecColourCode, 0
+		FROM TAMS_Sector
+			WHERE ID IN (SELECT [VALUE] FROM [dbo].[SPLIT](';', @Sectors)) 
+			--Added by yongde 2025-03-27
+			AND NOT EXISTS(
+			SELECT 1 FROM TAMS_TAR_Sector where TARId=@TARID and SectorId=ID)
+		ORDER BY ID;
+	-- >> TAMS_TAR_Sector
+
+	-- >> TAMS_TAR_Station
+	INSERT INTO [dbo].[TAMS_TAR_Station]
+		([TARId], [StationId])
+	SELECT @TARID, a.ID
+		FROM TAMS_Station a, TAMS_Entry_Station b	
+			WHERE a.ID = b.StationId
+				AND a.IsActive = 1
+				AND b.IsActive = 1
+				AND a.IsStation = 1
+				AND b.SectorId IN (SELECT [VALUE] FROM [dbo].[SPLIT](';', @Sectors))
+		GROUP BY a.ID
+		ORDER BY a.ID;
+	-- >> TAMS_TAR_Station
+	
+	-- >> TAMS_TAR_Power_Sector -- >> Check if Buffer Zone will be added
+	DECLARE @PowerOnInd	INT
+
+	SET @PowerOnInd = CASE WHEN @PowerSelTxt = 'Traction Power ON' THEN 1 ELSE 0 END
+
+	--->> Insert Non buffer power sector first 
+
+	INSERT INTO [dbo].[TAMS_TAR_Power_Sector]
+		([TARId], [PowerSectorId], [PowerSection], [IsBuffer])
+	SELECT @TARID, ps.PSSectorID, ps.PowerSection, ps.IsBuffer
+	FROM (SELECT c.ID AS PSSectorID, c.PowerSection, b.IsBuffer
+		FROM TAMS_Sector a, TAMS_Track_Power_Sector b, TAMS_Power_Sector c
+	WHERE a.Line = 'NEL'
+		and a.TrackType = @TrackType
+		AND a.ID = b.SectorId
+		AND b.PowerSectorId = c.ID
+		AND a.IsActive = 1
+		AND b.IsActive = 1
+		AND c.IsActive = 1
+		 AND ( b.PowerOn is NULL and b.IsBuffer = 0  )
+		AND a.ID IN (SELECT [VALUE] FROM [dbo].[SPLIT](';', @Sectors))
+		GROUP BY c.ID, c.PowerSection, b.IsBuffer) ps
+	ORDER BY ps.PSSectorID
+
+	----> Insert Buffer Power Sector exlcue non-buffer 
+
+	INSERT INTO [dbo].[TAMS_TAR_Power_Sector]
+		([TARId], [PowerSectorId], [PowerSection], [IsBuffer])
+	SELECT @TARID, ps.PSSectorID, ps.PowerSection, ps.IsBuffer
+	FROM (SELECT c.ID AS PSSectorID, c.PowerSection, b.IsBuffer
+		FROM TAMS_Sector a, TAMS_Track_Power_Sector b, TAMS_Power_Sector c
+	WHERE a.Line = 'NEL'
+		and a.TrackType = @TrackType
+		AND a.ID = b.SectorId
+		AND b.PowerSectorId = c.ID
+		AND a.IsActive = 1
+		AND b.IsActive = 1
+		AND c.IsActive = 1
+		 AND ( b.PowerOn = @PowerOnInd and b.IsBuffer = 1  )
+		AND a.ID IN (SELECT [VALUE] FROM [dbo].[SPLIT](';', @Sectors))
+		AND c.ID not in (
+			Select PowerSectorId
+			From TAMS_TAR_Power_Sector WHERE TARId = @TARID and IsBuffer = 0 
+		)
+		GROUP BY c.ID, c.PowerSection, b.IsBuffer) ps
+	ORDER BY ps.PSSectorID
+
+
+	--INSERT INTO [dbo].[TAMS_TAR_Power_Sector]
+	--	([TARId], [PowerSectorId], [PowerSection], [IsBuffer])
+	--SELECT @TARID, ps.PSSectorID, ps.PowerSection, ps.IsBuffer
+	--FROM (SELECT c.ID AS PSSectorID, c.PowerSection, b.IsBuffer
+	--	FROM TAMS_Sector a, TAMS_Track_Power_Sector b, TAMS_Power_Sector c
+	--WHERE a.Line = 'NEL'
+	--	and a.TrackType = @TrackType
+	--	AND a.ID = b.SectorId
+	--	AND b.PowerSectorId = c.ID
+	--	AND a.IsActive = 1
+	--	AND b.IsActive = 1
+	--	AND c.IsActive = 1
+	--	--AND ISNULL(b.PowerOn, 0) = @PowerOnInd   -- to change PowerON buffer zone rule 
+	--	AND ( b.PowerOn is NULL or b.PowerOn = @PowerOnInd )
+	--	AND a.ID IN (SELECT [VALUE] FROM [dbo].[SPLIT](';', @Sectors))
+	--	GROUP BY c.ID, c.PowerSection, b.IsBuffer) ps
+	--ORDER BY ps.PSSectorID
+	-- >> TAMS_TAR_Power_Sector 
+
+	-- >> TAMS_TAR_Attachment from TAMS_TAR_Attachment_Temp
+	INSERT INTO [dbo].[TAMS_TAR_Attachment]
+		([TARAccessReqId], [FileName], [FileType], [File])
+	SELECT b.ID, a.FileName, a.FileType, a.FileUpload 
+		FROM TAMS_TAR_Attachment_Temp a, TAMS_TAR_AccessReq b
+			WHERE a.TARId = b.TARId
+				AND a.TARAccessReqId = b.[Order]  
+				AND a.TARId = @TARID
+			ORDER BY a.ID
+	-- >> TAMS_TAR_Attachment from TAMS_TAR_Attachment_Temp
+
+	-- >> Buffer Zone
+	IF @AccessType = 'Possession'
+		BEGIN
+			-->> Color still missing
+
+			DECLARE @CrossOverInd	INT
+
+			SELECT @CrossOverInd = CASE WHEN CrossOver = 1 THEN 1 ELSE 0 END FROM TAMS_TAR
+				WHERE ID = @TARID
+
+			SET @SecColourCode = ''
+
+			SELECT @SecColourCode = ColourCode 
+				FROM TAMS_Type_Of_Work
+					WHERE Line = @Line
+						and TrackType = @TrackType
+						AND TypeOfWork = CASE WHEN Line='DTL' THEN 'Possession Buffer' ELSE 'Buffer Zone' END
+						AND IsActive = 1
+
+			INSERT INTO [dbo].[TAMS_TAR_Sector]
+			([TARId], [SectorId], [IsBuffer], [ColourCode], [IsAddedBuffer])
+			
+			SELECT @TARID, a.ID, 1, @SecColourCode, 0 
+				FROM TAMS_Sector a 
+					WHERE a.ID IN (SELECT BufferSectorId 
+						FROM TAMS_Buffer_Zone
+							WHERE Line = @Line
+								and TrackType = @TrackType
+								AND IsActive = 1
+								AND PowerOn = @PowerOnInd
+								AND SectorId IN (SELECT SectorId FROM TAMS_TAR_Sector WHERE TARId = @TARID)
+								AND ISNULL(CrossOverBuffer, 0) = 0)
+						AND a.ID NOT IN (SELECT SectorId FROM TAMS_TAR_Sector WHERE TARId = @TARID)
+
+			-- >> Additional Buffer Zone for CrossOver = 1
+			IF @CrossOverInd = 1
+				BEGIN
+					INSERT INTO [dbo].[TAMS_TAR_Sector]
+					([TARId], [SectorId], [IsBuffer], [ColourCode], [IsAddedBuffer])
+
+					SELECT @TARID, a.ID, 1, @SecColourCode, 0 
+						FROM TAMS_Sector a 
+							WHERE a.ID IN (SELECT BufferSectorId 
+								FROM TAMS_Buffer_Zone
+									WHERE Line = @Line
+										and TrackType = @TrackType
+										AND IsActive = 1
+										AND PowerOn = @PowerOnInd
+										AND SectorId IN (SELECT SectorId FROM TAMS_TAR_Sector WHERE TARId = @TARID)
+										AND ISNULL(CrossOverBuffer, 0) = 1)
+								AND a.ID NOT IN (SELECT SectorId FROM TAMS_TAR_Sector WHERE TARId = @TARID)
+				END
+
+			-- >> Update Colour Code of non Buffer Zone
+
+			DECLARE @TypeOfWorkID INT
+
+			SELECT @TypeOfWorkID = TypeOfWorkId 
+				FROM TAMS_Possession 
+					WHERE TARId = @TARID
+			
+			SET @SecColourCode = ''
+
+			SELECT @SecColourCode = ColourCode 
+				FROM TAMS_Type_Of_Work
+					WHERE Line = @Line
+						AND ID = @TypeOfWorkID
+						AND IsActive = 1
+			
+			UPDATE [dbo].[TAMS_TAR_Sector]
+				SET ColourCode = @SecColourCode
+			WHERE TARId = @TARID
+				AND IsBuffer = 0
+		END
+	-- >> Buffer Zone
+
+	DECLARE @WFID	INT
+	SET @WFID = 0
+
+	DECLARE @InvolvePower INT
+	SET @InvolvePower = 0
+
+	DECLARE @IsPowerWF INT
+	SET @IsPowerWF = 0
+
+	SELECT @IsPowerWF = tab.IsPowerWF 
+		FROM TAMS_TAR_AccessReq sel, TAMS_Access_Requirement tab
+			WHERE tab.IsPowerWF = 1
+				AND sel.IsSelected = 1
+				AND sel.TARId = @TARID
+				AND sel.OperationRequirement = tab.ID
+
+	SET @InvolvePower = @IsPowerWF
+
+	-- >> If Saturday, Sunday and PH -- Flow to OCC
+	DECLARE @DayName	NVARCHAR(20)
+	SET @DayName = UPPER(SUBSTRING(DATENAME(dw, CONVERT(DATE, GETDATE(), 103)), 1, 3))
+
+	DECLARE @PHInd	NVARCHAR(5)
+	IF (SELECT COUNT(*) FROM TAMS_Calendar
+		WHERE HolidayCode = 1
+			AND CalendarDate = CONVERT(DATE, GETDATE(), 103)) > 0
+		BEGIN
+			SET @PHInd = '1'
+		END
+	ELSE
+		BEGIN
+			SET @PHInd = '0'
+		END
+	-- >> If Saturday, Sunday and PH -- Flow to OCC
+
+	IF @TARType = 'Urgent'  
+		BEGIN
+			IF (@DayName = 'SAT' OR @DayName = 'SUN' OR @PHInd = '1')
+				BEGIN
+					SELECT @WFID = ID 
+						FROM TAMS_Workflow
+							WHERE IsActive = 1
+								AND Line = @Line
+								and TrackType = @TrackType
+								AND InvolvePower = @InvolvePower
+								AND CONVERT(DATETIME, CONVERT(NVARCHAR(20), GETDATE(), 103), 103) BETWEEN EffectiveDate AND ExpiryDate
+								AND WorkflowType = 'UrgentAfter' 
+				END
+			ELSE
+				BEGIN
+					DECLARE @CutoffTime TIME
+
+					SELECT @CutoffTime = ParaTime 
+						FROM TAMS_Parameters
+							WHERE ParaCode = 'ApprovalCutOffTime'
+								AND ParaValue1 = @Line
+								AND ParaValue2 = @TrackType
+								AND CONVERT(DATETIME, CONVERT(NVARCHAR(20), GETDATE(), 103), 103) BETWEEN EffectiveDate AND ExpiryDate 
+
+					IF CONVERT(TIME, GETDATE(), 108) <= @CutoffTime
+						BEGIN
+							SELECT @WFID = ID 
+								FROM TAMS_Workflow
+									WHERE IsActive = 1
+										AND Line = @Line
+										and TrackType = @TrackType
+										AND InvolvePower = @InvolvePower
+										AND CONVERT(DATETIME, CONVERT(NVARCHAR(20), GETDATE(), 103), 103) BETWEEN EffectiveDate AND ExpiryDate
+										AND WorkflowType = 'UrgentBefore' 
+						END
+					ELSE
+						BEGIN
+							SELECT @WFID = ID 
+								FROM TAMS_Workflow
+									WHERE IsActive = 1
+										AND Line = @Line
+										and TrackType = @TrackType
+										AND InvolvePower = @InvolvePower
+										AND CONVERT(DATETIME, CONVERT(NVARCHAR(20), GETDATE(), 103), 103) BETWEEN EffectiveDate AND ExpiryDate
+										AND WorkflowType = 'UrgentAfter' 
+						END
+				END
+		END
+	ELSE
+		BEGIN
+			SELECT @WFID = ID 
+				FROM TAMS_Workflow
+					WHERE IsActive = 1
+						AND Line = @Line
+						AND InvolvePower = @InvolvePower
+						and TrackType = @TrackType
+						AND CONVERT(DATETIME, CONVERT(NVARCHAR(20), GETDATE(), 103), 103) BETWEEN EffectiveDate AND ExpiryDate
+						AND WorkflowType = @TARType
+		END
+
+	DECLARE @WFStatusID	INT
+	DECLARE @EndorserID INT
+
+	SELECT @WFStatusID = WFStatusId,
+			@EndorserID = ID
+		FROM TAMS_Endorser
+			WHERE IsActive = 1
+				AND CONVERT(DATETIME, CONVERT(NVARCHAR(20), GETDATE(), 103), 103) BETWEEN EffectiveDate AND ExpiryDate
+				AND [Level] = 1
+				AND Line = @Line
+				AND WorkflowId = @WFID
+
+	DECLARE @RefNum		NVARCHAR(20)
+	DECLARE @RefNumMsg	NVARCHAR(20)
+	SET @RefNum = ''
+	SET @RefNumMsg = ''
+	EXEC sp_Generate_Ref_Num 'TAR', @Line,@TrackType, @RefNum OUTPUT, @RefNumMsg OUTPUT
+
+	UPDATE TAMS_TAR
+		SET TARNo = @RefNum,
+			TARType = @TARType,
+			TARStatusId = @WFStatusID,
+			InvolvePower = @IsPowerWF,	-- >> Jeffrey
+			PowerOn = @PowerOnInd,
+			CreatedBy = @UserIDID
+	WHERE Id = @TARID
+
+	DECLARE @HODUserID INT
+
+	SET @HODUserID = 0
+
+	SELECT @HODUserID = Userid
+	FROM TAMS_User
+		WHERE LoginId = @HODForApp
+
+	-- Added by yongde on 15032025, this is to prevent double entry of tar workflow approval
+	IF NOT EXISTS(SELECT * from [dbo].[TAMS_TAR_Workflow] where TARId=@TARID and 
+	[WorkflowId]=@WFID and EndorserId=@EndorserID)
+	BEGIN
+		INSERT INTO [dbo].[TAMS_TAR_Workflow]
+			([TARId], [WorkflowId], [EndorserId], [UserId], [WFStatus], [Remark], [ActionOn], [ActionBy])
+		VALUES 
+			(@TARID, @WFID, @EndorserID, @HODUserID, 'Pending', '', GETDATE(), @UserIDID)
+	END
+
+	--INSERT INTO [dbo].[TAMS_TAR_Workflow]
+	--	([TARId], [WorkflowId], [EndorserId], [UserId], [WFStatus], [Remark], [ActionOn], [ActionBy])
+	--VALUES 
+	--	(@TARID, @WFID, @EndorserID, @HODUserID, 'Pending', '', GETDATE(), @UserIDID)
+
+	DECLARE @ApplicantName	NVARCHAR(200)
+	SELECT @ApplicantName = [Name]
+		FROM TAMS_TAR
+			WHERE ID = @TARID
+
+	DECLARE @Sender NVARCHAR (100);
+	DECLARE @SysID NVARCHAR(10);
+	DECLARE @Subject NVARCHAR(500);    
+	DECLARE @Sys NVARCHAR(100);
+	DECLARE @Greetings  NVARCHAR(20);     
+	DECLARE @ToList NVARCHAR(MAX);
+	DECLARE @CCList NVARCHAR(MAX);
+	DECLARE @BCCList NVARCHAR(MAX);
+	DECLARE @Separator NVARCHAR(10);        
+	DECLARE @AlertMsg NVARCHAR(MAX);
+	DECLARE @AlertID AS INTEGER; 
+
+	DECLARE @Body VARCHAR(max)
+	DECLARE @Body1 VARCHAR(max)
+	DECLARE @Body2 VARCHAR(max)
+
+	DECLARE @LoginPage	NVARCHAR(500)
+
+	SET @Sender = 'TAMS Admin';
+	SET @SysID = 'TAMS';
+	SET @Subject = 'Urgent TAR ' + CAST(@RefNum AS NVARCHAR(50)) + ' for Applicant HOD Acceptance.'
+	SET @Sys = 'Track Access Management System'   
+	SET @Greetings = 'Dear Sir/Madam, '  
+	SET @ToList = ''
+	SET @CCList = ''   
+	SET @BCCList = ''
+	SET @Separator = ','    
+	SET @CCList = ''
+
+		-- >> If Urgent Send Email to HOD
+		IF @TARType = 'Urgent'
+			BEGIN
+				DECLARE @HODUserEmail NVARCHAR(200)
+
+				SELECT @HODUserEmail = Email 
+					FROM TAMS_User
+						WHERE Userid = @HODUserID
+							AND IsActive = 1
+							AND CONVERT(DATETIME, CONVERT(NVARCHAR(20), GETDATE(), 103), 103) BETWEEN ValidFrom AND ValidTo
+
+				SET @ToList = ISNULL(@HODUserEmail, '')
+
+				SET @Body1 = ''
+				SET @Body2 = ''
+			
+				SET @Body1 = @Body1 + '<table width="100%">'
+				SET @Body1 = @Body1 + '<tr align="left" valign="middle" style="font-size:10pt; font-face:Arial;">'
+				SET @Body1 = @Body1 + '<td>' + CAST(@ApplicantName AS NVARCHAR(200)) + ' has applied an Urgent TAR for your Acceptance.</td>'
+				SET @Body1 = @Body1 + '</tr>'
+				SET @Body1 = @Body1 + '</table>'
+				-- >> SET @LoginPage = 'https://sbstweb.sbstransit.com.sg/TAMS/Login.aspx'
+				SET @LoginPage = 'https://sbstweb.sbstransit.com.sg/TAMS/Login.aspx'
+
+				SET @Body2 = @Body2 + '<br>'
+				SET @Body2 = @Body2 + '<table width="100%">'
+				SET @Body2 = @Body2 + '<tr align="left" valign="middle" style="font-size:10pt; font-face:Arial;">'
+				SET @Body2 = @Body2 + '<td>Click on the link <a href=' + @LoginPage + '>here</a> to access the TAR Form.</td>'
+				SET @Body2 = @Body2 + '</tr>'
+				SET @Body2 = @Body2 + '</table>'
+
+				SET @Body = ''
+				SET @Body = @Body1 + @Body2
+
+				SET @BCCList = ''
+
+				EXEC [dbo].EAlertQ_EnQueue 
+					@Sender = @Sender, 
+					@UserId = @SysID, 
+					@Subject = @Subject,        
+					@Sys = @Sys,  
+					@Greetings = @Greetings, 
+					@AlertMsg = @Body, 
+					@SendTo = @ToList,        
+					@CC = @CCList, 
+					@BCC= @BCCList, 
+					@Separator = @Separator, 
+					@AlertID =  @AlertID output
+			END
+
+IF @@ERROR <> 0 BEGIN
+	SET @Message = 'ERROR INSERTING INTO TAMS_TAR'
+	GOTO TRAP_ERROR
+END
+
+FORCE_EXIT_PROC:	
+	IF @IntrnlTrans = 1 COMMIT TRAN
+	RETURN @Message 
+
+TRAP_ERROR:
+	IF @IntrnlTrans = 1 ROLLBACK TRAN
+	RETURN @Message
+
+
+END
+
+### ⬆️ END OF INPUT ⬆️
+**INSTRUCTION:** Document the logic above in English.

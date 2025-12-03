@@ -1,0 +1,456 @@
+
+### SYSTEM ROLE
+You are a **Technical Writer** specializing in Legacy Web Applications.
+You are NOT a Developer. You DO NOT write code.
+
+### OBJECTIVE
+Analyze the "Code Behind" files to create a **Page Functionality Reference**.
+
+### 🛑 HARD NEGATIVE CONSTRAINTS
+1. **NO** C# or SQL code blocks.
+2. **NO** "Installation" or "Setup" sections.
+3. **NO** explanation of standard ASP.NET concepts (e.g., don't explain what Page_Load is; explain what *this specific page* does inside it).
+4. **NO** mentions of `.designer.cs` or auto-generated controls.
+
+### ✅ STRICT OUTPUT FORMAT
+For every Page/Control found in the input, output this structure:
+
+# Page: {PageName}
+**File:** {Filename}
+
+### 1. User Purpose
+{One sentence explaining what the user does here. E.g., "Users fill out this form to request x."}
+
+### 2. Key Events & Logic
+| Event / Method | Business Logic Summary |
+| :--- | :--- |
+| {MethodName} | {Plain English description of what happens. E.g., "Validates inputs, calls DAO to save, sends email."} |
+
+### 3. Data Interactions
+* **Reads:** {List entities/tables loaded (e.g., User, BlockedTar)}
+* **Writes:** {List entities/tables saved or updated}
+
+---
+
+### ⬇️ RAW CODE BEHIND INPUT ⬇️
+{
+  "file": "RegistrationRequest.aspx.cs",
+  "language": "C#",
+  "namespaces": [
+    "TAMS"
+  ],
+  "classes": [
+    {
+      "name": "RegistrationRequest",
+      "modifiers": "public partial",
+      "baseType": "System.Web.UI.Page",
+      "interfaces": []
+    }
+  ],
+  "methods": [
+    "protected Page_Load(sender: object, e: EventArgs): void",
+    "private SetupPage(regModID: int): void",
+    "private BuildPage(_dummy: UserRegistration): void",
+    "private ResetPage(): void",
+    "private buildDummySystemSelectiondata(): List<UserRegistration>",
+    "protected btn_back_Click(sender: object, e: EventArgs): void",
+    "protected cb_gvSysAdminRole_CheckedChanged(sender: object, e: EventArgs): void",
+    "protected btn_assignAccess_Click(sender: object, e: EventArgs): void",
+    "protected btn_rejectRequest_Click(sender: object, e: EventArgs): void",
+    "protected btn_approvalUpdate_Click(sender: object, e: EventArgs): void",
+    "protected btn_approvalReject_Click(sender: object, e: EventArgs): void",
+    "protected cb_gvSysOwnerRole_CheckedChanged(sender: object, e: EventArgs): void",
+    "protected btn_approveCompany_Click(sender: object, e: EventArgs): void",
+    "protected btn_rejectCompany_Click(sender: object, e: EventArgs): void",
+    "protected btn_resendLink_Click(sender: object, e: EventArgs): void",
+    "protected btn_deleteRequest_Click(sender: object, e: EventArgs): void"
+  ],
+  "ir": {
+    "file": "RegistrationRequest.aspx.cs",
+    "path": "tams-dev\\TAMS\\UserForms\\RegistrationRequest.aspx.cs",
+    "namespaces": [
+      "TAMS"
+    ],
+    "types": [
+      {
+        "kind": "ClassDeclaration",
+        "name": "RegistrationRequest",
+        "namespaceName": "TAMS",
+        "modifiers": "public partial",
+        "baseTypes": [
+          "System.Web.UI.Page"
+        ],
+        "methods": [
+          {
+            "name": "Page_Load",
+            "modifiers": "protected",
+            "returnType": "void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "EventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "SetupPage",
+            "modifiers": "private",
+            "returnType": "void",
+            "parameters": [
+              {
+                "name": "regModID",
+                "type": "int",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "BuildPage",
+            "modifiers": "private",
+            "returnType": "void",
+            "parameters": [
+              {
+                "name": "_dummy",
+                "type": "UserRegistration",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "ResetPage",
+            "modifiers": "private",
+            "returnType": "void",
+            "parameters": []
+          },
+          {
+            "name": "buildDummySystemSelectiondata",
+            "modifiers": "private",
+            "returnType": "List<UserRegistration>",
+            "parameters": []
+          },
+          {
+            "name": "btn_back_Click",
+            "modifiers": "protected",
+            "returnType": "void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "EventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "cb_gvSysAdminRole_CheckedChanged",
+            "modifiers": "protected",
+            "returnType": "void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "EventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "btn_assignAccess_Click",
+            "modifiers": "protected",
+            "returnType": "void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "EventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "btn_rejectRequest_Click",
+            "modifiers": "protected",
+            "returnType": "void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "EventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "btn_approvalUpdate_Click",
+            "modifiers": "protected",
+            "returnType": "void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "EventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "btn_approvalReject_Click",
+            "modifiers": "protected",
+            "returnType": "void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "EventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "cb_gvSysOwnerRole_CheckedChanged",
+            "modifiers": "protected",
+            "returnType": "void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "EventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "btn_approveCompany_Click",
+            "modifiers": "protected",
+            "returnType": "void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "EventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "btn_rejectCompany_Click",
+            "modifiers": "protected",
+            "returnType": "void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "EventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "btn_resendLink_Click",
+            "modifiers": "protected",
+            "returnType": "void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "EventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "btn_deleteRequest_Click",
+            "modifiers": "protected",
+            "returnType": "void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "EventArgs",
+                "defaultValue": null
+              }
+            ]
+          }
+        ],
+        "properties": [],
+        "fields": [
+          {
+            "name": "relPath",
+            "modifiers": "",
+            "type": "string"
+          }
+        ],
+        "sql": []
+      }
+    ]
+  },
+  "sql_usages": []
+}
+{
+  "file": "ResetPassword.aspx.cs",
+  "language": "C#",
+  "namespaces": [
+    "TAMS"
+  ],
+  "classes": [
+    {
+      "name": "ResetPassword",
+      "modifiers": "public partial",
+      "baseType": "System.Web.UI.Page",
+      "interfaces": []
+    }
+  ],
+  "methods": [
+    "protected Page_Load(sender: object, e: EventArgs): void",
+    "private setupPage(UserRegID: int): void",
+    "protected btn_externalSave_Click(sender: object, e: EventArgs): void",
+    "protected btn_externalCancel_Click(sender: object, e: EventArgs): void"
+  ],
+  "ir": {
+    "file": "ResetPassword.aspx.cs",
+    "path": "tams-dev\\TAMS\\UserForms\\ResetPassword.aspx.cs",
+    "namespaces": [
+      "TAMS"
+    ],
+    "types": [
+      {
+        "kind": "ClassDeclaration",
+        "name": "ResetPassword",
+        "namespaceName": "TAMS",
+        "modifiers": "public partial",
+        "baseTypes": [
+          "System.Web.UI.Page"
+        ],
+        "methods": [
+          {
+            "name": "Page_Load",
+            "modifiers": "protected",
+            "returnType": "void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "EventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "setupPage",
+            "modifiers": "private",
+            "returnType": "void",
+            "parameters": [
+              {
+                "name": "UserRegID",
+                "type": "int",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "btn_externalSave_Click",
+            "modifiers": "protected",
+            "returnType": "void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "EventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "btn_externalCancel_Click",
+            "modifiers": "protected",
+            "returnType": "void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "EventArgs",
+                "defaultValue": null
+              }
+            ]
+          }
+        ],
+        "properties": [],
+        "fields": [
+          {
+            "name": "relPath",
+            "modifiers": "",
+            "type": "string"
+          }
+        ],
+        "sql": []
+      }
+    ]
+  },
+  "sql_usages": []
+}
+
+
+### ⬆️ END OF INPUT ⬆️
+**INSTRUCTION:** Document the page logic above. Focus on User Actions and Data Flow.

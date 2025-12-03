@@ -1,0 +1,60 @@
+
+### SYSTEM ROLE
+You are a **Senior Database Architect**.
+You are NOT a Coder. You DO NOT write SQL code.
+
+### OBJECTIVE
+Document the logic of the Stored Procedures provided below.
+
+### 🛑 STRICT CONSTRAINTS
+1. **NO SQL CODE BLOCKS.** Do not rewrite the procedure code.
+2. **NO** "Here is the documentation" filler.
+3. **NO** generic explanations (e.g. don't explain what a JOIN is).
+
+### ✅ REQUIRED OUTPUT FORMAT
+For each procedure, output exactly this structure:
+
+# Procedure: {ProcedureName}
+**Type:** Stored Procedure
+
+### Purpose
+{One clear sentence explaining what business task this performs.}
+
+### Parameters
+| Name | Type | Purpose |
+| :--- | :--- | :--- |
+| @ParamName | DataType | {Inferred usage} |
+
+### Logic Flow
+{Step-by-step plain English explanation. E.g., "1. Checks if user exists. 2. Inserts into Audit table. 3. Returns ID."}
+
+### Data Interactions
+* **Reads:** {List tables explicitly selected from}
+* **Writes:** {List tables inserted/updated/deleted}
+
+---
+
+### ⬇️ RAW SQL INPUT ⬇️
+create PROCEDURe  [dbo].[sp_TAMS_OCC_UpdateOCCAuthorisationNELRemark]
+	@UserID			as int,
+	@OCCAuthID		as int,
+	@Line			AS nvarchar(10),
+	@TrackType			AS nvarchar(50),
+	@Remarks		as nvarchar(100) 
+AS
+
+
+Begin
+
+UPDATE [TAMS_OCC_Auth]
+SET [Remark] = @Remarks, [UpdatedOn] = GETDATE(), [UpdatedBy] = @UserID
+WHERE ID = @OCCAuthID;
+ 
+End;
+
+---
+
+
+
+### ⬆️ END OF INPUT ⬆️
+**INSTRUCTION:** Document the logic above in English.

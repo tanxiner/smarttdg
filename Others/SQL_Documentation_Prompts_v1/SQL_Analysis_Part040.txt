@@ -1,0 +1,379 @@
+
+### SYSTEM ROLE
+You are a **Senior Database Architect**.
+You are NOT a Coder. You DO NOT write SQL code.
+
+### OBJECTIVE
+Document the logic of the Stored Procedures provided below.
+
+### 🛑 STRICT CONSTRAINTS
+1. **NO SQL CODE BLOCKS.** Do not rewrite the procedure code.
+2. **NO** "Here is the documentation" filler.
+3. **NO** generic explanations (e.g. don't explain what a JOIN is).
+
+### ✅ REQUIRED OUTPUT FORMAT
+For each procedure, output exactly this structure:
+
+# Procedure: {ProcedureName}
+**Type:** Stored Procedure
+
+### Purpose
+{One clear sentence explaining what business task this performs.}
+
+### Parameters
+| Name | Type | Purpose |
+| :--- | :--- | :--- |
+| @ParamName | DataType | {Inferred usage} |
+
+### Logic Flow
+{Step-by-step plain English explanation. E.g., "1. Checks if user exists. 2. Inserts into Audit table. 3. Returns ID."}
+
+### Data Interactions
+* **Reads:** {List tables explicitly selected from}
+* **Writes:** {List tables inserted/updated/deleted}
+
+---
+
+### ⬇️ RAW SQL INPUT ⬇️
+CREATE PROCEDURE [dbo].[sp_TAMS_Email_Apply_Urgent_TAR_20231009]
+	@EType		AS INTEGER,
+	@AppDept	AS NVARCHAR(200) = NULL,
+	@TARNo		AS NVARCHAR(50) = NULL,
+	@Actor		AS NVARCHAR(100) = NULL,
+	@ToSend		AS NVARCHAR(1000) = NULL,
+	@CCSend		AS NVARCHAR(1000) = NULL,
+	@Message	AS NVARCHAR(500) = NULL OUTPUT
+AS
+
+BEGIN
+
+DECLARE	@IntrnlTrans	TINYINT
+SELECT 	@IntrnlTrans 	= 0	
+
+IF (@@TRANCOUNT = 0) 
+BEGIN
+	SET @IntrnlTrans = 1
+	BEGIN TRAN
+END
+
+-- >>
+SET @Message = ''
+
+DECLARE @Sender NVARCHAR (100);
+DECLARE @SysID NVARCHAR(10);
+DECLARE @Subject NVARCHAR(500);    
+DECLARE @Sys NVARCHAR(100);
+DECLARE @Greetings  NVARCHAR(20);     
+DECLARE @ToList NVARCHAR(MAX);
+DECLARE @CCList NVARCHAR(MAX);
+DECLARE @BCCList NVARCHAR(MAX);
+DECLARE @Separator NVARCHAR(10);        
+DECLARE @AlertMsg NVARCHAR(MAX);
+DECLARE @AlertID AS INTEGER; 
+
+DECLARE @Body VARCHAR(max)
+DECLARE @Body1 VARCHAR(max)
+DECLARE @Body2 VARCHAR(max)
+DECLARE @Body3 VARCHAR(max)
+
+SET @Sender = 'TAMS Admin';
+SET @SysID = 'TAMS';
+
+SET @Sys = 'Track Access Management System'   
+SET @Greetings = 'Dear Sir/Madam, '  
+SET @ToList = @ToSend
+SET @CCList = @CCSend  
+SET @BCCList = ''
+SET @Separator = ','    
+SET @CCList = ''
+
+IF @EType = 1
+	BEGIN
+		SET @Subject = 'Urgent TAR ' + CAST(@TARNo AS NVARCHAR(50)) + ' for Applicant HOD Acceptance.'
+	END
+ELSE
+	BEGIN
+		SET @Subject = 'Urgent TAR ' + CAST(@TARNo AS NVARCHAR(50)) + ' for '
+
+		IF @Actor = 'Applicant HOD Endorsement' 
+			BEGIN
+				SET @Subject = @Subject + 'Applicant HOD Acceptance.' 
+			END 
+		ELSE IF @Actor = 'TAP HOD Endorsement' 
+			BEGIN
+				SET @Subject = @Subject + 'TAP HOD Acceptance.' 
+			END 
+		ELSE IF @Actor = 'Power Endorsement' 
+			BEGIN
+				SET @Subject = @Subject + 'Power Endorsement.' 
+			END 
+		ELSE IF @Actor = 'TAP Authority Verification' 
+			BEGIN
+				SET @Subject = @Subject + 'TAP Verification.' 
+			END 
+		ELSE IF @Actor = 'TAP Authority Approval' 
+			BEGIN
+				SET @Subject = @Subject + 'TAP Approval.' 
+			END 
+		ELSE IF @Actor = 'OCC Approval' 
+			BEGIN
+				SET @Subject = @Subject + 'OCC Approval.' 
+			END 
+		ELSE
+			BEGIN
+				SET @Subject = @Subject
+			END
+	END
+
+	SET @Body1 = ''
+	SET @Body2 = ''
+	SET @Body3 = ''
+			
+	SET @Body1 = @Body1 + '<table width="100%">'
+	SET @Body1 = @Body1 + '<tr align="left" valign="middle" style="font-size:10pt; font-face:Arial;">'
+
+	IF @EType = 1
+		BEGIN
+			SET @Body1 = @Body1 + '<td> ' + CAST(@AppDept AS NVARCHAR(200)) + ' has applied a Urgent TAR for your Acceptance.</td>'
+		END
+	ELSE
+		BEGIN
+			IF @Actor = 'Applicant HOD Endorsement' 
+				BEGIN
+					SET @Body1 = @Body1 + '<td> ' + CAST(@AppDept AS NVARCHAR(200)) + ' has applied a Urgent TAR for your Acceptance.</td>'
+				END 
+			ELSE IF @Actor = 'TAP HOD Endorsement' 
+				BEGIN
+					SET @Body1 = @Body1 + '<td> ' + CAST(@AppDept AS NVARCHAR(200)) + ' has applied a Urgent TAR for your Acceptance.</td>'
+				END 
+			ELSE IF @Actor = 'Power Endorsement' 
+				BEGIN
+					SET @Body1 = @Body1 + '<td> ' + CAST(@AppDept AS NVARCHAR(200)) + ' has applied a Urgent TAR for your Endorsement.</td>'
+				END 
+			ELSE IF @Actor = 'TAP Authority Verification' 
+				BEGIN
+					SET @Body1 = @Body1 + '<td> ' + CAST(@AppDept AS NVARCHAR(200)) + ' has applied a Urgent TAR for your Verification.</td>'
+				END 
+			ELSE IF @Actor = 'TAP Authority Approval' 
+				BEGIN
+					SET @Body1 = @Body1 + '<td> ' + CAST(@AppDept AS NVARCHAR(200)) + ' has applied a Urgent TAR for your Approval.</td>'
+				END 
+			ELSE IF @Actor = 'OCC Approval' 
+				BEGIN
+					SET @Body1 = @Body1 + '<td> ' + CAST(@AppDept AS NVARCHAR(200)) + ' has applied a Urgent TAR for your Approval.</td>'
+				END 
+			ELSE
+				BEGIN
+					SET @Body1 = @Body1 + '<td>&nbsp;</td>'
+				END
+		END
+
+	SET @Body1 = @Body1 + '</tr>'
+	SET @Body1 = @Body1 + '<tr align="left" valign="middle" style="font-size:10pt; font-face:Arial;"><td>&nbsp;</td></tr>'
+	--SET @Body1 = @Body1 + '<tr align="left" valign="middle" style="font-size:10pt; font-face:Arial;">'
+	--SET @Body1 = @Body1 + '<td>Remark ' +  CAST(@Remarks AS NVARCHAR(1000)) + '</td>'
+	--SET @Body1 = @Body1 + '</tr>'
+	SET @Body1 = @Body1 + '</table>'
+
+	DECLARE @LoginPage1	NVARCHAR(500)
+	DECLARE @LoginPage2	NVARCHAR(500)
+
+	--SET @LoginPage1 = 'http://nelappuat/TAMS/UAT/Login.aspx'
+	--SET @LoginPage2 = 'https://pulsewebuat.sbstransit.com.sg/TAMS/Login'
+	--SET @LoginPage1 = 'https://pulsewebuat.sbstransit.com.sg/TAMS/Login'
+	SET @LoginPage1 = 'https://sbstweb.sbstransit.com.sg/TAMS/Login.aspx'
+	SET @LoginPage2 = ''
+
+	SELECT @LoginPage1 = ParaValue1,
+		@LoginPage2 = ParaValue2 FROM TAMS_Parameters 
+		WHERE ParaCode = 'TAMS URL'
+			AND GETDATE() BETWEEN EffectiveDate AND ExpiryDate
+
+	SET @Body2 = @Body2 + '<br>'
+	SET @Body2 = @Body2 + '<table width="100%">'
+	SET @Body2 = @Body2 + '<tr align="left" valign="middle" style="font-size:10pt; font-face:Arial;">'
+	SET @Body2 = @Body2 + '<td>Click on the link <a href=' + @LoginPage1 + '>here</a> to access the TAR Form via Intranet.</td>'
+	SET @Body2 = @Body2 + '</tr>'
+	--SET @Body2 = @Body2 + '<tr align="left" valign="middle" style="font-size:10pt; font-face:Arial;">'
+	--SET @Body2 = @Body2 + '<td>Click on the link <a href=' + @LoginPage2 + '>here</a> to access the TAR Form via Internet.</td>'
+	--SET @Body2 = @Body2 + '</tr>'
+	SET @Body2 = @Body2 + '</table>'
+
+	SET @Body2 = @Body2 + '<br>'
+	SET @Body2 = @Body2 + '<table width="100%">'
+	SET @Body2 = @Body2 + '<tr align="left" valign="middle" style="font-size:10pt; font-face:Arial;">'
+	SET @Body2 = @Body2 + '<td>Regards, <br> System Administrator <br></td>'
+	SET @Body2 = @Body2 + '</tr>'
+	SET @Body2 = @Body2 + '</table>'
+
+	SET @Body3 = @Body3 + '<br>'
+	SET @Body3 = @Body3 + '<table width="100%">'
+	SET @Body3 = @Body3 + '<tr align="left" valign="middle" style="font-size:10pt; font-face:Arial;">'
+	SET @Body3 = @Body3 + '<td>********<br>Do Not reply. This is a computer generated Email. <br>********</td>'
+	SET @Body3 = @Body3 + '</tr>'
+	SET @Body3 = @Body3 + '</table>'
+
+	SET @Body = ''
+	SET @Body = @Body1 + @Body2 + @Body3
+
+	EXEC [dbo].EAlertQ_EnQueue 
+		@Sender = @Sender, 
+		@UserId = @SysID, 
+		@Subject = @Subject,        
+		@Sys = @Sys,  
+		@Greetings = @Greetings, 
+		@AlertMsg = @Body, 
+		@SendTo = @ToList,        
+		@CC = @CCList, 
+		@BCC= @BCCList, 
+		@Separator = @Separator, 
+		@AlertID =  @AlertID OUTPUT
+
+-- >>
+
+IF @@ERROR <> 0 BEGIN
+	SET @Message = 'ERROR INSERTING INTO TAMS_TAR'
+	GOTO TRAP_ERROR
+END
+
+FORCE_EXIT_PROC:	
+	IF @IntrnlTrans = 1 COMMIT TRAN
+	RETURN @Message 
+
+TRAP_ERROR:
+	IF @IntrnlTrans = 1 ROLLBACK TRAN
+	RETURN @Message
+
+END
+
+---
+
+CREATE PROCEDURE [dbo].[sp_TAMS_Email_Cancel_TAR]
+	@TARID		AS INTEGER,
+	@TARStatus	AS NVARCHAR(20) = NULL,
+	@TARNo		AS NVARCHAR(50) = NULL,
+	@ToSend		AS NVARCHAR(1000) = NULL,
+	@Message	AS NVARCHAR(500) = NULL OUTPUT
+AS
+
+BEGIN
+
+DECLARE	@IntrnlTrans	TINYINT
+SELECT 	@IntrnlTrans 	= 0	
+
+IF (@@TRANCOUNT = 0) 
+BEGIN
+	SET @IntrnlTrans = 1
+	BEGIN TRAN
+END
+
+-- >>
+SET @Message = ''
+
+DECLARE @Sender NVARCHAR (100);
+DECLARE @SysID NVARCHAR(10);
+DECLARE @Subject NVARCHAR(500);    
+DECLARE @Sys NVARCHAR(100);
+DECLARE @Greetings  NVARCHAR(20);     
+DECLARE @ToList NVARCHAR(MAX);
+DECLARE @CCList NVARCHAR(MAX);
+DECLARE @BCCList NVARCHAR(MAX);
+DECLARE @Separator NVARCHAR(10);        
+DECLARE @AlertMsg NVARCHAR(MAX);
+DECLARE @AlertID AS INTEGER; 
+
+DECLARE @Body VARCHAR(max)
+DECLARE @Body1 VARCHAR(max)
+DECLARE @Body2 VARCHAR(max)
+DECLARE @Body3 VARCHAR(max)
+
+DECLARE @LoginPage	NVARCHAR(500)
+
+SET @Sender = 'TAMS Admin';
+SET @SysID = 'TAMS';
+
+SET @Sys = 'Track Access Management System'   
+SET @Greetings = 'Dear Sir/Madam, '  
+SET @ToList = @ToSend
+SET @CCList = ''   
+SET @BCCList = ''
+SET @Separator = ','    
+SET @CCList = ''
+
+SET @Subject = 'TAR : ' + CAST(@TARNo AS NVARCHAR(50)) + ' has been CANCELLED.'
+
+	SET @Body1 = ''
+	SET @Body2 = ''
+	SET @Body3 = ''
+			
+	SET @Body1 = @Body1 + '<table width="100%">'
+	SET @Body1 = @Body1 + '<tr align="left" valign="middle" style="font-size:10pt; font-face:Arial;">'
+	SET @Body1 = @Body1 + '<td>Your approved TAR ' +  CAST(@TARNo AS NVARCHAR(50)) + ' has been cancelled by Track Access Planning Authority.</td>'
+	SET @Body1 = @Body1 + '</tr>'
+	SET @Body1 = @Body1 + '<tr align="left" valign="middle" style="font-size:10pt; font-face:Arial;"><td>&nbsp;</td></tr>'
+	SET @Body1 = @Body1 + '<tr align="left" valign="middle" style="font-size:10pt; font-face:Arial;">'
+	SET @Body1 = @Body1 + '<td>For more info, pls contact us at 67187226.</td>'
+	SET @Body1 = @Body1 + '</tr>'
+	SET @Body1 = @Body1 + '</table>'
+	SET @LoginPage = 'https://sbstweb.sbstransit.com.sg/TAMS/Login.aspx'
+
+	SET @Body2 = @Body2 + '<br>'
+	SET @Body2 = @Body2 + '<table width="100%">'
+	SET @Body2 = @Body2 + '<tr align="left" valign="middle" style="font-size:10pt; font-face:Arial;">'
+	SET @Body2 = @Body2 + '<td>Click on the link <a href=' + @LoginPage + '>here</a> to access the TAR Form.</td>'
+	SET @Body2 = @Body2 + '</tr>'
+	SET @Body2 = @Body2 + '</table>'
+
+	SET @Body2 = @Body2 + '<br>'
+	SET @Body2 = @Body2 + '<table width="100%">'
+	SET @Body2 = @Body2 + '<tr align="left" valign="middle" style="font-size:10pt; font-face:Arial;">'
+	SET @Body2 = @Body2 + '<td>Regards, <br> System Administrator <br></td>'
+	SET @Body2 = @Body2 + '</tr>'
+	SET @Body2 = @Body2 + '</table>'
+
+	SET @Body3 = @Body3 + '<br>'
+	SET @Body3 = @Body3 + '<table width="100%">'
+	SET @Body3 = @Body3 + '<tr align="left" valign="middle" style="font-size:10pt; font-face:Arial;">'
+	SET @Body3 = @Body3 + '<td>********<br>Do Not reply. This is a computer generated Email. <br>********</td>'
+	SET @Body3 = @Body3 + '</tr>'
+	SET @Body3 = @Body3 + '</table>'
+
+	SET @Body = ''
+	SET @Body = @Body1 + @Body2 + @Body3
+
+	EXEC [dbo].EAlertQ_EnQueue 
+		@Sender = @Sender, 
+		@UserId = @SysID, 
+		@Subject = @Subject,        
+		@Sys = @Sys,  
+		@Greetings = @Greetings, 
+		@AlertMsg = @Body, 
+		@SendTo = @ToList,        
+		@CC = @CCList, 
+		@BCC= @BCCList, 
+		@Separator = @Separator, 
+		@AlertID =  @AlertID OUTPUT
+
+-- >>
+
+IF @@ERROR <> 0 BEGIN
+	SET @Message = 'ERROR INSERTING INTO TAMS_TAR'
+	GOTO TRAP_ERROR
+END
+
+FORCE_EXIT_PROC:	
+	IF @IntrnlTrans = 1 COMMIT TRAN
+	RETURN @Message 
+
+TRAP_ERROR:
+	IF @IntrnlTrans = 1 ROLLBACK TRAN
+	RETURN @Message
+
+END
+
+---
+
+
+
+### ⬆️ END OF INPUT ⬆️
+**INSTRUCTION:** Document the logic above in English.

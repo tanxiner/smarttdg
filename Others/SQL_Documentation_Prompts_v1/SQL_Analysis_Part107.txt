@@ -1,0 +1,472 @@
+
+### SYSTEM ROLE
+You are a **Senior Database Architect**.
+You are NOT a Coder. You DO NOT write SQL code.
+
+### OBJECTIVE
+Document the logic of the Stored Procedures provided below.
+
+### 🛑 STRICT CONSTRAINTS
+1. **NO SQL CODE BLOCKS.** Do not rewrite the procedure code.
+2. **NO** "Here is the documentation" filler.
+3. **NO** generic explanations (e.g. don't explain what a JOIN is).
+
+### ✅ REQUIRED OUTPUT FORMAT
+For each procedure, output exactly this structure:
+
+# Procedure: {ProcedureName}
+**Type:** Stored Procedure
+
+### Purpose
+{One clear sentence explaining what business task this performs.}
+
+### Parameters
+| Name | Type | Purpose |
+| :--- | :--- | :--- |
+| @ParamName | DataType | {Inferred usage} |
+
+### Logic Flow
+{Step-by-step plain English explanation. E.g., "1. Checks if user exists. 2. Inserts into Audit table. 3. Returns ID."}
+
+### Data Interactions
+* **Reads:** {List tables explicitly selected from}
+* **Writes:** {List tables inserted/updated/deleted}
+
+---
+
+### ⬇️ RAW SQL INPUT ⬇️
+CREATE PROCEDURE [dbo].[sp_TAMS_OCC_UpdateOCCAuthorisationPFRByParameters_bak20230711]
+	@UserID			as int,
+	@OCCAuthID		as int,
+	@OCCLevel		as int,
+	--@OCCEndorserID	as int,
+	@Line			as nvarchar(10),
+	@RemarksPFR		as nvarchar(100),
+	@SelectionValue as nvarchar(50),
+	@StationName	as nvarchar(50)
+AS
+
+
+IF @Line = 'DTL'
+BEGIN
+	BEGIN TRY
+		BEGIN TRANSACTION;
+
+			DECLARE @OCCEndorserID INT
+			DECLARE @OCCEndorserID_Next INT
+			DECLARE @WorkflowId INT
+			DECLARE @WFStatusId INT
+			DECLARE @StationId INT
+			DECLARE @IsBuffer BIT
+			DECLARE @FISTestResult nvarchar(50)
+
+			IF @OCCLevel = 4
+				BEGIN
+
+					SELECT @WorkflowId = ID FROM [TAMS_Workflow]
+					WHERE Line = @Line
+					AND  WorkflowType = 'OCCAuth'
+					AND IsActive = 1
+					AND EffectiveDate <= GETDATE()
+					AND ExpiryDate >= GETDATE()
+
+					SELECT @OCCEndorserID = ID FROM [TAMS_Endorser]
+					WHERE WorkflowId = @WorkflowId AND Line = @Line
+					AND [Level] = @OCCLevel;
+
+					UPDATE [TAMS_OCC_Auth_Workflow]
+					SET [WFStatus] = 'Completed', [ActionOn] = GETDATE(), [ActionBy] = @UserID
+					WHERE [OCCAuthId] = @OCCAuthID AND [OCCAuthEndorserId] = @OCCEndorserID
+
+					SELECT @OCCEndorserID_Next = ID, @WFStatusId = WFStatusId
+					FROM [dbo].[TAMS_Endorser]
+					WHERE Line = @Line
+					AND WorkflowId = @WorkflowId
+					AND [Level] = @OCCLevel + 1;
+
+					INSERT INTO [TAMS_OCC_Auth_Workflow](OCCAuthId, OCCAuthEndorserId, WFStatus, StationId, FISTestResult, ActionOn, ActionBy)
+					VALUES (@OCCAuthID, @OCCEndorserID_Next, 'Pending', 0, NULL, '1900-01-01 00:00:00', 1)
+
+					UPDATE [TAMS_OCC_Auth]
+					SET [OCCAuthStatusId] = @WFStatusId, [PFRRemark] = @RemarksPFR, [PowerOffTime] = GETDATE(), [UpdatedOn] = GETDATE(), [UpdatedBy] = @UserID
+					WHERE ID = @OCCAuthID;
+
+				END; 
+
+			IF @OCCLevel = 5
+				BEGIN
+
+					SELECT @WorkflowId = ID FROM [TAMS_Workflow]
+					WHERE Line = @Line
+					AND  WorkflowType = 'OCCAuth'
+					AND IsActive = 1
+					AND EffectiveDate <= GETDATE()
+					AND ExpiryDate >= GETDATE()
+
+					SELECT @OCCEndorserID = ID FROM [TAMS_Endorser]
+					WHERE WorkflowId = @WorkflowId AND Line = @Line
+					AND [Level] = @OCCLevel;
+
+					UPDATE [TAMS_OCC_Auth_Workflow]
+					SET [WFStatus] = @SelectionValue, [ActionOn] = GETDATE(), [ActionBy] = @UserID
+					WHERE [OCCAuthId] = @OCCAuthID AND [OCCAuthEndorserId] = @OCCEndorserID
+
+					SELECT @OCCEndorserID_Next = ID, @WFStatusId = WFStatusId
+					FROM [dbo].[TAMS_Endorser]
+					WHERE Line = @Line
+					AND WorkflowId = @WorkflowId
+					AND [Level] = @OCCLevel + 1;
+
+					INSERT INTO [TAMS_OCC_Auth_Workflow](OCCAuthId, OCCAuthEndorserId, WFStatus, StationId, FISTestResult, ActionOn, ActionBy)
+					VALUES (@OCCAuthID, @OCCEndorserID_Next, 'Pending', 0, NULL, '1900-01-01 00:00:00', 1)
+
+					UPDATE [TAMS_OCC_Auth]
+					--SET [OCCAuthStatusId] = 6, [PFRRemark] = @RemarksPFR, [PowerOffTime] = CONVERT(TIME, GETDATE()), [UpdatedOn] = GETDATE(), [UpdatedBy] = @UserID
+					SET [OCCAuthStatusId] = @WFStatusId, [PFRRemark] = @RemarksPFR, [RackedOutTime] = GETDATE(), [UpdatedOn] = GETDATE(), [UpdatedBy] = @UserID
+					WHERE ID = @OCCAuthID;
+
+				END
+
+			IF @OCCLevel = 6
+				BEGIN
+
+					SELECT @WorkflowId = ID FROM [TAMS_Workflow]
+					WHERE Line = @Line
+					AND  WorkflowType = 'OCCAuth'
+					AND IsActive = 1
+					AND EffectiveDate <= GETDATE()
+					AND ExpiryDate >= GETDATE()
+
+					SELECT @OCCEndorserID = ID FROM [TAMS_Endorser]
+					WHERE WorkflowId = @WorkflowId AND Line = @Line
+					AND [Level] = @OCCLevel;
+
+					UPDATE [TAMS_OCC_Auth_Workflow]
+					SET [WFStatus] = @SelectionValue, [ActionOn] = GETDATE(), [ActionBy] = @UserID
+					WHERE [OCCAuthId] = @OCCAuthID AND [OCCAuthEndorserId] = @OCCEndorserID
+
+					SELECT @OCCEndorserID_Next = ID, @WFStatusId = WFStatusId
+					FROM [dbo].[TAMS_Endorser]
+					WHERE Line = @Line
+					AND WorkflowId = @WorkflowId
+					AND [Level] = @OCCLevel + 1;
+
+					INSERT INTO [TAMS_OCC_Auth_Workflow](OCCAuthId, OCCAuthEndorserId, WFStatus, StationId, FISTestResult, ActionOn, ActionBy)
+					VALUES (@OCCAuthID, @OCCEndorserID_Next, 'Pending', 0, NULL, '1900-01-01 00:00:00', 1)
+
+					UPDATE [TAMS_OCC_Auth]
+					SET [OCCAuthStatusId] = @WFStatusId, [PFRRemark] = @RemarksPFR, [UpdatedOn] = GETDATE(), [UpdatedBy] = @UserID
+					WHERE ID = @OCCAuthID;
+
+				END
+
+			IF @OCCLevel = 7
+				BEGIN
+					IF @StationName = 'N.A.'
+						BEGIN
+							SET @StationId = 0;
+						END;
+					ELSE
+						BEGIN
+							SELECT @StationId = ID FROM  [TAMS_Station] WHERE StationName = @StationName;
+						END;
+
+					SELECT @WorkflowId = ID FROM [TAMS_Workflow]
+					WHERE Line = @Line
+					AND  WorkflowType = 'OCCAuth'
+					AND IsActive = 1
+					AND EffectiveDate <= GETDATE()
+					AND ExpiryDate >= GETDATE()
+
+					SELECT @OCCEndorserID = ID FROM [TAMS_Endorser]
+					WHERE WorkflowId = @WorkflowId AND Line = @Line
+					AND [Level] = @OCCLevel;
+
+					UPDATE [TAMS_OCC_Auth_Workflow]
+					SET [WFStatus] = 'Completed', [StationId] = @StationId, [ActionOn] = GETDATE(), [ActionBy] = @UserID
+					WHERE [OCCAuthId] = @OCCAuthID AND [OCCAuthEndorserId] = @OCCEndorserID
+
+					SELECT @OCCEndorserID_Next = ID, @WFStatusId = WFStatusId
+					FROM [dbo].[TAMS_Endorser]
+					WHERE Line = @Line
+					AND WorkflowId = @WorkflowId
+					AND [Level] = @OCCLevel + 1;
+
+					SELECT @IsBuffer = IsBuffer FROM [TAMS_OCC_Auth] WHERE ID = @OCCAuthID;
+
+					--IF @IsBuffer = 1
+					--BEGIN
+					--	INSERT INTO [TAMS_OCC_Auth_Workflow](OCCAuthId, OCCAuthEndorserId, WFStatus, StationId, FISTestResult, ActionOn, ActionBy)
+					--	VALUES (@OCCAuthID, @OCCEndorserID_Next, 'Terminated', 0, NULL, '1900-01-01 00:00:00', 1)
+					--END;
+					--ELSE IF @IsBuffer = 0
+					--BEGIN
+					--	INSERT INTO [TAMS_OCC_Auth_Workflow](OCCAuthId, OCCAuthEndorserId, WFStatus, StationId, FISTestResult, ActionOn, ActionBy)
+					--	VALUES (@OCCAuthID, @OCCEndorserID_Next, 'Pending', 0, NULL, '1900-01-01 00:00:00', 1)
+
+					--	UPDATE [TAMS_OCC_Auth]
+					--	SET [OCCAuthStatusId] = 8, [PFRRemark] = @RemarksPFR, [UpdatedBy] = @UserID
+					--	WHERE ID = @OCCAuthID;
+					--END;
+
+					IF @IsBuffer = 0
+						BEGIN
+							INSERT INTO [TAMS_OCC_Auth_Workflow](OCCAuthId, OCCAuthEndorserId, WFStatus, StationId, FISTestResult, ActionOn, ActionBy)
+							VALUES (@OCCAuthID, @OCCEndorserID_Next, 'Pending', 0, NULL, '1900-01-01 00:00:00', 1)
+
+							UPDATE [TAMS_OCC_Auth]
+							SET [OCCAuthStatusId] = @WFStatusId, [PFRRemark] = @RemarksPFR, [UpdatedBy] = @UserID
+							WHERE ID = @OCCAuthID;
+						END;
+				END
+
+			IF @OCCLevel = 12
+				BEGIN
+					SELECT @WorkflowId = ID FROM [TAMS_Workflow]
+					WHERE Line = @Line
+					AND  WorkflowType = 'OCCAuth'
+					AND IsActive = 1
+					AND EffectiveDate <= GETDATE()
+					AND ExpiryDate >= GETDATE()
+
+					SELECT @OCCEndorserID = ID FROM [TAMS_Endorser]
+					WHERE WorkflowId = @WorkflowId AND Line = @Line
+					AND [Level] = @OCCLevel;
+
+					UPDATE [TAMS_OCC_Auth_Workflow]
+					SET [WFStatus] = @SelectionValue, [ActionOn] = GETDATE(), [ActionBy] = @UserID
+					WHERE [OCCAuthId] = @OCCAuthID AND [OCCAuthEndorserId] = @OCCEndorserID
+
+					SELECT @OCCEndorserID_Next = ID
+					FROM [dbo].[TAMS_Endorser]
+					WHERE Line = @Line
+					AND WorkflowId = @WorkflowId
+					AND [Level] = @OCCLevel + 1;
+
+					SELECT @WFStatusId = WFStatusId
+					FROM [dbo].[TAMS_Endorser]
+					WHERE Line = @Line
+					AND WorkflowId = @WorkflowId
+					AND [Level] = @OCCLevel
+
+					INSERT INTO [TAMS_OCC_Auth_Workflow](OCCAuthId, OCCAuthEndorserId, WFStatus, StationId, FISTestResult, ActionOn, ActionBy)
+					VALUES (@OCCAuthID, @OCCEndorserID_Next, 'Pending', 0, NULL, '1900-01-01 00:00:00', 1)
+
+					UPDATE [TAMS_OCC_Auth]
+					SET [OCCAuthStatusId] = @WFStatusId, [PFRRemark] = @RemarksPFR, [RackedOutTime] = GETDATE(), [UpdatedOn] = GETDATE(), [UpdatedBy] = @UserID
+					WHERE ID = @OCCAuthID;
+
+				END
+
+			IF @OCCLevel = 13
+				BEGIN
+					SELECT @WorkflowId = ID FROM [TAMS_Workflow]
+					WHERE Line = @Line
+					AND  WorkflowType = 'OCCAuth'
+					AND IsActive = 1
+					AND EffectiveDate <= GETDATE()
+					AND ExpiryDate >= GETDATE()
+
+					SELECT @OCCEndorserID = ID FROM [TAMS_Endorser]
+					WHERE WorkflowId = @WorkflowId AND Line = @Line
+					AND [Level] = @OCCLevel;
+
+					UPDATE [TAMS_OCC_Auth_Workflow]
+					SET [WFStatus] = @SelectionValue, [ActionOn] = GETDATE(), [ActionBy] = @UserID
+					WHERE [OCCAuthId] = @OCCAuthID AND [OCCAuthEndorserId] = @OCCEndorserID
+
+					SELECT @OCCEndorserID_Next = ID
+					FROM [dbo].[TAMS_Endorser]
+					WHERE Line = @Line
+					AND WorkflowId = @WorkflowId
+					AND [Level] = @OCCLevel + 1;
+
+					SELECT @WFStatusId = WFStatusId
+					FROM [dbo].[TAMS_Endorser]
+					WHERE Line = @Line
+					AND WorkflowId = @WorkflowId
+					AND [Level] = @OCCLevel
+
+					INSERT INTO [TAMS_OCC_Auth_Workflow](OCCAuthId, OCCAuthEndorserId, WFStatus, StationId, FISTestResult, ActionOn, ActionBy)
+					VALUES (@OCCAuthID, @OCCEndorserID_Next, 'Pending', 0, NULL, '1900-01-01 00:00:00', 1)
+
+					UPDATE [TAMS_OCC_Auth]
+					SET [OCCAuthStatusId] = @WFStatusId, [PFRRemark] = @RemarksPFR, [RackedOutTime] = GETDATE(), [UpdatedOn] = GETDATE(), [UpdatedBy] = @UserID
+					WHERE ID = @OCCAuthID;
+
+				END
+
+			IF @OCCLevel = 15
+				BEGIN
+					SELECT @WorkflowId = ID FROM [TAMS_Workflow]
+					WHERE Line = @Line
+					AND  WorkflowType = 'OCCAuth'
+					AND IsActive = 1
+					AND EffectiveDate <= GETDATE()
+					AND ExpiryDate >= GETDATE()
+
+					SELECT @OCCEndorserID = ID FROM [TAMS_Endorser]
+					WHERE WorkflowId = @WorkflowId AND Line = @Line
+					AND [Level] = @OCCLevel;
+
+					UPDATE [TAMS_OCC_Auth_Workflow]
+					SET [WFStatus] = 'Completed', [ActionOn] = GETDATE(), [ActionBy] = @UserID
+					WHERE [OCCAuthId] = @OCCAuthID AND [OCCAuthEndorserId] = @OCCEndorserID
+
+					SELECT @OCCEndorserID_Next = ID
+					FROM [dbo].[TAMS_Endorser]
+					WHERE Line = @Line
+					AND WorkflowId = @WorkflowId
+					AND [Level] = @OCCLevel + 1;
+
+					SELECT @WFStatusId = WFStatusId
+					FROM [dbo].[TAMS_Endorser]
+					WHERE Line = @Line
+					AND WorkflowId = @WorkflowId
+					AND [Level] = @OCCLevel
+
+					INSERT INTO [TAMS_OCC_Auth_Workflow](OCCAuthId, OCCAuthEndorserId, WFStatus, StationId, FISTestResult, ActionOn, ActionBy)
+					VALUES (@OCCAuthID, @OCCEndorserID_Next, 'Pending', 0, NULL, '1900-01-01 00:00:00', 1)
+
+					UPDATE [TAMS_OCC_Auth]
+					SET [OCCAuthStatusId] = @WFStatusId, [PFRRemark] = @RemarksPFR, [RackedOutTime] = GETDATE(), [UpdatedOn] = GETDATE(), [UpdatedBy] = @UserID
+					WHERE ID = @OCCAuthID;
+
+				END
+
+			IF @OCCLevel = 17
+				BEGIN
+					SELECT @WorkflowId = ID FROM [TAMS_Workflow]
+					WHERE Line = @Line
+					AND  WorkflowType = 'OCCAuth'
+					AND IsActive = 1
+					AND EffectiveDate <= GETDATE()
+					AND ExpiryDate >= GETDATE()
+
+					SELECT @OCCEndorserID = ID FROM [TAMS_Endorser]
+					WHERE WorkflowId = @WorkflowId AND Line = @Line
+					AND [Level] = @OCCLevel;
+
+					UPDATE [TAMS_OCC_Auth_Workflow]
+					SET [WFStatus] = 'Completed', [ActionOn] = GETDATE(), [ActionBy] = @UserID
+					WHERE [OCCAuthId] = @OCCAuthID AND [OCCAuthEndorserId] = @OCCEndorserID
+
+					SELECT @OCCEndorserID_Next = ID
+					FROM [dbo].[TAMS_Endorser]
+					WHERE Line = @Line
+					AND WorkflowId = @WorkflowId
+					AND [Level] = @OCCLevel + 1;
+
+					SELECT @WFStatusId = WFStatusId
+					FROM [dbo].[TAMS_Endorser]
+					WHERE Line = @Line
+					AND WorkflowId = @WorkflowId
+					AND [Level] = @OCCLevel
+
+					INSERT INTO [TAMS_OCC_Auth_Workflow](OCCAuthId, OCCAuthEndorserId, WFStatus, StationId, FISTestResult, ActionOn, ActionBy)
+					VALUES (@OCCAuthID, @OCCEndorserID_Next, 'Pending', 0, NULL, '1900-01-01 00:00:00', 1)
+
+					UPDATE [TAMS_OCC_Auth]
+					SET [OCCAuthStatusId] = @WFStatusId, [PFRRemark] = @RemarksPFR, [RackedOutTime] = GETDATE(), [UpdatedOn] = GETDATE(), [UpdatedBy] = @UserID
+					WHERE ID = @OCCAuthID;
+
+				END
+
+			IF @OCCLevel = 18
+				BEGIN
+					IF @SelectionValue = 'Select'
+					BEGIN
+						SET @SelectionValue = 'Pending'
+					END;
+					ELSE
+					BEGIN
+						SET @FISTestResult = @SelectionValue
+						SET @SelectionValue = 'Completed'
+					END;
+
+					SELECT @WorkflowId = ID FROM [TAMS_Workflow]
+					WHERE Line = @Line
+					AND  WorkflowType = 'OCCAuth'
+					AND IsActive = 1
+					AND EffectiveDate <= GETDATE()
+					AND ExpiryDate >= GETDATE()
+
+					SELECT @OCCEndorserID = ID FROM [TAMS_Endorser]
+					WHERE WorkflowId = @WorkflowId AND Line = @Line
+					AND [Level] = @OCCLevel;
+
+					UPDATE [TAMS_OCC_Auth_Workflow]
+					SET [WFStatus] = @SelectionValue, [FISTestResult] = @FISTestResult, [ActionOn] = GETDATE(), [ActionBy] = @UserID
+					WHERE [OCCAuthId] = @OCCAuthID AND [OCCAuthEndorserId] = @OCCEndorserID
+
+					SELECT @OCCEndorserID_Next = ID
+					FROM [dbo].[TAMS_Endorser]
+					WHERE Line = @Line
+					AND WorkflowId = @WorkflowId
+					AND [Level] = @OCCLevel + 1;
+
+					SELECT @WFStatusId = WFStatusId
+					FROM [dbo].[TAMS_Endorser]
+					WHERE Line = @Line
+					AND WorkflowId = @WorkflowId
+					AND [Level] = @OCCLevel
+
+					INSERT INTO [TAMS_OCC_Auth_Workflow](OCCAuthId, OCCAuthEndorserId, WFStatus, StationId, FISTestResult, ActionOn, ActionBy)
+					VALUES (@OCCAuthID, @OCCEndorserID_Next, 'Pending', 0, NULL, '1900-01-01 00:00:00', 1)
+
+					UPDATE [TAMS_OCC_Auth]
+					SET [OCCAuthStatusId] = @WFStatusId, [PFRRemark] = @RemarksPFR, [RackedOutTime] = GETDATE(), [UpdatedOn] = GETDATE(), [UpdatedBy] = @UserID
+					WHERE ID = @OCCAuthID;
+
+				END
+
+				-- >> Insert to Audit
+				INSERT INTO [dbo].[TAMS_OCC_Auth_Workflow_Audit]
+				([AuditActionBy], [AuditActionOn], [AuditAction], 
+					[OCCAuthWorkflowID], [OCCAuthId], [OCCAuthEndorserId], [WFStatus], [StationId], [FISTestResult], [ActionOn], [ActionBy])
+				SELECT @UserID, GETDATE(), 'U', 
+					[ID], [OCCAuthId], [OCCAuthEndorserId], [WFStatus], [StationId], [FISTestResult], [ActionOn], [ActionBy]
+					FROM [dbo].[TAMS_OCC_Auth_Workflow]
+						WHERE OCCAuthId = @OCCAuthID AND [OCCAuthEndorserId] = @OCCEndorserID
+				-- >> Insert to Audit
+
+				-- >> Insert to Audit
+				INSERT INTO [dbo].[TAMS_OCC_Auth_Workflow_Audit]
+				([AuditActionBy], [AuditActionOn], [AuditAction], 
+					[OCCAuthWorkflowID], [OCCAuthId], [OCCAuthEndorserId], [WFStatus], [StationId], [FISTestResult], [ActionOn], [ActionBy])
+				SELECT @UserID, GETDATE(), 'I', 
+					[ID], [OCCAuthId], [OCCAuthEndorserId], [WFStatus], [StationId], [FISTestResult], [ActionOn], [ActionBy]
+					FROM [dbo].[TAMS_OCC_Auth_Workflow]
+						WHERE OCCAuthId = @OCCAuthID AND [OCCAuthEndorserId] = @OCCEndorserID_Next AND WFStatus = 'Pending'
+				-- >> Insert to Audit
+
+				-- >> Insert to Audit
+				INSERT INTO [dbo].[TAMS_OCC_Auth_Audit]
+				([ActionBy], [ActionOn], [AuditAction], 
+					[OCCAuthID], [Line], [OperationDate], [AccessDate], [TractionPowerId], [Remark], [PFRRemark], 
+					[OCCAuthStatusId], [IsBuffer], [PowerOn], [PowerOffTime], [RackedOutTime], 
+					[CreatedOn], [CreatedBy], [UpdatedOn], [UpdatedBy])
+				SELECT @UserID, GETDATE(), 'U',
+					[ID], [Line], [OperationDate], [AccessDate], [TractionPowerId], [Remark], [PFRRemark],
+					[OCCAuthStatusId], [IsBuffer], [PowerOn], [PowerOffTime], [RackedOutTime],
+					[CreatedOn], [CreatedBy], [UpdatedOn], [UpdatedBy]
+				  FROM [dbo].[TAMS_OCC_Auth]
+						WHERE ID = @OCCAuthID
+				-- >> Insert to Audit
+
+
+
+		COMMIT TRANSACTION;
+	END TRY
+	BEGIN CATCH
+		ROLLBACK TRANSACTION;
+	END CATCH
+
+END
+
+---
+
+
+
+### ⬆️ END OF INPUT ⬆️
+**INSTRUCTION:** Document the logic above in English.

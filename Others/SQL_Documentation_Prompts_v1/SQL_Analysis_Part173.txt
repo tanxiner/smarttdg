@@ -1,0 +1,300 @@
+
+### SYSTEM ROLE
+You are a **Senior Database Architect**.
+You are NOT a Coder. You DO NOT write SQL code.
+
+### OBJECTIVE
+Document the logic of the Stored Procedures provided below.
+
+### 🛑 STRICT CONSTRAINTS
+1. **NO SQL CODE BLOCKS.** Do not rewrite the procedure code.
+2. **NO** "Here is the documentation" filler.
+3. **NO** generic explanations (e.g. don't explain what a JOIN is).
+
+### ✅ REQUIRED OUTPUT FORMAT
+For each procedure, output exactly this structure:
+
+# Procedure: {ProcedureName}
+**Type:** Stored Procedure
+
+### Purpose
+{One clear sentence explaining what business task this performs.}
+
+### Parameters
+| Name | Type | Purpose |
+| :--- | :--- | :--- |
+| @ParamName | DataType | {Inferred usage} |
+
+### Logic Flow
+{Step-by-step plain English explanation. E.g., "1. Checks if user exists. 2. Inserts into Audit table. 3. Returns ID."}
+
+### Data Interactions
+* **Reads:** {List tables explicitly selected from}
+* **Writes:** {List tables inserted/updated/deleted}
+
+---
+
+### ⬇️ RAW SQL INPUT ⬇️
+create PROCEDURE [dbo].[sp_TAMS_Update_UserRegModule_SysAdminApproveCompany] 	
+	@RegModID	INT,
+	@UserID		NVARCHAR(200)
+AS
+BEGIN
+	BEGIN TRY
+		BEGIN TRANSACTION;
+
+		CREATE TABLE #TMP_RegModule
+		(
+			ID INT,
+			RegId INT,
+			Line NVARCHAR(10),
+			TrackType NVARCHAR(50),
+			Module VARCHAR(50),
+			RegStatus INT
+		);
+
+		DECLARE @RegID INT;
+		
+		-- RegStatus 2 = Pending Company Approval
+		IF EXISTS(SELECT * FROM TAMS_Reg_Module WHERE ID = @RegModID AND RegStatus IN (SELECT ID FROM TAMS_WFStatus 
+																				WHERE WFStatus = 'Pending Company Approval' 
+																				AND IsActive = 1)) 
+		BEGIN
+			
+			SELECT @RegID = RegID 
+			FROM TAMS_Reg_Module 
+			WHERE ID = @RegModID 
+			AND RegStatus IN (SELECT ID FROM TAMS_WFStatus 
+							WHERE WFStatus = 'Pending Company Approval' 
+							AND IsActive = 1)
+
+			DECLARE @ID INT;					
+			DECLARE @Line NVARCHAR(20);
+			DECLARE @TrackType NVARCHAR(50);
+			DECLARE @Module NVARCHAR(20);
+			DECLARE @RegStatus INT;
+
+			INSERT INTO #TMP_RegModule(ID, RegId, Line,TrackType, Module, RegStatus)   
+			SELECT ID, RegId, Line,TrackType, Module, RegStatus FROM TAMS_Reg_Module WHERE WFStatus = 'Pending' AND RegID = @RegID
+
+
+			DECLARE cur CURSOR FOR
+			SELECT ID, RegId, Line,TrackType, Module, RegStatus FROM #TMP_RegModule WHERE RegID = @RegID
+
+			OPEN cur;
+			FETCH NEXT FROM cur INTO @ID, @RegModID, @Line,@TrackType, @Module, @RegStatus;
+
+			WHILE @@FETCH_STATUS = 0
+			BEGIN
+					
+				DECLARE @WorkflowID INT;
+				DECLARE @NewWFStatusID INT;
+				DECLARE @NewWFRoleID INT;
+				DECLARE @EndorserID	INT;
+				DECLARE @WFStatus   NVARCHAR(50);
+
+				-- Get next stageID for this TAMS_Reg_Module
+				SELECT @WorkflowID = ID 
+				FROM TAMS_Workflow
+				WHERE Line = @Line 
+				AND TrackType = @TrackType
+				AND WorkFlowType = 'ExtUser'
+				AND GETDATE() >= EffectiveDate 
+				AND GETDATE() <= ExpiryDate 
+				AND IsActive = 1
+
+				SELECT @NewWFStatusID = WFStatusID, @NewWFRoleID = RoleID, @EndorserID = ID
+				FROM TAMS_Endorser 
+				WHERE WorkflowID = @WorkflowID
+				AND Line = @Line
+				AND GETDATE() >= EffectiveDate
+				AND GETDATE() <= ExpiryDate
+				AND IsActive = 1
+				AND [Level] = 
+				(
+					SELECT [Level] + 1 
+					FROM TAMS_Endorser
+					WHERE WorkflowID = @WorkflowID
+					AND Line = @Line
+					AND WFStatusID = (SELECT WFStatusID FROM TAMS_WFStatus WHERE ID = @RegStatus)
+					AND GETDATE() >= EffectiveDate
+					AND GETDATE() <= ExpiryDate
+					AND IsActive = 1
+				)
+
+				SELECT @WFStatus = WFStatus FROM TAMS_WFStatus
+				WHERE Line = @Line
+				AND TrackType = @TrackType
+				AND WFType = 'UserRegStatus'
+				AND WFStatusId = @NewWFStatusID
+				AND IsActive = 1
+
+				SELECT  @RegModID, @RegID, @Line,@TrackType, @Module, @NewWFStatusID, @WorkflowID, @EndorserID, 'Pending', @WFStatus, GETDATE(), 1, GETDATE(), 1
+
+
+				INSERT INTO TAMS_Reg_Module 
+				VALUES (@RegID, @Line,@TrackType, @Module, @NewWFStatusID, @WorkflowID, @EndorserID, 'Pending', @WFStatus, GETDATE(), 1, GETDATE(), 1);
+
+
+				UPDATE TAMS_Reg_Module
+				SET WFStatus = 'Approved',
+				UpdatedOn = GETDATE()
+				WHERE ID = @ID;
+
+				-- Sends email
+				DECLARE @Sender NVARCHAR (100);
+				DECLARE @SysID NVARCHAR(10);
+				DECLARE @Subject NVARCHAR(500);    
+				DECLARE @Sys NVARCHAR(100);
+				DECLARE @Greetings  NVARCHAR(20);     
+				DECLARE @ToList NVARCHAR(MAX);
+				DECLARE @CCList NVARCHAR(MAX);
+				DECLARE @BCCList NVARCHAR(MAX);
+				DECLARE @Separator NVARCHAR(10);        
+				DECLARE @AlertMsg NVARCHAR(MAX);
+				DECLARE @AlertID AS INTEGER; 
+
+				DECLARE @Body VARCHAR(max);
+				DECLARE @Body1 VARCHAR(max);
+				DECLARE @Body2 VARCHAR(max);
+				DECLARE @Body3 VARCHAR(max);
+				DECLARE @Link NVARCHAR(MAX);
+
+				DECLARE @LoginPage	NVARCHAR(500)
+					
+				DECLARE @SendTo	NVARCHAR(200);	
+				SET @ToList = '';
+
+				-- Get Send to list
+				DECLARE curSendTo CURSOR FOR
+				SELECT Email FROM TAMS_User u, TAMS_User_Role ur
+				WHERE u.UserID = ur.UserID
+				AND ur.RoleID IN (@NewWFRoleID
+					--SELECT ID FROM TAMS_Role WHERE Line = @Line AND Module = @Module AND Role LIKE '%SysAdmin%'
+				)
+					
+				OPEN curSendTo;
+				FETCH NEXT FROM curSendTo INTO @SendTo;
+
+				WHILE @@FETCH_STATUS = 0
+				BEGIN
+					IF LEN(@ToList) =0 
+					BEGIN
+						SET @ToList = @SendTo
+					END
+					SET @ToList = @ToList + ',' + @SendTo;
+						
+					FETCH NEXT FROM curSendTo INTO @SendTo;
+				END;
+				
+
+				CLOSE curSendTo;
+				DEALLOCATE curSendTo;
+
+
+				SET @Sender = 'TAMS Admin';
+				SET @SysID = 'TAMS';
+				SET @Subject = 'For your approval: User Registration Request '
+				SET @Sys = 'Track Access Management System'   
+				SET @Greetings = 'Dear Sir/Madam, '  
+				--SET @ToList = ''
+				SET @CCList = ''   
+				SET @BCCList = ''
+				SET @Separator = ','    
+				SET @CCList = ''
+				--SET @ToList = '';
+
+				SET @Body1 = ''
+				SET @Body2 = ''
+				SET @Body3 = ''
+			
+				SET @Body1 = @Body1 + '<table width="100%">'
+				SET @Body1 = @Body1 + '<tr align="left" valign="middle" style="font-size:10pt; font-face:Arial;">'
+				SET @Body1 = @Body1 + '<td>Please access TAMS to approve/reject the User registration.</td>'
+				SET @Body1 = @Body1 + '</tr>'
+				SET @Body1 = @Body1 + '</table>'
+				SET @LoginPage = 'https://sbstweb.sbstransit.com.sg/TAMS/Login.aspx'
+				 
+				SET @Body2 = @Body2 + '<br>'
+				SET @Body2 = @Body2 + '<table width="100%">'
+				SET @Body2 = @Body2 + '<tr align="left" valign="middle" style="font-size:10pt; font-face:Arial;">'
+				SET @Body2 = @Body2 + '<td>Click on the link <a href=' + @LoginPage + '>here</a> to access tams.</td>'
+				SET @Body2 = @Body2 + '</tr>'
+				SET @Body2 = @Body2 + '</table>'
+
+				SET @Body3 = @Body3 + '<br>'
+				SET @Body3 = @Body3 + '<table width="100%">'
+				SET @Body3 = @Body3 + '<tr align="left" valign="middle" style="font-size:10pt; font-face:Arial;">'
+				SET @Body3 = @Body3 + '<td>***********************************************<br>Do Not reply. This is a computer generated Email. <br>***********************************************</td>'
+				SET @Body3 = @Body3 + '</tr>'
+				SET @Body3 = @Body3 + '</table>'
+
+				SET @Body = ''
+				SET @Body = @Body1 + @Body2 + @Body3
+
+				SET @BCCList = ''
+
+				EXEC [dbo].EAlertQ_EnQueue 
+					@Sender = @Sender, 
+					@UserId = @SysID, 
+					@Subject = @Subject,        
+					@Sys = @Sys,  
+					@Greetings = @Greetings, 
+					@AlertMsg = @Body, 
+					@SendTo = @ToList,        
+					@CC = @CCList, 
+					@BCC= @BCCList, 
+					@Separator = @Separator, 
+					@AlertID =  @AlertID 
+
+				FETCH NEXT FROM cur INTO @ID, @RegModID, @Line,@TrackType, @Module, @RegStatus;
+			END
+
+			CLOSE cur;
+			DEALLOCATE cur;
+
+			-- Register company info into TAMS_Company
+
+			IF NOT EXISTS(SELECT * FROM TAMS_Company WHERE UENNo = (SELECT UENNo FROM TAMS_Registration WHERE ID = @RegID))
+			BEGIN
+
+				INSERT INTO TAMS_Company  
+				SELECT UENNo, Company, BizOwner, CompanyOfficeNo, CompanyMobileNo, CompanyEmail, 1, GETDATE(), @UserID, GETDATE(), @UserID
+				FROM TAMS_Registration WHERE ID = @RegID
+			END;
+
+			-- Update Company ID into TAMS_Registration
+			DECLARE @CompanyID INT;
+			SELECT @CompanyID = ID FROM TAMS_Company WHERE UENNo = (SELECT UENNo FROM TAMS_Registration WHERE ID = @RegID)
+
+			UPDATE TAMS_Registration
+			SET CompanyID = @CompanyID
+			WHERE ID = @RegID
+
+			-- Insert Audit Log
+			INSERT INTO TAMS_Action_Log VALUES 
+			(
+				'All', 
+				'All', 
+				'UserReg-Registration', 
+				@RegID, 
+				'System Admin approved Company Registration for User Registration', 
+				GETDATE(), 
+				@UserID
+			)
+		END;
+
+		COMMIT TRANSACTION;
+	END TRY
+	BEGIN CATCH
+		ROLLBACK TRANSACTION;
+	END CATCH
+
+END;
+
+---
+
+
+
+### ⬆️ END OF INPUT ⬆️
+**INSTRUCTION:** Document the logic above in English.

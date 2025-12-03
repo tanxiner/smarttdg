@@ -1,0 +1,229 @@
+
+### SYSTEM ROLE
+You are a **Senior Database Architect**.
+You are NOT a Coder. You DO NOT write SQL code.
+
+### OBJECTIVE
+Document the logic of the Stored Procedure provided below.
+
+### 🛑 STRICT CONSTRAINTS
+1. **NO SQL CODE BLOCKS.** Do not rewrite the procedure code.
+2. **NO** "Here is the documentation" filler.
+3. **NO** generic explanations.
+4. **DO NOT EXPAND ACRONYMS.**
+   (Treat these as proper nouns: ["ID", "VALUE"])
+
+### ✅ REQUIRED OUTPUT FORMAT
+Output exactly this structure:
+
+# Procedure: sp_TAMS_SectorBooking_Special_Rule_Chk
+
+### Purpose
+{One clear sentence explaining what business task this performs.}
+
+### Parameters
+| Name | Type | Purpose |
+| :--- | :--- | :--- |
+| @ParamName | DataType | {Inferred usage} |
+
+### Logic Flow
+{Step-by-step plain English explanation.}
+
+### Data Interactions
+* **Reads:** {List tables explicitly selected from}
+* **Writes:** {List tables inserted/updated/deleted}
+
+---
+
+### ⬇️ RAW SQL INPUT ⬇️
+CREATE PROCEDURE [dbo].[sp_TAMS_SectorBooking_Special_Rule_Chk]
+	@AccessType		AS NVARCHAR(20) = NULL,
+	@Sectors		AS NVARCHAR(2000) = NULL,
+	@PowerSelTxt	AS NVARCHAR(50) = NULL
+AS
+
+BEGIN
+
+DECLARE @PowerOnInd	INT
+SET @PowerOnInd = CASE WHEN @PowerSelTxt = 'Traction Power ON' THEN 1 ELSE 0 END
+
+DECLARE @ISSCtr	INT
+SET @ISSCtr = 0
+
+DECLARE @RetMsg	INT
+SET @RetMsg = 0 -- >> No Error
+
+CREATE TABLE #TmpCombSect 
+(CombSectID INT)
+	
+TRUNCATE TABLE #TmpCombSect
+
+CREATE TABLE #TmpCombSectMax
+(CombSectID INT,
+Combination INT,
+CombCheck	INT)
+
+TRUNCATE TABLE #TmpCombSectMax
+
+DECLARE @CombSectCtr	INT
+DECLARE @SelCombSectCtr	INT
+
+SET @CombSectCtr = 0
+SET @SelCombSectCtr = 0
+
+IF @AccessType = 'Possession' AND @PowerOnInd = 0
+	BEGIN
+		PRINT 'Possession Power Off'
+
+		SELECT @ISSCtr = COUNT(*)
+			FROM TAMS_Sector
+				WHERE ID IN (SELECT [VALUE] FROM [dbo].[SPLIT](';', @Sectors))	
+					AND IsSpecialSector = 1
+					AND IsActive = 1;
+
+		IF @ISSCtr > 0
+			BEGIN
+				INSERT INTO #TmpCombSect
+				SELECT CombiSectorId 
+					FROM TAMS_Special_Sector_Booking
+						WHERE AccessType = 'Possession'
+							AND SectorId IN (SELECT ID 
+												FROM TAMS_Sector
+													WHERE ID IN (SELECT [VALUE] FROM [dbo].[SPLIT](';', @Sectors))		
+														AND IsSpecialSector = 1)
+							AND IsActive = 1
+
+				SELECT @CombSectCtr = COUNT(*)
+					FROM #TmpCombSect
+
+				SELECT @SelCombSectCtr = COUNT(*) 
+					FROM #TmpCombSect
+						WHERE CombSectID IN (SELECT [VALUE] FROM [dbo].[SPLIT](';', @Sectors))
+
+				-- >> SELECT @CombSectCtr, @SelCombSectCtr
+
+				IF @SelCombSectCtr < @CombSectCtr
+					BEGIN
+						SET @RetMsg = 1 -- >> Missing Combination
+					END
+				ELSE
+					BEGIN
+						SET @RetMsg = 0 -- >> No Error
+					END
+			END
+
+	END
+ELSE IF @AccessType = 'Protection' AND @PowerOnInd = 0
+	BEGIN
+		PRINT 'Protection Power Off'
+
+		SELECT @ISSCtr = COUNT(*)
+			FROM TAMS_Sector
+				WHERE ID IN (SELECT [VALUE] FROM [dbo].[SPLIT](';', @Sectors))	
+					AND IsSpecialSector = 1
+					AND IsActive = 1;
+
+		IF @ISSCtr > 0
+			BEGIN
+				INSERT INTO #TmpCombSectMax
+				SELECT SectorId, Combination, 0
+					FROM TAMS_Special_Sector_Booking
+						WHERE AccessType = 'Protection'
+							AND SectorId IN (SELECT ID 
+												FROM TAMS_Sector
+													WHERE ID IN (SELECT [VALUE] FROM [dbo].[SPLIT](';', @Sectors))		
+														AND IsSpecialSector = 1)
+							AND IsActive = 1
+				GROUP BY SectorId, Combination
+
+				-- >> 
+				DECLARE @Cur01 CURSOR;
+
+				DECLARE @CCombSectID	INT
+				DECLARE @CCombination	INT
+				DECLARE @CCombCheck		INT
+				DECLARE @CombChkCtr		INT
+				SET @CombChkCtr = 0
+
+					SET @Cur01 = CURSOR FAST_FORWARD 
+					FOR
+						SELECT CombSectID, Combination, CombCheck 
+							FROM #TmpCombSectMax
+								ORDER BY CombSectID
+
+					OPEN @Cur01
+	
+					FETCH NEXT FROM @Cur01 INTO @CCombSectID, @CCombination, @CCombCheck
+	
+					WHILE @@FETCH_STATUS = 0 
+	
+						BEGIN
+
+							TRUNCATE TABLE #TmpCombSect
+							SET @CombSectCtr = 0
+							SET @SelCombSectCtr = 0
+
+							INSERT INTO #TmpCombSect
+							SELECT CombiSectorId 
+								FROM TAMS_Special_Sector_Booking
+									WHERE AccessType = 'Protection'
+										AND SectorId = @CCombSectID
+										AND Combination = @CCombination
+										AND IsActive = 1
+
+							SELECT @CombSectCtr = COUNT(*)
+								FROM #TmpCombSect
+
+							SELECT @SelCombSectCtr = COUNT(*) 
+								FROM #TmpCombSect
+									WHERE CombSectID IN (SELECT [VALUE] FROM [dbo].[SPLIT](';', @Sectors))
+
+							IF @SelCombSectCtr < @CombSectCtr
+								BEGIN
+									UPDATE #TmpCombSectMax
+										SET CombCheck = 0				-- >> Combination not completed
+									WHERE CombSectID = @CCombSectID
+										AND Combination = @CCombination
+								END
+							ELSE
+								BEGIN
+									UPDATE #TmpCombSectMax
+										SET CombCheck = 1				-- >> Combination completed
+									WHERE CombSectID = @CCombSectID
+										AND Combination = @CCombination
+								END
+
+							FETCH NEXT FROM @Cur01 INTO @CCombSectID, @CCombination, @CCombCheck
+						END 	
+
+					CLOSE @Cur01
+	
+					DEALLOCATE @Cur01
+				-- >> 
+				
+				SELECT @CombChkCtr = COUNT(*) FROM (
+				SELECT CombSectID, SUM(CombCheck) SumCombCheck
+					FROM #TmpCombSectMax
+				GROUP BY CombSectID
+				HAVING SUM(CombCheck) < 1) a
+
+				IF @CombChkCtr > 0
+					BEGIN
+						SET @RetMsg = 2 -- >> Missing Combination
+					END
+				ELSE
+					BEGIN
+						SET @RetMsg = 0 -- >> No Error
+					END
+			END
+	END
+
+SELECT @RetMsg AS RetMsgInd
+
+DROP TABLE #TmpCombSect
+DROP TABLE #TmpCombSectMax
+
+END
+
+### ⬆️ END OF INPUT ⬆️
+**INSTRUCTION:** Document the logic above in English.
