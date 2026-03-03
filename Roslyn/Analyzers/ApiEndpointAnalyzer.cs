@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using VBS = Microsoft.CodeAnalysis.VisualBasic.Syntax;
 
 namespace Roslyn.Analyzers
 {
@@ -320,6 +321,210 @@ namespace Roslyn.Analyzers
             if (classAttrs.Any()) parts.Add("class attrs: " + string.Join(", ", classAttrs));
             if (methodAttrs.Any()) parts.Add("method attrs: " + string.Join(", ", methodAttrs));
             return string.Join("; ", parts);
+        }
+
+        // ================================================================== VB.NET overload
+
+        /// <summary>
+        /// Discovery-based API endpoint detection for VB.NET source files.
+        /// Detects the same patterns as the C# overload: WebAPI, MVC, ASMX, ASHX, WCF.
+        /// </summary>
+        public static List<ApiEndpoint> Analyze(VBS.CompilationUnitSyntax root, string filePath)
+        {
+            var endpoints = new List<ApiEndpoint>();
+            var fileName = Path.GetFileName(filePath);
+
+            foreach (var classBlock in root.DescendantNodes().OfType<VBS.ClassBlockSyntax>())
+            {
+                var className = classBlock.ClassStatement.Identifier.Text;
+
+                // VB: base types come from Inherits clauses; implemented interfaces from Implements clauses
+                var baseTypes = classBlock.Inherits
+                    .SelectMany(i => i.Types.Select(t => t.ToString()))
+                    .Concat(classBlock.Implements.SelectMany(i => i.Types.Select(t => t.ToString())))
+                    .ToList();
+
+                // VB: class-level attributes are on ClassStatement
+                var classAttrs = classBlock.ClassStatement.AttributeLists
+                    .SelectMany(al => al.Attributes)
+                    .Select(a => a.Name.ToString())
+                    .ToList();
+
+                var kind = DetectKind(baseTypes, classAttrs);
+                if (kind == null) continue;
+
+                var routePrefix = GetVbRoutePrefix(classBlock, kind);
+
+                // ASHX code-behind
+                if (kind == "ashx")
+                {
+                    endpoints.Add(new ApiEndpoint
+                    {
+                        Kind = "ashx",
+                        ControllerOrServiceName = className,
+                        OperationName = "ProcessRequest",
+                        FilePath = filePath,
+                        Route = routePrefix ?? ("/" + fileName),
+                        HttpMethods = new[] { "GET", "POST" },
+                        Parameters = Array.Empty<EndpointParam>(),
+                        ReturnType = "void",
+                        Evidence = "Implements IHttpHandler or IHttpAsyncHandler"
+                    });
+                    continue;
+                }
+
+                // Walk method blocks (Function/Sub with a body)
+                foreach (var methodBlock in classBlock.Members.OfType<VBS.MethodBlockSyntax>())
+                {
+                    var methodStmt = methodBlock.SubOrFunctionStatement;
+                    var methodName = methodStmt.Identifier.Text;
+
+                    var methodAttrs = methodStmt.AttributeLists
+                        .SelectMany(al => al.Attributes)
+                        .Select(a => a.Name.ToString())
+                        .ToList();
+
+                    // WCF: only [OperationContract] methods
+                    if (kind == "wcf")
+                    {
+                        if (!methodAttrs.Any(a => NormalizeAttr(a) == "OperationContract")) continue;
+
+                        var returnType = (methodStmt.AsClause as VBS.SimpleAsClauseSyntax)?.Type?.ToString() ?? "Void";
+                        endpoints.Add(new ApiEndpoint
+                        {
+                            Kind = "wcf",
+                            ControllerOrServiceName = className,
+                            OperationName = methodName,
+                            FilePath = filePath,
+                            Route = routePrefix ?? "",
+                            HttpMethods = Array.Empty<string>(),
+                            Parameters = ExtractVbParams(methodStmt),
+                            ReturnType = returnType,
+                            Evidence = BuildEvidence(baseTypes, classAttrs, methodAttrs, kind)
+                        });
+                        continue;
+                    }
+
+                    // ASMX: only [WebMethod] methods
+                    if (kind == "asmx")
+                    {
+                        if (!methodAttrs.Any(a => NormalizeAttr(a) == "WebMethod")) continue;
+
+                        var returnType = (methodStmt.AsClause as VBS.SimpleAsClauseSyntax)?.Type?.ToString() ?? "Void";
+                        endpoints.Add(new ApiEndpoint
+                        {
+                            Kind = "asmx",
+                            ControllerOrServiceName = className,
+                            OperationName = methodName,
+                            FilePath = filePath,
+                            Route = routePrefix ?? ("/" + fileName + "/" + methodName),
+                            HttpMethods = new[] { "GET", "POST" },
+                            Parameters = ExtractVbParams(methodStmt),
+                            ReturnType = returnType,
+                            Evidence = BuildEvidence(baseTypes, classAttrs, methodAttrs, kind)
+                        });
+                        continue;
+                    }
+
+                    // WebAPI / MVC: public action methods
+                    bool isPublic = methodStmt.Modifiers.Any(m =>
+                        string.Equals(m.Text, "Public", StringComparison.OrdinalIgnoreCase));
+                    if (!isPublic) continue;
+
+                    var httpMethods = ExtractHttpMethods(methodAttrs);
+                    bool hasRouteAttr = methodAttrs.Any(a => NormalizeAttr(a) == "Route");
+                    var vbReturnType = (methodStmt.AsClause as VBS.SimpleAsClauseSyntax)?.Type?.ToString() ?? "Void";
+                    bool returnsAction = IsActionResult(vbReturnType);
+
+                    if (!httpMethods.Any() && !hasRouteAttr && !returnsAction) continue;
+
+                    var methodRoute = GetVbMethodRoute(methodStmt, routePrefix, methodName);
+
+                    endpoints.Add(new ApiEndpoint
+                    {
+                        Kind = kind,
+                        ControllerOrServiceName = className,
+                        OperationName = methodName,
+                        FilePath = filePath,
+                        Route = methodRoute,
+                        HttpMethods = httpMethods.Any()
+                            ? httpMethods.ToArray()
+                            : InferHttpMethods(methodName),
+                        Parameters = ExtractVbParams(methodStmt),
+                        ReturnType = vbReturnType,
+                        Evidence = BuildEvidence(baseTypes, classAttrs, methodAttrs, kind)
+                    });
+                }
+            }
+
+            return endpoints;
+        }
+
+        // -- VB-specific private helpers --
+
+        private static string? GetVbRoutePrefix(VBS.ClassBlockSyntax classBlock, string kind)
+        {
+            foreach (var attrList in classBlock.ClassStatement.AttributeLists)
+            {
+                foreach (var attr in attrList.Attributes)
+                {
+                    var n = NormalizeAttr(attr.Name.ToString());
+                    if (n == "Route" || n == "RoutePrefix")
+                    {
+                        var arg = attr.ArgumentList?.Arguments
+                            .OfType<VBS.SimpleArgumentSyntax>().FirstOrDefault();
+                        if (arg != null)
+                        {
+                            var val = arg.Expression.ToString().Trim('"').TrimStart('~').TrimStart('/');
+                            return "/" + val;
+                        }
+                    }
+                }
+            }
+            if (kind == "mvc" || kind == "webapi")
+            {
+                var name = classBlock.ClassStatement.Identifier.Text;
+                if (name.EndsWith(ControllerSuffix))
+                    name = name.Substring(0, name.Length - ControllerSuffix.Length);
+                return "/api/" + name;
+            }
+            return null;
+        }
+
+        private static string GetVbMethodRoute(
+            VBS.MethodStatementSyntax methodStmt, string? routePrefix, string methodName)
+        {
+            foreach (var attrList in methodStmt.AttributeLists)
+            {
+                foreach (var attr in attrList.Attributes)
+                {
+                    if (NormalizeAttr(attr.Name.ToString()) == "Route")
+                    {
+                        var arg = attr.ArgumentList?.Arguments
+                            .OfType<VBS.SimpleArgumentSyntax>().FirstOrDefault();
+                        if (arg != null)
+                        {
+                            var val = arg.Expression.ToString().Trim('"');
+                            if (val.StartsWith("~/")) val = val.Substring(1);
+                            if (!val.StartsWith("/")) val = (routePrefix ?? "") + "/" + val;
+                            return val;
+                        }
+                    }
+                }
+            }
+            return (routePrefix ?? "") + "/" + methodName;
+        }
+
+        private static EndpointParam[] ExtractVbParams(VBS.MethodStatementSyntax methodStmt)
+        {
+            if (methodStmt.ParameterList == null) return Array.Empty<EndpointParam>();
+            return methodStmt.ParameterList.Parameters
+                .Select(p => new EndpointParam
+                {
+                    Name = p.Identifier.Identifier.Text,
+                    Type = (p.AsClause as VBS.SimpleAsClauseSyntax)?.Type?.ToString() ?? "Object"
+                })
+                .ToArray();
         }
     }
 
