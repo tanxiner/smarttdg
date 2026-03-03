@@ -1,4 +1,5 @@
 from flask import Flask, request, jsonify, send_from_directory
+import json
 import os
 from time import sleep
 import tempfile
@@ -33,6 +34,28 @@ UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 JOB_STATUS: Dict[str, Dict[str, Any]] = {}
+
+
+def _load_pipeline_steps() -> list:
+    """Load the canonical pipeline steps from pipeline.json (single source of truth).
+
+    Returns a list of step dicts, each with at minimum 'name', 'script', and 'phase' keys.
+    Falls back to an empty list and prints a warning if the file is missing or malformed.
+    See flask/backend/pipeline.json for the authoritative definition.
+    """
+    pipeline_json = os.path.join(BASE_DIR, "pipeline.json")
+    try:
+        with open(pipeline_json, "r", encoding="utf-8") as f:
+            return json.load(f).get("steps", [])
+    except FileNotFoundError:
+        print(f"[Pipeline] WARNING: pipeline.json not found at {pipeline_json}. No downstream scripts will run.")
+        return []
+    except json.JSONDecodeError as e:
+        print(f"[Pipeline] WARNING: pipeline.json is malformed ({pipeline_json}): {e}. No downstream scripts will run.")
+        return []
+    except Exception as e:
+        print(f"[Pipeline] WARNING: Could not load pipeline.json ({pipeline_json}): {e}. No downstream scripts will run.")
+        return []
 
 def _update_job(job_id: str, **kwargs):
     st = JOB_STATUS.setdefault(job_id, {})
@@ -313,63 +336,82 @@ def analyze_zip(zip_path: str, job_id: str | None = None) -> dict:
                 if runner_stderr and job_id:
                     _update_job(job_id, analyzer_stderr=runner_stderr[:8000])
 
+            # STEPS 1.5-4: Run downstream scripts defined in the canonical pipeline.
+            # The ordered step list is loaded from pipeline.json (single source of truth).
+            # Both this web entrypoint and the Roslyn CLI entrypoint (Program.cs) read that file.
+            pipeline_steps = _load_pipeline_steps()
+            step_progress = 45
+
+            # Group steps by phase so we can preserve phase-level progress tracking and
+            # the post-splitter expected_chapters calculation.
+            _diagram_steps  = [s for s in pipeline_steps if s.get("phase") == "diagram"]
+            _splitter_steps = [s for s in pipeline_steps if s.get("phase") == "splitter"]
+            _analysis_steps = [s for s in pipeline_steps if s.get("phase") == "analysis"]
+            _compile_steps  = [s for s in pipeline_steps if s.get("phase") == "compile"]
+
             # STEP 1.5: Diagrams
             print("[Pipeline] STEP 1.5: Generating diagrams from static analysis")
-            try:
-                if job_id:
-                    _update_job(job_id, progress=45, step="generating_diagrams")
-    
-                diagrams_script = os.path.join(BASE_DIR, "services", "analyzer", "diagram_generator.py")
-                if os.path.isfile(diagrams_script):
+            if job_id:
+                _update_job(job_id, progress=step_progress, step="generating_diagrams")
+            for _step in _diagram_steps:
+                _name   = _step["name"]
+                _script = os.path.join(BASE_DIR, _step["script"].replace("/", os.sep))
+                _timeout = _step.get("timeout_seconds") or None
+                if not os.path.isfile(_script):
+                    print(f"[Pipeline] Script not found, skipping: {_script}")
+                    continue
+                try:
                     proc = subprocess.run(
-                        [sys.executable, diagrams_script],
+                        [sys.executable, _script],
                         cwd=temp_dir,
                         env=env_base,
                         capture_output=True,
                         text=True,
-                        timeout=60,
-                        encoding='utf-8', errors='replace' # Force UTF-8
+                        timeout=_timeout,
+                        encoding='utf-8', errors='replace'
                     )
                     if job_id:
                         dout = (proc.stdout or "").strip()
                         derr = (proc.stderr or "").strip()
                         _update_job(job_id, diagram_stdout=dout[:2000], diagram_stderr=derr[:2000])
-            except Exception as e:
-                print(f"[Pipeline] Diagram generation error: {e}, but continuing")
+                except Exception as e:
+                    print(f"[Pipeline] {_name} error: {e}, but continuing")
+            step_progress = 50
 
             # STEP 2: Run splitters
+            # Progress increments by 6 per step (a small fixed slice of the 50-100 range
+            # shared across splitters and analyses). This value predates pipeline.json and
+            # is kept for UI compatibility; adjust if the overall progress budget changes.
             print("[Pipeline] STEP 2: Running splitters")
-            splitters = [
-                ("ai_splitter", os.path.join(BASE_DIR, "services", "analyzer", "ai_analysis", "ai_splitter.py")),
-                ("sql_splitter", os.path.join(BASE_DIR, "services", "analyzer", "sql_analysis", "sql_splitter.py")),
-            ]
-            step_progress = 50
-            for name, script in splitters:
-                if not os.path.isfile(script):
+            for _step in _splitter_steps:
+                _name   = _step["name"]
+                _script = os.path.join(BASE_DIR, _step["script"].replace("/", os.sep))
+                if not os.path.isfile(_script):
+                    print(f"[Pipeline] Script not found, skipping: {_script}")
+                    step_progress += 6
                     continue
                 try:
                     if job_id:
-                        _update_job(job_id, progress=step_progress, step=f"running_{name}")
-                    print(f"[Pipeline] Running {name}")
+                        _update_job(job_id, progress=step_progress, step=f"running_{_name}")
+                    print(f"[Pipeline] Running {_name}")
                     proc = subprocess.run(
-                        [sys.executable, script],
+                        [sys.executable, _script],
                         cwd=temp_dir,
                         env=env_base,
                         capture_output=True,
                         text=True,
-                        #timeout=300,
-                        encoding='utf-8', errors='replace' # Force UTF-8
+                        encoding='utf-8', errors='replace'
                     )
                     if job_id:
                         out = (proc.stdout or "").strip()
                         err = (proc.stderr or "").strip()
-                        _update_job(job_id, **{f"{name}_stdout": out[:4000], f"{name}_stderr": err[:4000]})
+                        _update_job(job_id, **{f"{_name}_stdout": out[:4000], f"{_name}_stderr": err[:4000]})
                 except Exception as e:
-                    print(f"[Pipeline] {name} error: {e}, but continuing")
+                    print(f"[Pipeline] {_name} error: {e}, but continuing")
                 step_progress += 6
             print("[Pipeline] STEP 2 COMPLETE: Splitters finished")
 
-            # --- NEW: CALCULATE EXPECTED CHAPTERS HERE (POST-SPLITTER) ---
+            # --- CALCULATE EXPECTED CHAPTERS HERE (POST-SPLITTER) ---
             # We now know exactly how many prompt files exist.
             if job_id:
                 try:
@@ -381,68 +423,72 @@ def analyze_zip(zip_path: str, job_id: str | None = None) -> dict:
                         if os.path.exists(fp):
                             # Count strictly valid prompt text files
                             total_prompts += len([n for n in os.listdir(fp) if n.lower().endswith('.txt')])
-                    
+
                     print(f"[Pipeline] Splitters done. Authoritative Expected Chapters = {total_prompts}")
                     # Update status so frontend and monitor see the final count
                     _update_job(job_id, expected_chapters=total_prompts)
                 except Exception as e:
                     print(f"[Pipeline] Error counting prompts: {e}")
-            # -------------------------------------------------------------
+            # --------------------------------------------------------
 
             # STEP 3: Run analysis scripts
             print("[Pipeline] STEP 3: Running analysis scripts")
-            analyses = [
-                ("ai_analysis", os.path.join(BASE_DIR, "services", "analyzer", "ai_analysis", "ai_analysis.py")),
-                ("sql_analysis", os.path.join(BASE_DIR, "services", "analyzer", "sql_analysis", "sql_analysis.py")),
-            ]
-            for name, script in analyses:
-                if not os.path.isfile(script):
+            for _step in _analysis_steps:
+                _name   = _step["name"]
+                _script = os.path.join(BASE_DIR, _step["script"].replace("/", os.sep))
+                if not os.path.isfile(_script):
+                    print(f"[Pipeline] Script not found, skipping: {_script}")
+                    step_progress += 6
                     continue
                 try:
                     if job_id:
-                        _update_job(job_id, progress=step_progress, step=f"running_{name}")
-                    print(f"[Pipeline] Running {name}")
+                        _update_job(job_id, progress=step_progress, step=f"running_{_name}")
+                    print(f"[Pipeline] Running {_name}")
                     proc = subprocess.run(
-                        [sys.executable, script],
+                        [sys.executable, _script],
                         cwd=temp_dir,
                         env=env_base,
                         capture_output=True,
                         text=True,
-                        #timeout=300,
-                        encoding='utf-8', errors='replace' # Force UTF-8!
+                        encoding='utf-8', errors='replace'
                     )
                     if job_id:
                         out = (proc.stdout or "").strip()
                         err = (proc.stderr or "").strip()
-                        _update_job(job_id, **{f"{name}_stdout": out[:4000], f"{name}_stderr": err[:4000]})
+                        _update_job(job_id, **{f"{_name}_stdout": out[:4000], f"{_name}_stderr": err[:4000]})
                 except Exception as e:
-                    print(f"[Pipeline] {name} error: {e}, but continuing")
+                    print(f"[Pipeline] {_name} error: {e}, but continuing")
                 step_progress += 6
             print("[Pipeline] STEP 3 COMPLETE: Analysis scripts finished")
 
             # STEP 4: Run compiler
             print("[Pipeline] STEP 4: Running compiler")
-            compile_py = os.path.join(BASE_DIR, "compile.py")
-            if os.path.isfile(compile_py):
+            for _step in _compile_steps:
+                _name    = _step["name"]
+                _script  = os.path.join(BASE_DIR, _step["script"].replace("/", os.sep))
+                _timeout = _step.get("timeout_seconds") or None
+                if not os.path.isfile(_script):
+                    print(f"[Pipeline] Script not found, skipping: {_script}")
+                    continue
                 try:
                     if job_id:
-                        _update_job(job_id, progress=step_progress, step="running_compiler")
-                    print(f"[Pipeline] Running compiler")
+                        _update_job(job_id, progress=step_progress, step=f"running_{_name}")
+                    print(f"[Pipeline] Running {_name}")
                     proc = subprocess.run(
-                        [sys.executable, compile_py],
+                        [sys.executable, _script],
                         cwd=BASE_DIR,
                         env=env_base,
                         capture_output=True,
                         text=True,
-                        timeout=120,
-                        encoding='utf-8', errors='replace' # Force UTF-8!
+                        timeout=_timeout,
+                        encoding='utf-8', errors='replace'
                     )
                     if job_id:
                         cout = (proc.stdout or "").strip()
                         cerr = (proc.stderr or "").strip()
-                        _update_job(job_id, compiler_stdout=cout[:4000], compiler_stderr=cerr[:4000])
+                        _update_job(job_id, **{f"{_name}_stdout": cout[:4000], f"{_name}_stderr": cerr[:4000]})
                 except Exception as e:
-                    print(f"[Pipeline] Compiler error: {e}, but continuing")
+                    print(f"[Pipeline] {_name} error: {e}, but continuing")
 
             print("[Pipeline] ALL STEPS COMPLETE")
 
@@ -641,7 +687,7 @@ def analyze():
                     else:
                         analysis_dict["results"][0] = totals_entry
             except Exception:
-                # non-fatal — we still have analysis_result["totals"] and computedTotals for other consumers
+                # non-fatal ï¿½ we still have analysis_result["totals"] and computedTotals for other consumers
                 pass
 
         duration_ms = int((time.perf_counter() - start) * 1000)

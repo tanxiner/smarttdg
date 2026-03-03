@@ -1,0 +1,52 @@
+{
+  "_comment": "Canonical downstream-pipeline definition. This is the single source of truth for script ordering and execution. Both Roslyn/Program.cs (CLI/batch) and flask/backend/app.py (web UI) read this file. To add, remove, or reorder pipeline steps, edit only this file.",
+  "steps": [
+    {
+      "name": "diagram_generator",
+      "script": "services/analyzer/diagram_generator.py",
+      "phase": "diagram",
+      "timeout_seconds": 60
+    },
+    {
+      "name": "ai_splitter",
+      "script": "services/analyzer/ai_analysis/ai_splitter.py",
+      "phase": "splitter"
+    },
+    {
+      "name": "sql_splitter",
+      "script": "services/analyzer/sql_analysis/sql_splitter.py",
+      "phase": "splitter"
+    },
+    {
+      "name": "api_splitter",
+      "script": "services/analyzer/api_analysis/api_splitter.py",
+      "phase": "splitter"
+    },
+    {
+      "name": "merge_manifests",
+      "script": "services/analyzer/merge_manifests.py",
+      "phase": "splitter"
+    },
+    {
+      "name": "ai_analysis",
+      "script": "services/analyzer/ai_analysis/ai_analysis.py",
+      "phase": "analysis"
+    },
+    {
+      "name": "sql_analysis",
+      "script": "services/analyzer/sql_analysis/sql_analysis.py",
+      "phase": "analysis"
+    },
+    {
+      "name": "api_analysis",
+      "script": "services/analyzer/api_analysis/api_analysis.py",
+      "phase": "analysis"
+    },
+    {
+      "name": "compile",
+      "script": "compile.py",
+      "phase": "compile",
+      "timeout_seconds": 120
+    }
+  ]
+}

@@ -152,7 +152,7 @@ def analyze_code(*file_paths: str, job_id: Optional[str] = None) -> Any:
         print(f"[Warn] Failed to create arg list file: {e}. Falling back to CLI args.")
         args = list(file_paths)
 
-    # Use dotnet directly — avoid requiring a .env file via `dotenv run`
+    # Use dotnet directly ï¿½ avoid requiring a .env file via `dotenv run`
     cmd = [
         "dotnet", "run",
         "--project", analyzer_project_dir,
