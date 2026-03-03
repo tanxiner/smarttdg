@@ -1,0 +1,324 @@
+
+### SYSTEM ROLE
+You are a **Technical Writer** specializing in Legacy Web Applications.
+You are NOT a Developer. You DO NOT write code.
+
+### OBJECTIVE
+Analyze the "Code Behind" files to create a **Page Functionality Reference**.
+
+### IMPORTANT: DO NOT INFER DOMAIN
+- Do NOT infer business domain, product names, or concrete entities from filenames, base types, or project names.
+- Use only explicit evidence present in the provided IR/metadata (method names, control names, SQL table names, linked markup tokens).
+- If there is no explicit domain or entity name visible in the input, write the User Purpose exactly as:
+  This page's user purpose is Unknown (no explicit domain information in the code).
+- If you do include a purpose inferred from tokens, append the exact tokens used for the inference in parentheses, e.g. "(inferred from: baseType='SBSTransit.Common', file='RPEAS_Completed_Form.aspx.vb')".
+
+### 🛑 HARD NEGATIVE CONSTRAINTS
+1. **NO** Code blocks (C#, VB.NET, or SQL).
+2. **NO** "Installation" or "Setup" sections.
+3. **NO** explanation of standard ASP.NET concepts (e.g., don't explain what Page_Load is; explain what *this specific page* does inside it).
+4. **NO** mentions of `.designer.cs` or auto-generated controls.
+
+### ✅ STRICT OUTPUT FORMAT
+For every Page/Control found in the input, output this structure:
+
+# Page: {PageName}
+**File:** {Filename}
+
+### 1. User Purpose
+{One sentence explaining what the user does here. E.g., "Users fill out this form to request x."}
+If unknown, use the exact sentence above.
+
+### 2. Key Events & Logic
+| Event / Method | Business Logic Summary |
+| :--- | :--- |
+| {MethodName} | {Plain English description of what happens. E.g., "Validates inputs, calls DAO to save, sends email."} |
+
+### 3. Data Interactions
+* **Reads:** {List entities/tables loaded (e.g., User, BlockedTar)}
+* **Writes:** {List entities/tables saved or updated}
+
+--- 
+
+### ⬇️ RAW CODE BEHIND INPUT ⬇️
+{
+  "file": "RPEAS_All_Forms.aspx.vb",
+  "language": "VB",
+  "namespaces": [],
+  "classes": [
+    {
+      "name": "RPEAS_All_Forms",
+      "modifiers": "Partial Public",
+      "baseType": "",
+      "interfaces": [],
+      "Methods": [
+        "Page_Load",
+        "Load_Forms",
+        "btnSearch_Click",
+        "lbtStart_Click",
+        "lbtPrevious_Click",
+        "lbtEnd_Click",
+        "lbtNext_Click",
+        "setPager",
+        "gvInbox_RowDataBound",
+        "btnReset_Click"
+      ],
+      "Properties": []
+    }
+  ],
+  "methods": [
+    "Protected Page_Load(sender: Object, e: System.EventArgs): Void",
+    "Private Load_Forms(): Void",
+    "Protected btnSearch_Click(sender: Object, e: EventArgs): Void",
+    "Protected lbtStart_Click(sender: System.Object, e: System.EventArgs): Void",
+    "Protected lbtPrevious_Click(sender: System.Object, e: System.EventArgs): Void",
+    "Protected lbtEnd_Click(sender: System.Object, e: System.EventArgs): Void",
+    "Protected lbtNext_Click(sender: System.Object, e: System.EventArgs): Void",
+    "Protected setPager(): Void",
+    "Protected gvInbox_RowDataBound(sender: Object, e: GridViewRowEventArgs): Void",
+    "Protected btnReset_Click(sender: Object, e: EventArgs): Void"
+  ],
+  "ir": {
+    "file": "RPEAS_All_Forms.aspx.vb",
+    "path": "RPEAS_All_Forms.aspx.vb",
+    "namespaces": [],
+    "types": [
+      {
+        "kind": "Class",
+        "name": "RPEAS_All_Forms",
+        "namespaceName": "",
+        "modifiers": "Partial Public",
+        "baseTypes": [],
+        "methods": [
+          {
+            "name": "Page_Load",
+            "modifiers": "Protected",
+            "returnType": "Void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "Object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "System.EventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "Load_Forms",
+            "modifiers": "Private",
+            "returnType": "Void",
+            "parameters": []
+          },
+          {
+            "name": "btnSearch_Click",
+            "modifiers": "Protected",
+            "returnType": "Void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "Object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "EventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "lbtStart_Click",
+            "modifiers": "Protected",
+            "returnType": "Void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "System.Object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "System.EventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "lbtPrevious_Click",
+            "modifiers": "Protected",
+            "returnType": "Void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "System.Object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "System.EventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "lbtEnd_Click",
+            "modifiers": "Protected",
+            "returnType": "Void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "System.Object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "System.EventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "lbtNext_Click",
+            "modifiers": "Protected",
+            "returnType": "Void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "System.Object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "System.EventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "setPager",
+            "modifiers": "Protected",
+            "returnType": "Void",
+            "parameters": []
+          },
+          {
+            "name": "gvInbox_RowDataBound",
+            "modifiers": "Protected",
+            "returnType": "Void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "Object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "GridViewRowEventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "btnReset_Click",
+            "modifiers": "Protected",
+            "returnType": "Void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "Object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "EventArgs",
+                "defaultValue": null
+              }
+            ]
+          }
+        ],
+        "properties": [],
+        "fields": [
+          {
+            "name": "DAL",
+            "modifiers": "Dim",
+            "type": "Object"
+          },
+          {
+            "name": "DAL_Error",
+            "modifiers": "Dim",
+            "type": "Object"
+          },
+          {
+            "name": "errormsg",
+            "modifiers": "Dim",
+            "type": "String"
+          },
+          {
+            "name": "dtformat",
+            "modifiers": "Dim",
+            "type": "Object"
+          }
+        ],
+        "sql": []
+      }
+    ]
+  },
+  "sql_usages": [],
+  "_matched_markup": {
+    "file": "RPEAS_All_Forms.aspx",
+    "path": "RPEAS(Xin Er)\\RPEAS(Xin Er)\\RPEAS_All_Forms.aspx",
+    "directives": [
+      {
+        "text": "<%@ Page Language=\"vb\" AutoEventWireup=\"false\" CodeBehind=\"RPEAS_All_Forms.aspx.vb\"\r\n    Inherits=\"RPEAS.RPEAS_All_Forms\" %>",
+        "content": "Page Language=\"vb\" AutoEventWireup=\"false\" CodeBehind=\"RPEAS_All_Forms.aspx.vb\"\r\n    Inherits=\"RPEAS.RPEAS_All_Forms\""
+      }
+    ],
+    "scriptBlocks": [
+      {
+        "tag": "script",
+        "attributes": "type=\"text/javascript\" src=\"jsDatePick_Other.js\"",
+        "attributes_parsed": {
+          "type": "\"text/javascript\"",
+          "src": "\"jsDatePick_Other.js\""
+        },
+        "src": "\"jsDatePick_Other.js\"",
+        "src_file": "jsDatePick_Other.js",
+        "content": ""
+      },
+      {
+        "tag": "script",
+        "attributes": "type=\"text/javascript\"",
+        "attributes_parsed": {
+          "type": "\"text/javascript\""
+        },
+        "src": null,
+        "src_file": null,
+        "content": "\r\n\twindow.onload = function(){\r\n\t\tnew JsDatePick({\r\n\t\t\tuseMode:2,\r\n\t\t\ttarget:\"txtSFrom\",\r\n\t\t\tcellColorScheme:\"aqua\",\r\n\t\t\tdateFormat:\"%d/%m/%Y\"\r\n\t\t});\r\n\t\tnew JsDatePick({\r\n\t\t\tuseMode:2,\r\n\t\t\ttarget:\"txtSTo\",\r\n\t\t\tcellColorScheme:\"aqua\",\r\n\t\t\tdateFormat:\"%d/%m/%Y\"\r\n\t\t});\r\n\t};\r\n    "
+      }
+    ],
+    "linkedClientFiles": [
+      "jsDatePick_Other.js"
+    ],
+    "linkedFilesDetailed": [
+      {
+        "file": "jsDatePick_Other.js",
+        "path": "RPEAS(Xin Er)\\RPEAS(Xin Er)\\jsDatePick_Other.js",
+        "language": "",
+        "client_js_summary": {
+          "summary": "0 url_candidates; 0 API patterns",
+          "facts": {
+            "api_calls": [],
+            "url_candidates": []
+          }
+        }
+      }
+    ]
+  }
+}
+
+
+### ⬆️ END OF INPUT ⬆️
+**INSTRUCTION:** Document the page logic above. Focus on User Actions and Data Flow.

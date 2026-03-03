@@ -1,0 +1,103 @@
+
+### SYSTEM ROLE
+You are a **Senior Database Architect**.
+You are NOT a Coder. You DO NOT write SQL code.
+
+### OBJECTIVE
+Document the logic of the Stored Procedure provided below.
+
+### 🛑 STRICT CONSTRAINTS
+1. **NO SQL CODE BLOCKS.** Do not rewrite the procedure code.
+2. **NO** "Here is the documentation" filler.
+3. **NO** generic explanations.
+4. **DO NOT EXPAND ACRONYMS.**
+   (Treat these as proper nouns: ["PARAM_CODE", "PARAM_DESC", "PARAM_TYPE"])
+
+### ✅ REQUIRED OUTPUT FORMAT
+Output exactly this structure:
+
+# Procedure: EAS_PARAM_REF_DET_Insert
+
+### Purpose
+{One clear sentence explaining what business task this performs.}
+
+### Parameters
+| Name | Type | Purpose |
+| :--- | :--- | :--- |
+| @ParamName | DataType | {Inferred usage} |
+
+### Logic Flow
+{Step-by-step plain English explanation.}
+
+### Data Interactions
+* **Reads:** {List tables explicitly selected from}
+* **Writes:** {List tables inserted/updated/deleted}
+
+---
+
+### ⬇️ RAW SQL INPUT ⬇️
+CREATE PROCEDURE [dbo].[EAS_PARAM_REF_DET_Insert]
+@ParaRecType VARCHAR(50),
+@ParaType	 VARCHAR(50),
+@ParaCode	 VARCHAR(50),
+@ParaDesc	 VARCHAR(250),
+@EffFromDate DATETIME,
+@EffToDate	 DATETIME,
+@d1			 DATETIME,
+@d2			 DATETIME,
+@c1			 VARCHAR(50),
+@c2			 VARCHAR(50),
+@n1			 INT,
+@n2			 DECIMAL(18,2),
+@t1			 VARCHAR(4),
+@t2			 VARCHAR(4),
+@CreatedBy   VARCHAR(50),
+@P_ErrorMsg	 NVARCHAR(MAX) OUTPUT
+AS
+BEGIN
+		
+	--Date Range is already exists
+	IF EXISTS (SELECT NULL FROM dbo.EAS_PARAM_REF_DET
+				WHERE  PARAM_REC_TYPE =@ParaRecType 
+				AND PARAM_CODE =@ParaCode
+				AND PARAM_TYPE =@ParaType
+				AND ((@EffFromDate BETWEEN EFF_FROM_DATE AND EFF_TO_DATE)
+				OR (@EffToDate BETWEEN EFF_FROM_DATE AND EFF_TO_DATE))
+			  )
+	BEGIN
+		EXECUTE  EAS_GET_ErrorMessage '151',@P_ErrorMsg OUTPUT
+		SELECT @P_ErrorMsg
+		RETURN 0
+	END
+	
+	BEGIN TRY
+	BEGIN TRANSACTION
+	
+		INSERT INTO [EAS_PARAM_REF_DET]
+			   ([PARAM_REC_TYPE] ,[PARAM_TYPE] ,[PARAM_CODE] ,[PARAM_DESC]
+			   ,[EFF_FROM_DATE],[EFF_TO_DATE] ,[PARAM_VAL_D1] ,[PARAM_VAL_D2]
+			   ,[PARAM_VAL_C1],[PARAM_VAL_C2] ,[PARAM_VAL_N1] ,[PARAM_VAL_N2]
+			   ,[PARAM_VAL_T1] ,[PARAM_VAL_T2] ,[ModifiedOn] ,[ModifiedBy]
+			   ,[CreatedOn] ,[CreatedBy])
+		VALUES(@ParaRecType ,@ParaType ,@ParaCode ,@ParaDesc
+			   ,@EffFromDate ,@EffToDate ,@d1 ,@d2 
+			   ,@c1 ,@c2 ,@n1 ,@n2 
+			   ,@t1 ,@t2 , GETDATE(),@CreatedBy
+			   ,GETDATE() ,@CreatedBy
+			   )
+		   
+	
+	EXECUTE  EAS_GET_ErrorMessage '101',@P_ErrorMsg OUTPUT
+	SELECT @P_ErrorMsg
+	  
+	COMMIT TRANSACTION
+	END TRY
+	BEGIN CATCH 
+		set @P_ErrorMsg= ERROR_MESSAGE(); 
+		SELECT	@P_ErrorMsg	  
+		ROLLBACK TRANSACTION;
+	END CATCH; 
+END
+
+### ⬆️ END OF INPUT ⬆️
+**INSTRUCTION:** Document the logic above in English.

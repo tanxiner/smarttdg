@@ -1,0 +1,90 @@
+
+### SYSTEM ROLE
+You are a **Senior Database Architect**.
+You are NOT a Coder. You DO NOT write SQL code.
+
+### OBJECTIVE
+Document the logic of the Stored Procedure provided below.
+
+### 🛑 STRICT CONSTRAINTS
+1. **NO SQL CODE BLOCKS.** Do not rewrite the procedure code.
+2. **NO** "Here is the documentation" filler.
+3. **NO** generic explanations.
+4. **DO NOT EXPAND ACRONYMS.**
+   (Treat these as proper nouns: ["IT_ADMIN"])
+
+### ✅ REQUIRED OUTPUT FORMAT
+Output exactly this structure:
+
+# Procedure: EAS_Admin_GET_Roles
+
+### Purpose
+{One clear sentence explaining what business task this performs.}
+
+### Parameters
+| Name | Type | Purpose |
+| :--- | :--- | :--- |
+| @ParamName | DataType | {Inferred usage} |
+
+### Logic Flow
+{Step-by-step plain English explanation.}
+
+### Data Interactions
+* **Reads:** {List tables explicitly selected from}
+* **Writes:** {List tables inserted/updated/deleted}
+
+---
+
+### ⬇️ RAW SQL INPUT ⬇️
+CREATE PROCEDURE [dbo].[EAS_Admin_GET_Roles]  
+(  
+ @RoleCode  VARCHAR(50)  = NULL   
+ ,@RoleDesc VARCHAR(250) = NULL  
+ ,@Active SMALLINT  = NULL  ,
+ @LoginID	varchar(10)
+)  
+------------------------------------------------------------------------------------------  
+-- Procedure Name	: EAS_Admin_GET_Roles   
+-- Date Created		: 31/01/2016
+-- Purpose			: To Search Roles  
+--  
+-- Version    Date                          Changes  
+-- ----------------------------------------------------------------------------------------  
+-- 1.0      31/01/2016		 			Initial version  
+-------------------------------------------------------------------------------------------  
+AS  
+BEGIN  
+  
+  if (select COUNT(*)
+	from EAS_User_Role
+	where upper(UserID)=upper(@LoginID)
+	and Role='IT_ADMIN'
+)>0
+BEGIN
+Select Role, RoleDesc , Active,CASE Active WHEN 1 THEN 'True' ELSE 'False' END [_Active],  
+ CreatedOn, CreatedBY,UpdatedON,UpdatedBY 
+ from EAS_Role   
+ WHERE  
+  (Role =@RoleCode  or @RoleCode IS NULL)  
+  AND (RoleDesc  LIKE '%' + @RoleDesc  + '%' OR @RoleDesc IS NULL)  
+  AND (Active = @Active OR @Active IS NULL)  
+ ORDER BY CreatedOn Desc   
+ 
+END  
+ELSE
+BEGIN
+	Select Role, RoleDesc , Active,CASE Active WHEN 1 THEN 'True' ELSE 'False' END [_Active],  
+ CreatedOn, CreatedBY,UpdatedON,UpdatedBY 
+ from EAS_Role   
+ WHERE  
+  (Role =@RoleCode  or @RoleCode IS NULL)  
+  AND (RoleDesc  LIKE '%' + @RoleDesc  + '%' OR @RoleDesc IS NULL)  
+  AND (Active = @Active OR @Active IS NULL)  
+  and  Role <> 'IT_ADMIN'
+ ORDER BY CreatedOn Desc  
+END
+ 
+END
+
+### ⬆️ END OF INPUT ⬆️
+**INSTRUCTION:** Document the logic above in English.

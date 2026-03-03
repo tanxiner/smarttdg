@@ -1,10 +1,34 @@
 ﻿import os
 import re
-import chardet 
+import chardet
+import shutil
+import json
+from pathlib import Path
 
 # --- CONFIGURATION ---
-INPUT_SQL_FILE = os.path.join(os.path.expanduser("~"), "Documents", "script.sql") 
-OUTPUT_DIR = 'SQL_Documentation_Prompts'
+# (no Documents fallback used anymore)
+INPUT_SQL_FILES = []
+
+# Centralized prompts output (so monitor can see SQL prompts)
+SCRIPT_DIR = os.path.abspath(os.path.dirname(__file__))  # flask/backend/services/analyzer/sql_analysis
+BACKEND_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "..", ".."))  # flask/backend
+PROMPTS_OUTPUT_BASE = os.path.join(BACKEND_DIR, "prompts_output")
+OUTPUT_FOLDER = os.path.join(PROMPTS_OUTPUT_BASE, "SQL_Documentation_Prompts")
+
+# Allow explicit SQL file(s) passed by app.py
+# Updated to support multiple files separated by ;
+sql_env = os.environ.get("ANALYZER_SQL_FILE")
+if sql_env:
+    # If it contains semicolons, split it. Otherwise treat as single path.
+    if ";" in sql_env:
+        candidates = sql_env.split(";")
+    else:
+        candidates = [sql_env]
+    
+    for c in candidates:
+        c = c.strip()
+        if c and os.path.isfile(c):
+            INPUT_SQL_FILES.append(c)
 
 # --- TEMPLATE ---
 TEMPLATE = """
@@ -46,7 +70,6 @@ Output exactly this structure:
 
 ### ⬇️ RAW SQL INPUT ⬇️
 {code_chunk}
-
 ### ⬆️ END OF INPUT ⬆️
 **INSTRUCTION:** Document the logic above in English.
 """
@@ -62,87 +85,54 @@ def detect_encoding(file_path):
         return 'latin-1'
 
 def get_dynamic_acronyms(text):
-    """Scans for UPPERCASE words to protect them from expansion."""
     exclude = {
-        # Standard SQL Commands & Keywords
-        "ADD", "ALL", "ALTER", "AND", "ANY", "AS", "ASC", "BACKUP", "BEGIN", "BETWEEN", "BREAK", "BULK", "BY", 
-        "CASE", "CATCH", "CHECK", "CHECKPOINT", "CLOSE", "COALESCE", "COLUMN", "COMMIT", "COMPUTE", "CONSTRAINT", "CONTAINS", 
-        "CONTINUE", "CONVERT", "CREATE", "CROSS", "CURRENT", "CURSOR", "DATABASE", "DBCC", "DEALLOCATE", "DECLARE", 
-        "DEFAULT", "DELETE", "DENY", "DESC", "DISTINCT", "DISTRIBUTED", "DOUBLE", "DROP", "ELSE", "END", "ERRLVL", 
-        "ESCAPE", "EXCEPT", "EXEC", "EXECUTE", "EXISTS", "EXIT", "FETCH", "FILE", "FILLFACTOR", "FOR", "FOREIGN", 
-        "FREETEXT", "FROM", "FULL", "FUNCTION", "GOTO", "GRANT", "GROUP", "HAVING", "HOLDLOCK", "IDENTITY", 
-        "IDENTITY_INSERT", "IDENTITYCOL", "IF", "IN", "INDEX", "INNER", "INSERT", "INTERSECT", "INTO", "IS", "JOIN", 
-        "KEY", "KILL", "LEFT", "LIKE", "LINENO", "LOAD", "MERGE", "NATIONAL", "NOCHECK", "NONCLUSTERED", "NOT", "NULL", 
-        "NULLIF", "OF", "OFF", "OFFSETS", "ON", "OPEN", "OPENDATASOURCE", "OPENQUERY", "OPENROWSET", "OPENXML", "OPTION", 
-        "OR", "ORDER", "OUTER", "OVER", "PERCENT", "PIVOT", "PLAN", "PRIMARY", "PRINT", "PROC", "PROCEDURE", "PUBLIC", 
-        "RAISERROR", "READ", "READTEXT", "RECONFIGURE", "REFERENCES", "REPLICATION", "RESTORE", "RESTRICT", "RETURN", 
-        "REVERT", "REVOKE", "RIGHT", "ROLLBACK", "ROWCOUNT", "ROWGUIDCOL", "RULE", "SAVE", "SCHEMA", "SELECT", "SET", 
-        "SETUSER", "SHUTDOWN", "SOME", "STATISTICS", "SYS", "TABLE", "TEXTSIZE", "THEN", "TO", "TOP", "TRAN", "TRANSACTION", 
-        "TRIGGER", "TRUNCATE", "TRY", "TSEQUAL", "TYPE", "UNION", "UNIQUE", "UNPIVOT", "UPDATE", "UPDATETEXT", "USE", "USER", "VALUES", 
-        "VARYING", "VIEW", "WAITFOR", "WHEN", "WHERE", "WHILE", "WITH", "WRITETEXT", "XML",
-        
-        # Security & Context (Added OWNER, CALLER, SELF)
-        "OWNER", "CALLER", "SELF", "GUEST", "MASTER",
-        
-        # Transaction Isolation Levels
-        "ISOLATION", "LEVEL", "UNCOMMITTED", "COMMITTED", "REPEATABLE", "SERIALIZABLE", "SNAPSHOT",
-        
-        # String/Math/System Functions
-        "LTRIM", "RTRIM", "TRIM", "UPPER", "LOWER", "LEN", "REPLACE", "SUBSTRING", "CHARINDEX", "LEFT", "RIGHT",
-        "PATINDEX", "TEXTPTR", "DATALENGTH", "REPLICATE", "SPACE", "STR", "STUFF", "SPLIT",
-        "MIN", "MAX", "SUM", "AVG", "COUNT", "ABS", "ROUND", "CEILING", "FLOOR",
-        
-        # Date & Time 
-        "YEAR", "MONTH", "DAY", "DATEPART", "DATEDIFF", "DATEADD", "ISDATE",
-        
-        # Window Functions & Ranking
-        "DENSE_RANK", "RANK", "ROW_NUMBER", "NTILE", "PARTITION",
-        
-        # Cursor & Flow
-        "NEXT", "PRIOR", "FIRST", "LAST", "ABSOLUTE", "RELATIVE",
-        
-        # Data Types & Modifiers
-        "INT", "INTEGER", "VARCHAR", "NVARCHAR", "CHAR", "NCHAR", "DATE", "DATETIME", "BIT", "DECIMAL", "NUMERIC", "FLOAT", "REAL",
-        "MONEY", "SMALLINT", "TINYINT", "BIGINT", "OUTPUT", 
-        
-        # System Globals, Error Handling & Common Vars
-        "ISNULL", "GETDATE", "OBJECT_ID", "NOCOUNT", "XACT_ABORT", "ANSI_NULLS", "QUOTED_IDENTIFIER", "SYSNAME", "CAST", 
-        "COALESCE", "TRANCOUNT", "ERROR", "TRAP_ERROR", "SPID", "ERROR_MESSAGE", "ERROR_STATE", "ERROR_SEVERITY",
-        "RES", "PATH"
+        "ADD","ALL","ALTER","AND","ANY","AS","ASC","BEGIN","CASE","CONVERT","CREATE","DATABASE",
+        "DECLARE","DELETE","DROP","END","EXEC","EXISTS","FETCH","FOR","FROM","FUNCTION","GROUP",
+        "HAVING","IF","IN","INSERT","INNER","JOIN","LEFT","LIKE","ORDER","OUTER","PRIMARY",
+        "SELECT","SET","TABLE","UPDATE","WHERE","PROCEDURE","PROC","TRIGGER","RETURN","TRANSACTION"
     }
-    candidates = re.findall(r'\b[A-Z0-9_]{2,10}\b', text)
+    candidates = re.findall(r'\b[A-Z0-9_]{2,12}\b', text)
     unique = sorted(list(set([w for w in candidates if not w.isdigit() and w not in exclude])))
     return ", ".join(f'"{a}"' for a in unique)
 
 def extract_proc_name(proc_sql):
-    pattern = r'CREATE\s+(?:OR\s+ALTER\s+)?(?:PROC|PROCEDURE)\s+(?:\[?\w+\]?\.?)?\[?([a-zA-Z0-9_]+)\]?'
+    pattern = (
+        r'(?:CREATE|ALTER)\s+'
+        r'(?:OR\s+ALTER\s+)?'
+        r'(?:PROC|PROCEDURE)\s+'
+        r'(?:\[?\w+\]?\.?)?'
+        r'\[?([a-zA-Z0-9_]+)\]?'
+    )
     match = re.search(pattern, proc_sql, re.IGNORECASE)
     if match:
         return match.group(1)
+    # Fallback: try to find filename hint if present in comments? No, just unknown.
     return "Unknown_Proc"
 
 def sanitize_filename(name):
-    """Removes illegal characters from filenames."""
     return re.sub(r'[\\/*?:"<>|]', "", name)
 
-# --- READING LOGIC (YOUR CUSTOM CODE) ---
+# --- READING LOGIC ---
 
-def read_procedures(file_path):
+def read_procedures(file_path: str):
     print(f"Reading {file_path}...")
     encoding = detect_encoding(file_path)
-    
-    with open(file_path, "r", encoding=encoding, errors="replace") as f:
-        lines = f.readlines()
+    try:
+        with open(file_path, "r", encoding=encoding, errors="replace") as f:
+            lines = f.readlines()
+    except Exception as ex:
+        print(f"Error reading {file_path}: {ex}")
+        return []
 
     procedures = []
     current_proc = []
     in_proc = False
 
     for line in lines:
-        if re.match(r'(?i)^\s*CREATE\s+(?:OR\s+ALTER\s+)?(?:PROC|PROCEDURE)\b', line):
-            if in_proc: 
+        # Simple regex to detect CREATE PROCEDURE start
+        if re.match(r'(?i)^\s*(?:CREATE\s+(?:OR\s+ALTER\s+)?|ALTER\s+)(?:PROC|PROCEDURE)\s+', line):
+            if in_proc and current_proc:
                 procedures.append(''.join(current_proc).strip())
-            
             in_proc = True
             current_proc = [line]
             continue
@@ -163,43 +153,106 @@ def read_procedures(file_path):
 # --- MAIN EXECUTION ---
 
 def main():
-    if not os.path.exists(INPUT_SQL_FILE):
-        print(f"Error: '{INPUT_SQL_FILE}' not found.")
+    analyzer_temp = os.environ.get("ANALYZER_TEMP_DIR") or os.environ.get("ANALYZER_WORK_DIR")
+    job_id = os.environ.get("ANALYZER_JOB_ID") or os.environ.get("JOB_ID")
+
+    # If env didn't give us valid files (INPUT_SQL_FILES is empty), fallback to scanning temp dir
+    if not INPUT_SQL_FILES and analyzer_temp and os.path.isdir(analyzer_temp):
+        print(f"Scanning ANALYZER_TEMP_DIR for .sql files: {analyzer_temp}")
+        for p in Path(analyzer_temp).rglob("*.sql"):
+            INPUT_SQL_FILES.append(str(p))
+
+    # If still no SQL source found: write an empty manifest so monitor knows SQL contributed 0.
+    if not INPUT_SQL_FILES:
+        print("No SQL source detected. Skipping sql_splitter.")
+        if job_id:
+            try:
+                os.makedirs(PROMPTS_OUTPUT_BASE, exist_ok=True)
+                manifest = {"job_id": job_id, "expected": 0, "files": []}
+                manifest_path = os.path.join(PROMPTS_OUTPUT_BASE, f"manifest_sql_{job_id}.json")
+                with open(manifest_path, "w", encoding="utf-8") as mf:
+                    json.dump(manifest, mf, indent=2)
+                print(f"Wrote empty SQL manifest (expected=0): {manifest_path}")
+            except Exception as e:
+                print(f"Error writing empty manifest: {e}")
         return
 
-    if not os.path.exists(OUTPUT_DIR): os.makedirs(OUTPUT_DIR)
+    # Ensure centralized output folder
+    # Only wipe if it exists and we haven't already processed (conceptually unsafe to wipe if running in parallel, but here ok)
+    # Actually, we should wipe once.
+    if os.path.exists(OUTPUT_FOLDER):
+        print(f"Wiping existing folder: {OUTPUT_FOLDER}")
+        try:
+            shutil.rmtree(OUTPUT_FOLDER)
+        except OSError as e:
+            print(f"Error removing {OUTPUT_FOLDER}: {e}")
+            return
+    os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 
-    # 1. Read procedures
-    procs = read_procedures(INPUT_SQL_FILE)
-    print(f"Found {len(procs)} valid stored procedures.")
+    all_procs = []
+    print(f"Processing {len(INPUT_SQL_FILES)} SQL file(s)...")
+    
+    for sql_path in INPUT_SQL_FILES:
+        file_procs = read_procedures(sql_path)
+        print(f"  > Found {len(file_procs)} procedures in {os.path.basename(sql_path)}")
+        all_procs.extend(file_procs)
 
-    if not procs:
-        print("No procedures found.")
+    print(f"Total found: {len(all_procs)} stored procedures.")
+
+    if not all_procs:
+        print("No procedures found across all files.")
+        if job_id:
+            try:
+                os.makedirs(PROMPTS_OUTPUT_BASE, exist_ok=True)
+                manifest = {"job_id": job_id, "expected": 0, "files": []}
+                manifest_path = os.path.join(PROMPTS_OUTPUT_BASE, f"manifest_sql_{job_id}.json")
+                with open(manifest_path, "w", encoding="utf-8") as mf:
+                    json.dump(manifest, mf, indent=2)
+                print(f"Wrote empty SQL manifest (expected=0): {manifest_path}")
+            except Exception as e:
+                print(f"Error writing empty manifest: {e}")
         return
 
-    # 2. Iterate and Save INDIVIDUALLY
-    for i, proc_code in enumerate(procs):
-        
-        # Get metadata
+    created_files = []
+    total_created = 0
+
+    for i, proc_code in enumerate(all_procs, start=1):
         proc_name = extract_proc_name(proc_code)
+        if proc_name == "Unknown_Proc":
+            proc_name = f"Unknown_Proc_{i}"
+            
         acronyms = get_dynamic_acronyms(proc_code)
-        
-        # Create Filename: 001_ProcedureName.txt
         safe_name = sanitize_filename(proc_name)
-        fname = f"{i+1:03d}_{safe_name}.txt"
+        # Ensure filenames are unique (collision might happen if same proc name in different files, but i helps)
+        fname = f"{i:03d}_{safe_name}.txt"
         
-        # Create Content
         final_content = TEMPLATE.replace("{ProcedureName}", proc_name) \
                                 .replace("{ACRONYM_LIST}", acronyms) \
                                 .replace("{code_chunk}", proc_code)
-        
-        # Write File
-        with open(os.path.join(OUTPUT_DIR, fname), 'w', encoding='utf-8') as f:
+        out_path = os.path.join(OUTPUT_FOLDER, fname)
+        with open(out_path, 'w', encoding='utf-8') as f:
             f.write(final_content)
-        
-        print(f"Saved: {fname}")
+        created_files.append(out_path)
+        total_created += 1
+        print(f"Saved: {out_path}")
 
-    print(f"✅ Success! Created {len(procs)} separate files in '{OUTPUT_DIR}'.")
+    # Write per-job manifest into prompts_output so monitor can use it
+    try:
+        if job_id:
+            os.makedirs(PROMPTS_OUTPUT_BASE, exist_ok=True)
+            manifest = {
+                "job_id": job_id,
+                "expected": total_created,
+                "files": [os.path.relpath(p, PROMPTS_OUTPUT_BASE).replace("\\", "/") for p in created_files]
+            }
+            manifest_path = os.path.join(PROMPTS_OUTPUT_BASE, f"manifest_sql_{job_id}.json")
+            with open(manifest_path, "w", encoding="utf-8") as mf:
+                json.dump(manifest, mf, indent=2)
+            print(f"Wrote SQL manifest: {manifest_path} (expected={manifest['expected']})")
+    except Exception as e:
+        print(f"Error writing manifest: {e}")
+
+    print(f"✅ Success! Created {total_created} SQL prompt files in '{OUTPUT_FOLDER}'.")
 
 if __name__ == "__main__":
     main()

@@ -203,9 +203,7 @@ namespace Roslyn.Analyzers
             };
         }
 
-        // Add this helper near the bottom of the file (inside the CSharpAnalyzer class)
         // It builds a simple, compact IR for the file's types/members and SQL usages.
-
         private static object BuildIR(CSS.CompilationUnitSyntax root, SemanticModel model, Compilation compilation, List<SqlCommandExtractor.SqlUsage> sqlUsages, string filePath)
         {
             string Modifiers(SyntaxTokenList mods) => string.Join(" ", mods.Select(m => m.Text)).Trim();
@@ -283,7 +281,7 @@ namespace Roslyn.Analyzers
                         methods,
                         properties,
                         fields,
-                        sql = sqlForType
+                        //sql = sqlForType
                     };
                 })
                 .ToArray();
@@ -308,9 +306,9 @@ namespace Roslyn.Analyzers
                 path = filePath,
                 namespaces = root.DescendantNodes().OfType<CSS.BaseNamespaceDeclarationSyntax>()
                                  .Select(n => n.Name?.ToString()).Where(s => !string.IsNullOrWhiteSpace(s)).Distinct().ToArray(),
-                usings = root.Usings.Select(u => u.Name?.ToString()).Where(s => !string.IsNullOrWhiteSpace(s)).Distinct().ToArray(),
+                //usings = root.Usings.Select(u => u.Name?.ToString()).Where(s => !string.IsNullOrWhiteSpace(s)).Distinct().ToArray(),
                 types,
-                file_level_sql = fileLevelSql
+                //file_level_sql = fileLevelSql
             };
 
             return ir;

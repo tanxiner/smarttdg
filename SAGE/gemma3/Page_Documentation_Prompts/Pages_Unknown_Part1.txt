@@ -1,0 +1,401 @@
+
+### SYSTEM ROLE
+You are a **Technical Writer** specializing in Legacy Web Applications.
+You are NOT a Developer. You DO NOT write code.
+
+### OBJECTIVE
+Analyze the "Code Behind" files to create a **Page Functionality Reference**.
+
+### IMPORTANT: DO NOT INFER DOMAIN
+- Do NOT infer business domain, product names, or concrete entities from filenames, base types, or project names.
+- Use only explicit evidence present in the provided IR/metadata (method names, control names, SQL table names, linked markup tokens).
+- If there is no explicit domain or entity name visible in the input, write the User Purpose exactly as:
+  This page's user purpose is Unknown (no explicit domain information in the code).
+- If you do include a purpose inferred from tokens, append the exact tokens used for the inference in parentheses, e.g. "(inferred from: baseType='SBSTransit.Common', file='RPEAS_Completed_Form.aspx.vb')".
+
+### 🛑 HARD NEGATIVE CONSTRAINTS
+1. **NO** Code blocks (C#, VB.NET, or SQL).
+2. **NO** "Installation" or "Setup" sections.
+3. **NO** explanation of standard ASP.NET concepts (e.g., don't explain what Page_Load is; explain what *this specific page* does inside it).
+4. **NO** mentions of `.designer.cs` or auto-generated controls.
+
+### ✅ STRICT OUTPUT FORMAT
+For every Page/Control found in the input, output this structure:
+
+# Page: {PageName}
+**File:** {Filename}
+
+### 1. User Purpose
+{One sentence explaining what the user does here. E.g., "Users fill out this form to request x."}
+If unknown, use the exact sentence above.
+
+### 2. Key Events & Logic
+| Event / Method | Business Logic Summary |
+| :--- | :--- |
+| {MethodName} | {Plain English description of what happens. E.g., "Validates inputs, calls DAO to save, sends email."} |
+
+### 3. Data Interactions
+* **Reads:** {List entities/tables loaded (e.g., User, BlockedTar)}
+* **Writes:** {List entities/tables saved or updated}
+
+--- 
+
+### ⬇️ RAW CODE BEHIND INPUT ⬇️
+{
+  "file": "AssemblyInfo.vb",
+  "language": "VB",
+  "namespaces": [],
+  "classes": [],
+  "methods": [],
+  "ir": {
+    "file": "AssemblyInfo.vb",
+    "path": "SAGE_API_SCS\\SAGE_API\\My Project\\AssemblyInfo.vb",
+    "namespaces": [],
+    "types": []
+  },
+  "sql_usages": []
+}
+{
+  "file": "Common.vb",
+  "language": "VB",
+  "namespaces": [],
+  "classes": [
+    {
+      "name": "Common",
+      "modifiers": "Public",
+      "baseType": null,
+      "interfaces": [],
+      "Methods": [
+        "getConnection1",
+        "getConnection2",
+        "getConnection3",
+        "getConnection4",
+        "Get_BC_Service_Info"
+      ],
+      "Properties": []
+    },
+    {
+      "name": "Bus_info",
+      "modifiers": "",
+      "baseType": null,
+      "interfaces": [],
+      "Methods": [],
+      "Properties": []
+    }
+  ],
+  "methods": [
+    "Private getConnection1(): SqlConnection",
+    "Private getConnection2(): SqlConnection",
+    "Private getConnection3(): SqlConnection",
+    "Private getConnection4(): SqlConnection",
+    "Public Get_BC_Service_Info(data_str: String): String"
+  ],
+  "ir": {
+    "file": "Common.vb",
+    "path": "SAGE_API_SCS\\SAGE_API\\Common.vb",
+    "namespaces": [],
+    "types": [
+      {
+        "kind": "Class",
+        "name": "Common",
+        "namespaceName": "",
+        "modifiers": "Public",
+        "baseTypes": [],
+        "methods": [
+          {
+            "name": "getConnection1",
+            "modifiers": "Private",
+            "returnType": "SqlConnection",
+            "parameters": []
+          },
+          {
+            "name": "getConnection2",
+            "modifiers": "Private",
+            "returnType": "SqlConnection",
+            "parameters": []
+          },
+          {
+            "name": "getConnection3",
+            "modifiers": "Private",
+            "returnType": "SqlConnection",
+            "parameters": []
+          },
+          {
+            "name": "getConnection4",
+            "modifiers": "Private",
+            "returnType": "SqlConnection",
+            "parameters": []
+          },
+          {
+            "name": "Get_BC_Service_Info",
+            "modifiers": "Public",
+            "returnType": "String",
+            "parameters": [
+              {
+                "name": "data_str",
+                "type": "String",
+                "defaultValue": null
+              }
+            ]
+          }
+        ],
+        "properties": [],
+        "fields": [],
+        "sql": []
+      },
+      {
+        "kind": "Class",
+        "name": "Bus_info",
+        "namespaceName": "",
+        "modifiers": "",
+        "baseTypes": [],
+        "methods": [],
+        "properties": [],
+        "fields": [
+          {
+            "name": "Bus_No",
+            "modifiers": "Public",
+            "type": "String"
+          },
+          {
+            "name": "Timestamp",
+            "modifiers": "Public",
+            "type": "String"
+          }
+        ],
+        "sql": []
+      }
+    ]
+  },
+  "sql_usages": []
+}
+{
+  "file": "Constants.vb",
+  "language": "VB",
+  "namespaces": [],
+  "classes": [
+    {
+      "name": "Constants",
+      "modifiers": "Public",
+      "baseType": null,
+      "interfaces": [],
+      "Methods": [],
+      "Properties": []
+    }
+  ],
+  "methods": [],
+  "ir": {
+    "file": "Constants.vb",
+    "path": "SAGE_API_SCS\\SAGE_API\\Constants.vb",
+    "namespaces": [],
+    "types": [
+      {
+        "kind": "Class",
+        "name": "Constants",
+        "namespaceName": "",
+        "modifiers": "Public",
+        "baseTypes": [],
+        "methods": [],
+        "properties": [],
+        "fields": [
+          {
+            "name": "SCRIPT_ALERT_MESSAGE",
+            "modifiers": "Public Const",
+            "type": "String"
+          }
+        ],
+        "sql": []
+      }
+    ]
+  },
+  "sql_usages": []
+}
+{
+  "file": "GetServiceDriver.aspx.vb",
+  "language": "VB",
+  "namespaces": [],
+  "classes": [
+    {
+      "name": "GetServiceDriver",
+      "modifiers": "Public",
+      "baseType": "System.Web.UI.Page",
+      "interfaces": [],
+      "Methods": [
+        "Page_Load"
+      ],
+      "Properties": []
+    }
+  ],
+  "methods": [
+    "Protected Page_Load(sender: Object, e: System.EventArgs): Void"
+  ],
+  "ir": {
+    "file": "GetServiceDriver.aspx.vb",
+    "path": "SAGE_API_SCS\\SAGE_API\\GetServiceDriver.aspx.vb",
+    "namespaces": [],
+    "types": [
+      {
+        "kind": "Class",
+        "name": "GetServiceDriver",
+        "namespaceName": "",
+        "modifiers": "Public",
+        "baseTypes": [
+          "System.Web.UI.Page"
+        ],
+        "methods": [
+          {
+            "name": "Page_Load",
+            "modifiers": "Protected",
+            "returnType": "Void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "Object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "System.EventArgs",
+                "defaultValue": null
+              }
+            ]
+          }
+        ],
+        "properties": [],
+        "fields": [],
+        "sql": []
+      }
+    ]
+  },
+  "sql_usages": [],
+  "_matched_markup": {
+    "file": "GetServiceDriver.aspx",
+    "path": "SAGE_API_SCS\\SAGE_API\\GetServiceDriver.aspx",
+    "directives": [
+      {
+        "text": "<%@ Page Language=\"vb\" AutoEventWireup=\"false\" CodeBehind=\"GetServiceDriver.aspx.vb\" Inherits=\"SAGE_API.GetServiceDriver\" %>",
+        "content": "Page Language=\"vb\" AutoEventWireup=\"false\" CodeBehind=\"GetServiceDriver.aspx.vb\" Inherits=\"SAGE_API.GetServiceDriver\""
+      }
+    ],
+    "scriptBlocks": [],
+    "linkedClientFiles": [],
+    "linkedFilesDetailed": []
+  }
+}
+{
+  "file": "Log.vb",
+  "language": "VB",
+  "namespaces": [],
+  "classes": [
+    {
+      "name": "Log",
+      "modifiers": "Public",
+      "baseType": null,
+      "interfaces": [],
+      "Methods": [
+        "logging",
+        "logging_traceFile"
+      ],
+      "Properties": []
+    }
+  ],
+  "methods": [
+    "Public Shared logging(Filename: String, msg: String): Void",
+    "Public Shared logging(Filename: String, msg: String, stopcode: String): Void",
+    "Public Shared logging_traceFile(trace_filename: String, msg: String): Void"
+  ],
+  "ir": {
+    "file": "Log.vb",
+    "path": "SAGE_API_SCS\\SAGE_API\\Log.vb",
+    "namespaces": [],
+    "types": [
+      {
+        "kind": "Class",
+        "name": "Log",
+        "namespaceName": "",
+        "modifiers": "Public",
+        "baseTypes": [],
+        "methods": [
+          {
+            "name": "logging",
+            "modifiers": "Public Shared",
+            "returnType": "Void",
+            "parameters": [
+              {
+                "name": "Filename",
+                "type": "String",
+                "defaultValue": null
+              },
+              {
+                "name": "msg",
+                "type": "String",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "logging",
+            "modifiers": "Public Shared",
+            "returnType": "Void",
+            "parameters": [
+              {
+                "name": "Filename",
+                "type": "String",
+                "defaultValue": null
+              },
+              {
+                "name": "msg",
+                "type": "String",
+                "defaultValue": null
+              },
+              {
+                "name": "stopcode",
+                "type": "String",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "logging_traceFile",
+            "modifiers": "Public Shared",
+            "returnType": "Void",
+            "parameters": [
+              {
+                "name": "trace_filename",
+                "type": "String",
+                "defaultValue": null
+              },
+              {
+                "name": "msg",
+                "type": "String",
+                "defaultValue": null
+              }
+            ]
+          }
+        ],
+        "properties": [],
+        "fields": [],
+        "sql": []
+      }
+    ]
+  },
+  "sql_usages": []
+}
+{
+  "file": "MyWebExtension.vb",
+  "language": "VB",
+  "namespaces": [],
+  "classes": [],
+  "methods": [],
+  "ir": {
+    "file": "MyWebExtension.vb",
+    "path": "SAGE_API_SCS\\SAGE_API\\My Project\\MyExtensions\\MyWebExtension.vb",
+    "namespaces": [],
+    "types": []
+  },
+  "sql_usages": []
+}
+
+
+### ⬆️ END OF INPUT ⬆️
+**INSTRUCTION:** Document the page logic above. Focus on User Actions and Data Flow.

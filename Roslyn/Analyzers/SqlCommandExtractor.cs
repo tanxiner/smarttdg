@@ -74,13 +74,13 @@ namespace Roslyn.Analyzers
 						ClassName = methodSym?.ContainingType?.Name ?? "",
 						MethodName = methodSym?.Name ?? "(top-level)",
 						MethodSignature = methodSym?.ToDisplayString() ?? "(unknown)",
-						Line = location.StartLinePosition.Line + 1,
+						//Line = location.StartLinePosition.Line + 1,
 						Kind = "SqlCommandCtor",
 						SqlText = resolved,
 						RawSnippet = oc.ToString()
 					};
 
-					PopulateInferredProcs(usage);
+					//PopulateInferredProcs(usage);
 					results.Add(usage);
 				}
 				catch
@@ -111,12 +111,12 @@ namespace Roslyn.Analyzers
 								ClassName = methodSym?.ContainingType?.Name ?? "",
 								MethodName = methodSym?.Name ?? "(top-level)",
 								MethodSignature = methodSym?.ToDisplayString() ?? "(unknown)",
-								Line = loc.StartLinePosition.Line + 1,
+								//Line = loc.StartLinePosition.Line + 1,
 								Kind = "CommandTextAssignment",
 								SqlText = resolved,
 								RawSnippet = a.ToString()
 							};
-							PopulateInferredProcs(usage);
+							//PopulateInferredProcs(usage);
 							results.Add(usage);
 						}
 						else if (string.Equals(memberName, "CommandType", StringComparison.OrdinalIgnoreCase))
@@ -146,7 +146,7 @@ namespace Roslyn.Analyzers
 									ClassName = methodSym?.ContainingType?.Name ?? "",
 									MethodName = methodSym?.Name ?? "(top-level)",
 									MethodSignature = methodSym?.ToDisplayString() ?? "(unknown)",
-									Line = loc.StartLinePosition.Line + 1,
+									//Line = loc.StartLinePosition.Line + 1,
 									Kind = "CommandTypeAssignment",
 									SqlText = null,
 									CommandTypeIsStoredProcedure = true,
@@ -222,13 +222,13 @@ namespace Roslyn.Analyzers
 									ClassName = methodSym?.ContainingType?.Name ?? "",
 									MethodName = methodSym?.Name ?? "(top-level)",
 									MethodSignature = methodSym?.ToDisplayString() ?? "(unknown)",
-									Line = loc.StartLinePosition.Line + 1,
+									//Line = loc.StartLinePosition.Line + 1,
 									Kind = isDapper ? "DapperInvocation" : isEF ? "EFInvocation" : "DbInvocation",
 									SqlText = resolved,
 									CommandTypeIsStoredProcedure = commandTypeSP,
 									RawSnippet = inv.ToString()
 								};
-								PopulateInferredProcs(usage);
+								//PopulateInferredProcs(usage);
 								results.Add(usage);
 							}
 						}

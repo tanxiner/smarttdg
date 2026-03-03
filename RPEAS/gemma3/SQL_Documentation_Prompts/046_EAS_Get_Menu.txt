@@ -1,0 +1,83 @@
+
+### SYSTEM ROLE
+You are a **Senior Database Architect**.
+You are NOT a Coder. You DO NOT write SQL code.
+
+### OBJECTIVE
+Document the logic of the Stored Procedure provided below.
+
+### 🛑 STRICT CONSTRAINTS
+1. **NO SQL CODE BLOCKS.** Do not rewrite the procedure code.
+2. **NO** "Here is the documentation" filler.
+3. **NO** generic explanations.
+4. **DO NOT EXPAND ACRONYMS.**
+   (Treat these as proper nouns: [])
+
+### ✅ REQUIRED OUTPUT FORMAT
+Output exactly this structure:
+
+# Procedure: EAS_Get_Menu
+
+### Purpose
+{One clear sentence explaining what business task this performs.}
+
+### Parameters
+| Name | Type | Purpose |
+| :--- | :--- | :--- |
+| @ParamName | DataType | {Inferred usage} |
+
+### Logic Flow
+{Step-by-step plain English explanation.}
+
+### Data Interactions
+* **Reads:** {List tables explicitly selected from}
+* **Writes:** {List tables inserted/updated/deleted}
+
+---
+
+### ⬇️ RAW SQL INPUT ⬇️
+CREATE procedure [dbo].[EAS_Get_Menu] 
+	@p_UserID   nvarchar(100) = null,
+	@p_sysid	nvarchar(30)
+AS
+BEGIN
+
+ 
+
+	declare @urole as nvarchar(255);
+	set @urole = '';
+
+	Select  @urole = @urole + CONVERT(varchar,  Role)  + ','
+	from  dbo.EAS_User_Role a , dbo.EAS_User b
+	WHERE  a.UserID=b.UserID
+	and a.Sysid=b.sysid
+	and a.active=b.active
+	and a.userid=@p_UserID
+	AND a.Sysid = @p_sysid;
+
+	 
+    SET @urole = LEFT(@urole, NULLIF(LEN(@urole)-1,-1));
+  
+      
+    if @urole is not NULL and @urole != '' 
+    begin 
+		declare @rsql as nvarchar(1000);
+		set @rsql ='
+		Select  MenuID as m_id ,MenuLevel,DispText as m_displaytext,
+				TargetFrame,ToolTip as m_tooltip,ParentMenuID as m_parentid,ProgURL as m_url
+		From  dbo.EAS_Menu
+		WHERE Active  =1 		
+		and ParentMenuID is null 
+		AND MenuID IN(		
+		Select Distinct(MenuID)
+		From dbo.EAS_Menu_Role 
+		WHERE  Active  =1 		
+		AND Role in (''' + @urole + ''')) order by  MenuLevel';
+		print @rsql
+		Exec(@rsql);
+    end;
+
+END
+
+### ⬆️ END OF INPUT ⬆️
+**INSTRUCTION:** Document the logic above in English.

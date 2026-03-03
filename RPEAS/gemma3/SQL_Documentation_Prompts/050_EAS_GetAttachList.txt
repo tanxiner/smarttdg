@@ -1,0 +1,79 @@
+
+### SYSTEM ROLE
+You are a **Senior Database Architect**.
+You are NOT a Coder. You DO NOT write SQL code.
+
+### OBJECTIVE
+Document the logic of the Stored Procedure provided below.
+
+### 🛑 STRICT CONSTRAINTS
+1. **NO SQL CODE BLOCKS.** Do not rewrite the procedure code.
+2. **NO** "Here is the documentation" filler.
+3. **NO** generic explanations.
+4. **DO NOT EXPAND ACRONYMS.**
+   (Treat these as proper nouns: ["CONT_TYPE", "FILE_ID", "FILE_NAME", "FILE_PATH", "REAPS"])
+
+### ✅ REQUIRED OUTPUT FORMAT
+Output exactly this structure:
+
+# Procedure: EAS_GetAttachList
+
+### Purpose
+{One clear sentence explaining what business task this performs.}
+
+### Parameters
+| Name | Type | Purpose |
+| :--- | :--- | :--- |
+| @ParamName | DataType | {Inferred usage} |
+
+### Logic Flow
+{Step-by-step plain English explanation.}
+
+### Data Interactions
+* **Reads:** {List tables explicitly selected from}
+* **Writes:** {List tables inserted/updated/deleted}
+
+---
+
+### ⬇️ RAW SQL INPUT ⬇️
+CREATE   PROCEDURE [dbo].[EAS_GetAttachList]
+ 
+ 
+AS
+BEGIN
+	 
+	 
+	 
+	 -------------------------
+
+	 select FileRefNo,[FILE_ID],[FILE_NAME],FILE_PATH,FILE_CONTENT,CONT_TYPE,
+	 'D:\CanBusOutput\REAPS_UploadFile\' + SUBSTRING(FileURL,1, CHARINDEX('/',FileURL) -1) + '\' as FilePath
+	 from ( 
+	select  b.FormGuid as FileRefNo,a.id as [FILE_ID], 
+	     a.FileName as  [FILE_NAME],   a.FileURL as FILE_PATH,
+		a.[FileContent] as FILE_CONTENT, a.FileContentType as CONT_TYPE,
+		--('D:\CanBusOutput\ODTS_UploadFile\'  )FilePath
+		REPLACE(a.FileURL, 'https://apps.sbstransit.com.sg/RPEAS_Document/','')  as FileURL 
+
+	From [dbo].[EAS_Form_Attach_Document] a ,EAS_Form_Master b
+	where a.FormGuid=b.FormGuid
+	and a.[FileContent] is null 
+	--and a.[FILE_ID]	 <=9
+
+	) z 
+	order by 	[FILE_ID]
+
+
+--	SELECT SUBSTRING(newstr,1, CHARINDEX('/',newstr) -1)
+--from (
+--SELECT REPLACE([FileURL], 'https://apps.sbstransit.com.sg/RPEAS_Document/','')  as newstr 
+--FROM    [REAPS].[dbo].[EAS_Form_Attach_Document]  
+--) a
+
+
+	 
+ 
+END
+
+### ⬆️ END OF INPUT ⬆️
+**INSTRUCTION:** Document the logic above in English.

@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { Button } from "./ui/button";
 import { Card } from "./ui/card";
 import { Progress } from "./ui/progress";
@@ -7,16 +7,33 @@ import { Upload, FileArchive, X, Loader2, CheckCircle } from "lucide-react";
 
 interface FileUploadZoneProps {
   onDocumentationReady?: (result?: any) => void;
+  selectedModel?: string;
+  onProcessingChanged?: (isProcessing: boolean) => void;
 }
 
-export function FileUploadZone({ onDocumentationReady }: FileUploadZoneProps) {
+export function FileUploadZone({ onDocumentationReady, selectedModel, onProcessingChanged }: FileUploadZoneProps) {
   const [isDragOver, setIsDragOver] = useState(false);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingProgress, setProcessingProgress] = useState(0);
   const [processingStep, setProcessingStep] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [expectedChapters, setExpectedChapters] = useState<number>(0);
+  const [chaptersGenerated, setChaptersGenerated] = useState<number>(0);
+  const [currentJobId, setCurrentJobId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const modelToUse = selectedModel ?? "gemma3:latest";
+
+  useEffect(() => {
+    // Clear any stale job id on mount (prevent polling a non-existent job)
+    setCurrentJobId(null);
+  }, []);
+
+  // Notify parent when processing state changes
+  useEffect(() => {
+    onProcessingChanged?.(isProcessing);
+  }, [isProcessing, onProcessingChanged]);
 
   const isZip = (name: string) => name.toLowerCase().endsWith(".zip");
 
@@ -65,6 +82,24 @@ export function FileUploadZone({ onDocumentationReady }: FileUploadZoneProps) {
     setProcessingProgress(0);
     setProcessingStep("");
     setError(null);
+    setExpectedChapters(0);
+    setChaptersGenerated(0);
+    setCurrentJobId(null);
+  };
+
+  // Cancel helper used by Cancel button and navigation handlers
+  const cancelJob = async (jobId: string | null) => {
+    if (!jobId) return;
+    try {
+      await fetch(`/cancel/${jobId}`, { method: "POST" });
+    } catch (e) {
+      console.warn("Cancel request failed", e);
+    } finally {
+      setProcessingStep("Canceled");
+      setProcessingProgress(0);
+      setIsProcessing(false);
+      setCurrentJobId(null);
+    }
   };
 
   const generateDocs = async () => {
@@ -74,14 +109,18 @@ export function FileUploadZone({ onDocumentationReady }: FileUploadZoneProps) {
     setProcessingProgress(0);
     setProcessingStep("Uploading...");
     setError(null);
+    setExpectedChapters(0);
+    setChaptersGenerated(0);
 
     const formData = new FormData();
     formData.append("file", uploadedFile);
+    formData.append("model", modelToUse);
 
     const xhr = new XMLHttpRequest();
-    xhr.open("POST", "/analyze");
+    xhr.open("POST", "/analyze_async");
 
-    let lastResult: any = null;
+    let jobId: string | null = null;
+    let pollHandle: number | null = null;
 
     xhr.upload.onprogress = (e: ProgressEvent) => {
       if (e.lengthComputable) {
@@ -99,21 +138,104 @@ export function FileUploadZone({ onDocumentationReady }: FileUploadZoneProps) {
     xhr.onreadystatechange = () => {
       if (xhr.readyState === 4) {
         if (xhr.status >= 200 && xhr.status < 300) {
-          setProcessingStep("Analyzing on server...");
-          setProcessingProgress(80);
-
           try {
-            lastResult = JSON.parse(xhr.responseText);
-            console.log("Analyze result:", lastResult);
+            const resp = JSON.parse(xhr.responseText);
+            jobId = resp?.jobId;
+            if (jobId) setCurrentJobId(jobId);
           } catch {
-            /* ignore */
+            jobId = null;
           }
 
-          setTimeout(() => {
-            setProcessingStep("Finalizing...");
-            setProcessingProgress(100);
-            setTimeout(() => onDocumentationReady?.(lastResult), 800);
-          }, 600);
+          if (!jobId) {
+            try {
+              const r = JSON.parse(xhr.responseText);
+              setProcessingStep("Finalizing...");
+              setProcessingProgress(100);
+              setTimeout(() => onDocumentationReady?.(r), 600);
+            } catch {
+              setError("Unexpected response from server.");
+              setIsProcessing(false);
+            }
+            return;
+          }
+
+          // start polling status
+          setProcessingStep("Queued on server...");
+          setProcessingProgress(65);
+
+          pollHandle = window.setInterval(async () => {
+            try {
+              const sres = await fetch(`/status/${jobId}`);
+              if (sres.status === 404) {
+                // job not found -> stop polling and inform user
+                if (pollHandle) clearInterval(pollHandle);
+                setProcessingStep("Job not found or expired.");
+                setProcessingProgress(0);
+                setIsProcessing(false);
+                setCurrentJobId(null);
+                return;
+              }
+              if (!sres.ok) {
+                throw new Error(`Status ${sres.status}`);
+              }
+              const st = await sres.json();
+
+              // numeric chapter counters (explicit)
+              const expected = typeof st.expected_chapters === "number" ? st.expected_chapters : 0;
+              const generated = typeof st.chapters_generated === "number" ? st.chapters_generated : 0;
+              setExpectedChapters(expected);
+              setChaptersGenerated(generated);
+
+              // Respect cancellation reported by server
+              if (st.step === "cancel_requested" || st.step === "canceled" || st.canceled) {
+                if (pollHandle) clearInterval(pollHandle);
+                setProcessingStep("Canceled");
+                setProcessingProgress(0);
+                setIsProcessing(false);
+                setCurrentJobId(null);
+                return;
+              }
+
+              if (expected > 0) {
+                // If all chapters generated, show "finalizing" and move progress to 99%
+                if (generated >= expected) {
+                  setProcessingStep(`All chapters generated (${generated}/${expected}) — Finalizing...`);
+                  setProcessingProgress(99);
+                } else {
+                  const remaining = Math.max(0, expected - generated);
+                  setProcessingStep(`Generating chapters: ${generated}/${expected} — ${remaining} chapter(s) remaining`);
+                  const pct = Math.round((generated / expected) * 100);
+                  setProcessingProgress(Math.min(98, Math.max(0, pct)));
+                }
+              } else {
+                // fallback to step text or progress
+                if (st.step) setProcessingStep(String(st.step));
+                if (typeof st.progress === "number") setProcessingProgress(st.progress);
+              }
+
+              // When backend reports final result, finish
+              if (st.result && (typeof st.progress === "number" ? st.progress >= 100 : true)) {
+                if (pollHandle) {
+                  clearInterval(pollHandle);
+                }
+                setProcessingProgress(100);
+                setProcessingStep("Done — preparing results...");
+                setTimeout(() => onDocumentationReady?.(st.result), 400);
+                setCurrentJobId(null);
+                setIsProcessing(false);
+              }
+
+              if (st.step === "error") {
+                if (pollHandle) clearInterval(pollHandle);
+                setError(st.error || "Analysis error");
+                setIsProcessing(false);
+                setCurrentJobId(null);
+              }
+            } catch (e) {
+              console.warn("Polling error", e);
+              // keep polling for transient errors; if you prefer, implement retry/backoff here
+            }
+          }, 1000);
         } else {
           let msg = "Upload failed.";
           try {
@@ -144,7 +266,26 @@ export function FileUploadZone({ onDocumentationReady }: FileUploadZoneProps) {
             <h3 className="text-lg font-medium text-gray-900 mb-2">
               {processingProgress < 100 ? "Processing" : "Documentation Ready!"}
             </h3>
-            <p className="text-gray-600 mb-6">{processingStep}</p>
+            <p className="text-gray-600 mb-2">{processingStep}</p>
+          {/*  <p className="text-sm text-gray-500">Model used: <strong>{modelToUse}</strong></p>*/}
+          </div>
+
+          <div className="flex items-center justify-center space-x-1 mt-1">
+            {currentJobId && (
+              <Button
+                variant="destructive"
+                onClick={async () => {
+                  try {
+                    setProcessingStep("Canceling...");
+                    await cancelJob(currentJobId);
+                  } catch (e) {
+                    console.warn("Cancel request failed", e);
+                  }
+                }}
+              >
+                Cancel
+              </Button>
+            )}
           </div>
 
           <div className="mb-6">
@@ -164,13 +305,13 @@ export function FileUploadZone({ onDocumentationReady }: FileUploadZoneProps) {
             </span>
           </div>
 
-          {error && <p className="text-sm text-red-600 mt-4">{error}</p>}
+          {error && <p className="text-sm text-red-600 mt-2">{error}</p>}
 
-          {processingProgress < 100 && (
-            <p className="text-xs text-gray-500 mt-4">
-              This usually takes 2-5 minutes depending on project size
-            </p>
-          )}
+          {/*{processingProgress < 100 && (*/}
+          {/*  <p className="text-xs text-gray-500 mt-2">*/}
+          {/*    This usually takes 2-5 minutes depending on project size*/}
+          {/*  </p>*/}
+          {/*)}*/}
         </Card>
       </div>
     );
@@ -199,7 +340,7 @@ export function FileUploadZone({ onDocumentationReady }: FileUploadZoneProps) {
             type="file"
             accept=".zip"
             onChange={handleFileSelect}
-            className="hidden" // use hidden instead of sr-only
+            className="hidden"
           />
 
           <Button
@@ -213,6 +354,7 @@ export function FileUploadZone({ onDocumentationReady }: FileUploadZoneProps) {
           </Button>
 
           <p className="text-sm text-gray-500 mt-2">Supports ZIP files up to 1GB</p>
+          <p className="text-sm text-gray-500 mt-2">Selected model: <strong>{modelToUse}</strong></p>
         </Card>
       ) : (
         <Card className="p-6">
@@ -230,6 +372,11 @@ export function FileUploadZone({ onDocumentationReady }: FileUploadZoneProps) {
               <X className="h-4 w-4" />
             </Button>
           </div>
+
+          <p className="text-sm text-gray-500 mb-4">
+            Model selected: <strong>{modelToUse}</strong>
+          </p>
+
           <Button onClick={generateDocs} className="w-full">
             Generate Documentation
           </Button>

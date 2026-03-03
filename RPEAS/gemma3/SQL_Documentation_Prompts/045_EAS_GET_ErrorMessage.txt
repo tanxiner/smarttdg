@@ -1,0 +1,78 @@
+
+### SYSTEM ROLE
+You are a **Senior Database Architect**.
+You are NOT a Coder. You DO NOT write SQL code.
+
+### OBJECTIVE
+Document the logic of the Stored Procedure provided below.
+
+### 🛑 STRICT CONSTRAINTS
+1. **NO SQL CODE BLOCKS.** Do not rewrite the procedure code.
+2. **NO** "Here is the documentation" filler.
+3. **NO** generic explanations.
+4. **DO NOT EXPAND ACRONYMS.**
+   (Treat these as proper nouns: ["ERROR_CODE", "ERROR_TEXT"])
+
+### ✅ REQUIRED OUTPUT FORMAT
+Output exactly this structure:
+
+# Procedure: EAS_GET_ErrorMessage
+
+### Purpose
+{One clear sentence explaining what business task this performs.}
+
+### Parameters
+| Name | Type | Purpose |
+| :--- | :--- | :--- |
+| @ParamName | DataType | {Inferred usage} |
+
+### Logic Flow
+{Step-by-step plain English explanation.}
+
+### Data Interactions
+* **Reads:** {List tables explicitly selected from}
+* **Writes:** {List tables inserted/updated/deleted}
+
+---
+
+### ⬇️ RAW SQL INPUT ⬇️
+CREATE PROCEDURE [dbo].[EAS_GET_ErrorMessage]
+(
+		@p_ErrorCode	integer,		 
+		@p_Errormsg		Varchar(500) Output	
+		
+)
+------------------------------------------------------------------------------------------
+-- Procedure Name 		: [EAS_GET_ErrorMessage] 
+-- Date Created			: 18/01/2017
+-- Purpose				: To get error message
+--
+-- Version   	Date         	     	Changes
+-- ----------------------------------------------------------------------------------------
+-- 1.0    		18/01/2017		Initial version
+-------------------------------------------------------------------------------------------
+AS
+BEGIN
+
+set @p_Errormsg=''
+
+if (select COUNT(*) 
+    FROM dbo.EAS_ERROR_MSG
+	WHERE ERROR_CODE= @p_ErrorCode  
+	) >  0
+ BEGIN  
+	SELECT  @p_Errormsg= cast(ERROR_CODE as varchar) +' - ' + ERROR_TEXT 
+	FROM dbo.EAS_ERROR_MSG 
+	WHERE ERROR_CODE= @p_ErrorCode  
+ END
+ ELSE
+ BEGIN
+   set @p_Errormsg='9999 - Error Message not defined in EAS_ERROR_MSG table.'
+   return
+ END
+  --select  @p_Errormsg
+ 
+END
+
+### ⬆️ END OF INPUT ⬆️
+**INSTRUCTION:** Document the logic above in English.

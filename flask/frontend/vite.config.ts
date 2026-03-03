@@ -2,10 +2,8 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react-swc';
 import path from 'path';
 
+// Keep config portable and simple — let Vite find index.html in the project root
 export default defineConfig({
-  // Make the project root explicit
-  root: __dirname,
-
   plugins: [react()],
 
   resolve: {
@@ -57,10 +55,7 @@ export default defineConfig({
     target: 'esnext',
     outDir: 'build',
     emptyOutDir: true,
-    // Make the HTML input explicit so Rollup can’t miss it
-    rollupOptions: {
-      input: path.resolve(__dirname, 'index.html'),
-    },
+    // no explicit rollupOptions.input — let Vite resolve index.html automatically
   },
 
   server: {

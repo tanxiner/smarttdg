@@ -1,0 +1,275 @@
+
+### SYSTEM ROLE
+You are a **Senior Database Architect**.
+You are NOT a Coder. You DO NOT write SQL code.
+
+### OBJECTIVE
+Document the logic of the Stored Procedure provided below.
+
+### 🛑 STRICT CONSTRAINTS
+1. **NO SQL CODE BLOCKS.** Do not rewrite the procedure code.
+2. **NO** "Here is the documentation" filler.
+3. **NO** generic explanations.
+4. **DO NOT EXPAND ACRONYMS.**
+   (Treat these as proper nouns: ["BCC", "CC", "EAS_USER", "ID", "PA", "REAS", "RPEAS", "URL"])
+
+### ✅ REQUIRED OUTPUT FORMAT
+Output exactly this structure:
+
+# Procedure: EAS_Send_Approval_Email_Reminder
+
+### Purpose
+{One clear sentence explaining what business task this performs.}
+
+### Parameters
+| Name | Type | Purpose |
+| :--- | :--- | :--- |
+| @ParamName | DataType | {Inferred usage} |
+
+### Logic Flow
+{Step-by-step plain English explanation.}
+
+### Data Interactions
+* **Reads:** {List tables explicitly selected from}
+* **Writes:** {List tables inserted/updated/deleted}
+
+---
+
+### ⬇️ RAW SQL INPUT ⬇️
+CREATE PROCEDURE [dbo].[EAS_Send_Approval_Email_Reminder]
+	 
+	 --@p_FormGuid		varchar(225) ,
+	 --@p_FormUserID		varchar(15),
+	 --@p_FormLevel		int,
+	 @p_ErrorMsg NVARCHAR(500) output
+	 
+AS
+BEGIN
+	
+declare @e_subject		   NVARCHAR (1000) 
+declare @e_tolist		   VARCHAR(max)  
+declare @e_cclist		   VARCHAR(max)  
+declare @e_body			   nvarchar(max)  	
+declare @e_alertqid		   INTEGER         
+declare @Url			   VARCHAR (1000)  
+declare @e_From				varchar(500)
+declare @p_nextusername		varchar(200)
+declare @p_nextLevelusrid	   varchar(15)
+declare @e_senderdetail    varchar(max)
+declare @e_nodays			int
+declare @p_FormLevel		int
+declare @p_Supervisorid varchar(10)
+declare @p_MaxGroup int
+
+set @e_subject=''
+set @e_tolist=''
+set @e_cclist=''
+set @e_body='' 
+set @e_alertqid=0 
+set @Url=''
+set @p_nextLevelusrid=''
+set @p_ErrorMsg=''
+set @e_senderdetail=''
+set @e_From=''
+set @p_nextusername=''
+ -----------
+--Set URL
+set @Url='http://mssqldevpsvr/RPEAS/RPEAS_Login.aspx'
+--set @Url='https://apps.sbstransit.com.sg/RPEAS/RPEAS_Login.aspx'
+----------------------
+--Get Email Sender Detail Info
+set @e_senderdetail='REAS' 
+-----------------------
+----Get Subject
+--SELECT @e_subject=Title
+--FROM EAS_Form_Master
+--where FormGuid=  @p_FormGuid
+
+----Get Email From
+--SELECT @e_From = dbo.EAS_User_Name(@p_FormUserID)
+------------------------------
+    
+	BEGIN
+	    DECLARE @cur_FormGuid varchar(225),@Cur_Title varchar(500),
+				@p_Nodays int
+	    
+ 		DECLARE @Cur CURSOR
+		SET @Cur = CURSOR FAST_FORWARD FOR 
+		
+			 select FormGuid ,Title
+			 from EAS_Form_Master a 
+			 where a.active=1 
+			 and a.FormStatus not in ('Closed','Rejected','Withdrawn')
+			  
+			
+		OPEN @Cur 
+		FETCH NEXT FROM @Cur INTO @cur_FormGuid,@Cur_Title
+		WHILE (@@FETCH_STATUS = 0 )
+		BEGIN 	
+				set @p_Nodays=0
+				 
+				Select top 1 @p_Nodays=  [dbo].[EAS_Form_Pending_NODays](@cur_FormGuid) 				 
+				from dbo.EAS_Form_Approve_Lvl  
+				where active=1
+				and FormGuid=@cur_FormGuid
+				and action is null
+				order by applevel asc 	
+				----------------
+				print '@cur_FormGuid :' + @cur_FormGuid
+				print '@Cur_Title :' + @Cur_Title
+				print '@p_Nodays :' + cast(@p_Nodays as varchar)
+				------------------------
+				IF @p_Nodays > 2 
+				BEGIN
+					
+				--Get Subject
+				set  @e_subject=@Cur_Title + ' (Reminder)'
+				
+				--Get Form Level
+				--set @p_FormLevel= [dbo].[EAS_Form_Get_Form_Level](@cur_FormGuid ,null,'F')				 
+				select  top 1 @p_FormLevel =ID,@p_MaxGroup=GroupLevel
+				from EAS_Form_Approve_Lvl
+				where FormGuid=@cur_FormGuid 
+				and  isnull(Action,'x')='x'
+				order by ID asc 
+
+				--Get Send From
+				SELECT top 1 @e_From = dbo.EAS_User_Name(ActionBy) 				   
+				FROM [dbo].[EAS_Form_Log_History]
+				where [FormGuid]=@cur_FormGuid
+				order by id desc
+				
+				--Get To Lists 
+				select  top 1  @e_tolist=(Case @e_tolist when '' then b.Email else @e_tolist + ',' + b.Email end) ,
+				@p_nextLevelusrid=a.userid  ,@p_nextusername= dbo.EAS_User_Name(a.userid)
+				from EAS_Form_Approve_Lvl a, EAS_USER b
+				where FormGuid=@cur_FormGuid
+				and a.userid=b.userid
+				and b.sysid='RPEAS'
+				and a.active=b.active
+				and a.active=1
+				and a.ID = @p_FormLevel
+				and actionBy is null 
+				order by appLevel asc
+				---------------------------  
+				--Get CC Lists  
+				if @p_MaxGroup=6
+				BEGIN
+					set @p_Supervisorid=null 
+					
+					select @p_Supervisorid=a.userid
+					From dbo.EAS_Form_Approve_Lvl a, EAS_USER b
+					where FormGuid =@cur_FormGuid
+					and a.userid=b.userid
+					and b.sysid='RPEAS'
+					and a.active=b.active
+					and a.active=1
+					--and a.Applevel=4
+					and a.GroupLevel=@p_MaxGroup
+
+					select  @e_cclist=(Case @e_cclist when '' then Email else @e_cclist + ',' + Email end)   
+					FROM (
+					
+					select b.Email
+					from EAS_Form_Approve_Lvl a, EAS_USER b
+					where FormGuid=@cur_FormGuid
+					and a.userid=b.userid
+					and b.sysid='RPEAS'
+					and a.active=b.active
+					and a.active=1
+					and a.ID < @p_FormLevel
+					
+					union
+					
+					select a.email
+					from EAS_USER a 
+					where userid in (
+						select userid
+						from dbo.EAS_PA_Supervisor
+						where supervisorid=@p_Supervisorid
+						and active=1)
+					and active=1
+					and a.userid in (Select userid 
+									 from EAS_USER_ROLE	
+									 where sysid='RPEAS'
+									 and Role='PA'
+									 and active=1
+									 )
+					) z
+				END
+				ELSE
+				BEGIN
+					select  @e_cclist=(Case @e_cclist when '' then b.Email else @e_cclist + ',' + b.Email end)   
+					from EAS_Form_Approve_Lvl a, EAS_USER b
+					where FormGuid=@cur_FormGuid
+					and a.userid=b.userid
+					and b.sysid='RPEAS'
+					and a.active=b.active
+					and a.active=1
+					and a.ID < @p_FormLevel 
+					order by appLevel asc
+				
+				END
+				----------------------------
+				
+				
+				--Email Content
+				 set @e_body = 'The above subject matter refer. For your approval please.'  
+				 set @e_body =@e_body + '<br><br>'+'Please click below link for information and action.<br><br>'
+			  
+				 --URL
+				set @e_body=@e_body +   '<a href="' +  @Url + '?guid=' +@cur_FormGuid + '&uaid='+ dbo.fn_Encrypt(@p_nextLevelusrid)+ '&frm='+dbo.fn_Encrypt('emailaction') +   '&act='+dbo.fn_Encrypt('A' )+ +'&nm=' + dbo.fn_Encrypt(@p_nextusername) +  '" target="_blank">OPEN</a><br><br>' ;  
+			 --------------------
+				print  '@p_FormLevel:' + cast(@p_FormLevel as varchar)
+				print  '@e_From :' + @e_From
+				print  '@e_subject:'+ @e_subject
+				print  '@e_tolist:' + @e_tolist
+				print  '@e_cclist:' + @e_cclist
+				print  '@e_body :'  + @e_body
+				print  '@e_senderdetail :' + @e_senderdetail
+				print  '--------------------------------------'
+			--------------------
+			IF  @e_subject='' or 
+				@e_tolist ='' or  	 
+				@e_body ='' or 
+				@p_FormLevel =''
+			BEGIN
+				 set @p_ErrorMsg='Sending Email Alert Error'
+				 RAISERROR('Sending Email Alert Error', 16, 1 ) 	 
+				 return 
+			END
+			ELSE
+			BEGIN
+
+				EXEC [dbo].[EAlertQ_EnQueue]
+					  @e_senderdetail, 
+					  @e_subject, 
+					  '',
+					  'Dear Sir/Madam ,',
+					  @e_body,
+					  @e_From,
+					  @e_tolist,
+					  @e_cclist,
+					  '',--BCC
+					  ',',
+					  @e_alertqid ,@e_From--'RPEAS Admin'	
+					  ---------------
+					  set @e_subject=''
+					  set @e_tolist=''
+					  set @e_cclist=''
+					  set @e_body='' 
+					  set @e_From=''
+					  set @p_FormLevel=null
+			END 
+			
+		END					
+		FETCH NEXT FROM @Cur INTO  @cur_FormGuid,@Cur_Title
+		END
+		CLOSE @Cur
+		DEALLOCATE @Cur		 
+		END
+	   ----------- 
+END;
+
+### ⬆️ END OF INPUT ⬆️
+**INSTRUCTION:** Document the logic above in English.

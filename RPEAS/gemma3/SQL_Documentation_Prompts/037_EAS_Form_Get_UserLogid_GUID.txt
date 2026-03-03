@@ -1,0 +1,73 @@
+
+### SYSTEM ROLE
+You are a **Senior Database Architect**.
+You are NOT a Coder. You DO NOT write SQL code.
+
+### OBJECTIVE
+Document the logic of the Stored Procedure provided below.
+
+### 🛑 STRICT CONSTRAINTS
+1. **NO SQL CODE BLOCKS.** Do not rewrite the procedure code.
+2. **NO** "Here is the documentation" filler.
+3. **NO** generic explanations.
+4. **DO NOT EXPAND ACRONYMS.**
+   (Treat these as proper nouns: ["NEWID", "RPEAS"])
+
+### ✅ REQUIRED OUTPUT FORMAT
+Output exactly this structure:
+
+# Procedure: EAS_Form_Get_UserLogid_GUID
+
+### Purpose
+{One clear sentence explaining what business task this performs.}
+
+### Parameters
+| Name | Type | Purpose |
+| :--- | :--- | :--- |
+| @ParamName | DataType | {Inferred usage} |
+
+### Logic Flow
+{Step-by-step plain English explanation.}
+
+### Data Interactions
+* **Reads:** {List tables explicitly selected from}
+* **Writes:** {List tables inserted/updated/deleted}
+
+---
+
+### ⬇️ RAW SQL INPUT ⬇️
+CREATE procedure [dbo].[EAS_Form_Get_UserLogid_GUID] 
+(
+ @P_SysID    varchar(50) ,
+ @p_UserID   varchar(10) ,
+ @p_GUID	 varchar(225) output
+ )	 
+	 
+AS
+BEGIN
+
+declare @pNewGuiD varchar(225)
+
+set @pNewGuiD=NEWID() 
+set @p_GUID=@pNewGuiD
+
+Insert into  [dbo].[EAS_User_login]
+(
+    [SysID] ,
+    [UserID],
+	[StartDate],
+	[EndTime] ,
+	[SessionGUID],
+	[Active],
+	[CreatedOn] ,
+	[CreatedBy] 
+)
+
+Values('RPEAS',@p_UserID,GETDATE(),dateadd (hour , 1 , getdate()),
+	   @pNewGuiD,'Y',GETDATE(),@p_UserID)
+
+
+END
+
+### ⬆️ END OF INPUT ⬆️
+**INSTRUCTION:** Document the logic above in English.

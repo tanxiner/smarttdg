@@ -1,0 +1,674 @@
+
+### SYSTEM ROLE
+You are a **Technical Writer** specializing in Legacy Web Applications.
+You are NOT a Developer. You DO NOT write code.
+
+### OBJECTIVE
+Analyze the "Code Behind" files to create a **Page Functionality Reference**.
+
+### IMPORTANT: DO NOT INFER DOMAIN
+- Do NOT infer business domain, product names, or concrete entities from filenames, base types, or project names.
+- Use only explicit evidence present in the provided IR/metadata (method names, control names, SQL table names, linked markup tokens).
+- If there is no explicit domain or entity name visible in the input, write the User Purpose exactly as:
+  This page's user purpose is Unknown (no explicit domain information in the code).
+- If you do include a purpose inferred from tokens, append the exact tokens used for the inference in parentheses, e.g. "(inferred from: baseType='SBSTransit.Common', file='RPEAS_Completed_Form.aspx.vb')".
+
+### 🛑 HARD NEGATIVE CONSTRAINTS
+1. **NO** Code blocks (C#, VB.NET, or SQL).
+2. **NO** "Installation" or "Setup" sections.
+3. **NO** explanation of standard ASP.NET concepts (e.g., don't explain what Page_Load is; explain what *this specific page* does inside it).
+4. **NO** mentions of `.designer.cs` or auto-generated controls.
+
+### ✅ STRICT OUTPUT FORMAT
+For every Page/Control found in the input, output this structure:
+
+# Page: {PageName}
+**File:** {Filename}
+
+### 1. User Purpose
+{One sentence explaining what the user does here. E.g., "Users fill out this form to request x."}
+If unknown, use the exact sentence above.
+
+### 2. Key Events & Logic
+| Event / Method | Business Logic Summary |
+| :--- | :--- |
+| {MethodName} | {Plain English description of what happens. E.g., "Validates inputs, calls DAO to save, sends email."} |
+
+### 3. Data Interactions
+* **Reads:** {List entities/tables loaded (e.g., User, BlockedTar)}
+* **Writes:** {List entities/tables saved or updated}
+
+--- 
+
+### ⬇️ RAW CODE BEHIND INPUT ⬇️
+{
+  "file": "RPEAS_Create_Form.aspx.vb",
+  "language": "VB",
+  "namespaces": [],
+  "classes": [
+    {
+      "name": "RPEAS_Create_Form",
+      "modifiers": "Partial Public",
+      "baseType": "",
+      "interfaces": [],
+      "Methods": [
+        "Page_Load",
+        "Load_Page",
+        "Populate_Company",
+        "Populate_ApproverLists",
+        "ddlprepby2_SelectedIndexChanged",
+        "btnAdd_ServerClick",
+        "AddPageNumber",
+        "dgappdoc_ItemCommand",
+        "DeleteSelectedAppDoc",
+        "btnAddSuppDoc_ServerClick",
+        "dgsuppdoc_ItemCommand",
+        "DeleteSelectedSuppDoc",
+        "btnFormSubmit_Click",
+        "GetServerDetails",
+        "ValidateInput",
+        "Save_Document",
+        "BindGridFileUpload",
+        "btnFormClear_Click",
+        "btnConfirmnFormSubmit_Click",
+        "btnCancel_Click",
+        "txtAmount_TextChanged",
+        "FormatDec",
+        "btnaddSupportby_Click",
+        "BindGridsupportby",
+        "dgsupportby_ItemCommand",
+        "dgsupportby_ItemDataBound",
+        "btnaddSubmThru_Click",
+        "BindGridSbumitThru",
+        "dgsubmitThru_ItemCommand",
+        "dgsubmitThru_ItemDataBound",
+        "GetApproverList",
+        "FormApproverList"
+      ],
+      "Properties": []
+    }
+  ],
+  "methods": [
+    "Protected Page_Load(sender: Object, e: System.EventArgs): Void",
+    "Private Load_Page(): Void",
+    "Private Populate_Company(): Void",
+    "Private Populate_ApproverLists(): Void",
+    "Protected ddlprepby2_SelectedIndexChanged(sender: Object, e: EventArgs): Void",
+    "Private btnAdd_ServerClick(sender: Object, e: System.EventArgs): Void",
+    "Protected AddPageNumber(filename: String, docruno: String): Void",
+    "Private dgappdoc_ItemCommand(source: Object, e: System.Web.UI.WebControls.DataGridCommandEventArgs): Void",
+    "Public DeleteSelectedAppDoc(rowIndex: Integer): String",
+    "Private btnAddSuppDoc_ServerClick(sender: Object, e: System.EventArgs): Void",
+    "Private dgsuppdoc_ItemCommand(source: Object, e: System.Web.UI.WebControls.DataGridCommandEventArgs): Void",
+    "Public DeleteSelectedSuppDoc(rowIndex: Integer): String",
+    "Protected btnFormSubmit_Click(sender: Object, e: EventArgs): Void",
+    "Protected GetServerDetails(): Void",
+    "Private ValidateInput(strerrormsg: String): Void",
+    "Private Save_Document(srterrormsg: String): Void",
+    "Protected BindGridFileUpload(): Void",
+    "Protected btnFormClear_Click(sender: Object, e: EventArgs): Void",
+    "Private btnConfirmnFormSubmit_Click(sender: Object, e: System.EventArgs): Void",
+    "Protected btnCancel_Click(sender: Object, e: EventArgs): Void",
+    "Protected txtAmount_TextChanged(sender: Object, e: EventArgs): Void",
+    "Private FormatDec(strAmt: String): Void",
+    "Protected btnaddSupportby_Click(sender: Object, e: EventArgs): Void",
+    "BindGridsupportby(dt: DataTable): Void",
+    "Private dgsupportby_ItemCommand(source: Object, e: System.Web.UI.WebControls.DataGridCommandEventArgs): Void",
+    "Private dgsupportby_ItemDataBound(sender: Object, e: System.Web.UI.WebControls.DataGridItemEventArgs): Void",
+    "Protected btnaddSubmThru_Click(sender: Object, e: EventArgs): Void",
+    "BindGridSbumitThru(dt: DataTable): Void",
+    "Private dgsubmitThru_ItemCommand(source: Object, e: System.Web.UI.WebControls.DataGridCommandEventArgs): Void",
+    "Private dgsubmitThru_ItemDataBound(sender: Object, e: System.Web.UI.WebControls.DataGridItemEventArgs): Void",
+    "Private GetApproverList(): ArrayList",
+    "Private FormApproverList(): DataTable"
+  ],
+  "ir": {
+    "file": "RPEAS_Create_Form.aspx.vb",
+    "path": "RPEAS_Create_Form.aspx.vb",
+    "namespaces": [],
+    "types": [
+      {
+        "kind": "Class",
+        "name": "RPEAS_Create_Form",
+        "namespaceName": "",
+        "modifiers": "Partial Public",
+        "baseTypes": [],
+        "methods": [
+          {
+            "name": "Page_Load",
+            "modifiers": "Protected",
+            "returnType": "Void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "Object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "System.EventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "Load_Page",
+            "modifiers": "Private",
+            "returnType": "Void",
+            "parameters": []
+          },
+          {
+            "name": "Populate_Company",
+            "modifiers": "Private",
+            "returnType": "Void",
+            "parameters": []
+          },
+          {
+            "name": "Populate_ApproverLists",
+            "modifiers": "Private",
+            "returnType": "Void",
+            "parameters": []
+          },
+          {
+            "name": "ddlprepby2_SelectedIndexChanged",
+            "modifiers": "Protected",
+            "returnType": "Void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "Object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "EventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "btnAdd_ServerClick",
+            "modifiers": "Private",
+            "returnType": "Void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "Object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "System.EventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "AddPageNumber",
+            "modifiers": "Protected",
+            "returnType": "Void",
+            "parameters": [
+              {
+                "name": "filename",
+                "type": "String",
+                "defaultValue": null
+              },
+              {
+                "name": "docruno",
+                "type": "String",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "dgappdoc_ItemCommand",
+            "modifiers": "Private",
+            "returnType": "Void",
+            "parameters": [
+              {
+                "name": "source",
+                "type": "Object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "System.Web.UI.WebControls.DataGridCommandEventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "DeleteSelectedAppDoc",
+            "modifiers": "Public",
+            "returnType": "String",
+            "parameters": [
+              {
+                "name": "rowIndex",
+                "type": "Integer",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "btnAddSuppDoc_ServerClick",
+            "modifiers": "Private",
+            "returnType": "Void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "Object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "System.EventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "dgsuppdoc_ItemCommand",
+            "modifiers": "Private",
+            "returnType": "Void",
+            "parameters": [
+              {
+                "name": "source",
+                "type": "Object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "System.Web.UI.WebControls.DataGridCommandEventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "DeleteSelectedSuppDoc",
+            "modifiers": "Public",
+            "returnType": "String",
+            "parameters": [
+              {
+                "name": "rowIndex",
+                "type": "Integer",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "btnFormSubmit_Click",
+            "modifiers": "Protected",
+            "returnType": "Void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "Object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "EventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "GetServerDetails",
+            "modifiers": "Protected",
+            "returnType": "Void",
+            "parameters": []
+          },
+          {
+            "name": "ValidateInput",
+            "modifiers": "Private",
+            "returnType": "Void",
+            "parameters": [
+              {
+                "name": "strerrormsg",
+                "type": "String",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "Save_Document",
+            "modifiers": "Private",
+            "returnType": "Void",
+            "parameters": [
+              {
+                "name": "srterrormsg",
+                "type": "String",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "BindGridFileUpload",
+            "modifiers": "Protected",
+            "returnType": "Void",
+            "parameters": []
+          },
+          {
+            "name": "btnFormClear_Click",
+            "modifiers": "Protected",
+            "returnType": "Void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "Object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "EventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "btnConfirmnFormSubmit_Click",
+            "modifiers": "Private",
+            "returnType": "Void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "Object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "System.EventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "btnCancel_Click",
+            "modifiers": "Protected",
+            "returnType": "Void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "Object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "EventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "txtAmount_TextChanged",
+            "modifiers": "Protected",
+            "returnType": "Void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "Object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "EventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "FormatDec",
+            "modifiers": "Private",
+            "returnType": "Void",
+            "parameters": [
+              {
+                "name": "strAmt",
+                "type": "String",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "btnaddSupportby_Click",
+            "modifiers": "Protected",
+            "returnType": "Void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "Object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "EventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "BindGridsupportby",
+            "modifiers": "",
+            "returnType": "Void",
+            "parameters": [
+              {
+                "name": "dt",
+                "type": "DataTable",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "dgsupportby_ItemCommand",
+            "modifiers": "Private",
+            "returnType": "Void",
+            "parameters": [
+              {
+                "name": "source",
+                "type": "Object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "System.Web.UI.WebControls.DataGridCommandEventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "dgsupportby_ItemDataBound",
+            "modifiers": "Private",
+            "returnType": "Void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "Object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "System.Web.UI.WebControls.DataGridItemEventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "btnaddSubmThru_Click",
+            "modifiers": "Protected",
+            "returnType": "Void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "Object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "EventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "BindGridSbumitThru",
+            "modifiers": "",
+            "returnType": "Void",
+            "parameters": [
+              {
+                "name": "dt",
+                "type": "DataTable",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "dgsubmitThru_ItemCommand",
+            "modifiers": "Private",
+            "returnType": "Void",
+            "parameters": [
+              {
+                "name": "source",
+                "type": "Object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "System.Web.UI.WebControls.DataGridCommandEventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "dgsubmitThru_ItemDataBound",
+            "modifiers": "Private",
+            "returnType": "Void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "Object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "System.Web.UI.WebControls.DataGridItemEventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "GetApproverList",
+            "modifiers": "Private",
+            "returnType": "ArrayList",
+            "parameters": []
+          },
+          {
+            "name": "FormApproverList",
+            "modifiers": "Private",
+            "returnType": "DataTable",
+            "parameters": []
+          }
+        ],
+        "properties": [],
+        "fields": [
+          {
+            "name": "dal",
+            "modifiers": "Dim",
+            "type": "Object"
+          },
+          {
+            "name": "DAL_Error",
+            "modifiers": "Dim",
+            "type": "Object"
+          },
+          {
+            "name": "errormsg",
+            "modifiers": "Dim",
+            "type": "String"
+          },
+          {
+            "name": "dttablenew_suppby",
+            "modifiers": "Public Shared",
+            "type": "Object"
+          },
+          {
+            "name": "dttablenew_submitThru",
+            "modifiers": "Public Shared",
+            "type": "Object"
+          }
+        ],
+        "sql": []
+      }
+    ]
+  },
+  "sql_usages": [],
+  "_matched_markup": {
+    "file": "RPEAS_Create_Form.aspx",
+    "path": "RPEAS(Xin Er)\\RPEAS(Xin Er)\\RPEAS_Create_Form.aspx",
+    "directives": [
+      {
+        "text": "<%@ Page Language=\"vb\" AutoEventWireup=\"false\" CodeBehind=\"RPEAS_Create_Form.aspx.vb\"\r\n    Inherits=\"RPEAS.RPEAS_Create_Form\" MaintainScrollPositionOnPostback=\"true\" %>",
+        "content": "Page Language=\"vb\" AutoEventWireup=\"false\" CodeBehind=\"RPEAS_Create_Form.aspx.vb\"\r\n    Inherits=\"RPEAS.RPEAS_Create_Form\" MaintainScrollPositionOnPostback=\"true\""
+      }
+    ],
+    "scriptBlocks": [
+      {
+        "tag": "script",
+        "attributes": "language=\"javascript\" type=\"text/javascript\"",
+        "attributes_parsed": {
+          "language": "\"javascript\"",
+          "type": "\"text/javascript\""
+        },
+        "src": null,
+        "src_file": null,
+        "content": "\r\n\r\n        function characterCounter(controlId, countControlId, maxCharlimit) {\r\n            //alert ('hi');\r\n            if (controlId.value.length > maxCharlimit)\r\n                controlId.value = controlId.value.substring(0, maxCharlimit);\r\n\r\n            else\r\n                countControlId.value = maxCharlimit - controlId.value.length;\r\n        }\r\n        function AddAppDoc() {\r\n            form1.btnAdd.click();\r\n        }\r\n\r\n\r\n        function AddSuppDoc() {\r\n            form1.btnAddSuppDoc.click();\r\n        }\r\n\r\n    "
+      },
+      {
+        "tag": "script",
+        "attributes": "type=\"text/javascript\" src=\"http://ajax.googleapis.com/ajax/libs/jquery/1.8.3/jquery.min.js\"",
+        "attributes_parsed": {
+          "type": "\"text/javascript\"",
+          "src": "\"http://ajax.googleapis.com/ajax/libs/jquery/1.8.3/jquery.min.js\""
+        },
+        "src": "\"http://ajax.googleapis.com/ajax/libs/jquery/1.8.3/jquery.min.js\"",
+        "src_file": "http://ajax.googleapis.com/ajax/libs/jquery/1.8.3/jquery.min.js",
+        "content": ""
+      },
+      {
+        "tag": "script",
+        "attributes": "type=\"text/javascript\" src=\"jquery.min.js\"",
+        "attributes_parsed": {
+          "type": "\"text/javascript\"",
+          "src": "\"jquery.min.js\""
+        },
+        "src": "\"jquery.min.js\"",
+        "src_file": "jquery.min.js",
+        "content": ""
+      },
+      {
+        "tag": "script",
+        "attributes": "type=\"text/javascript\"",
+        "attributes_parsed": {
+          "type": "\"text/javascript\""
+        },
+        "src": null,
+        "src_file": null,
+        "content": "\r\n        function ShowProgress() {\r\n            setTimeout(function () {\r\n                var modal = $('<div />');\r\n                modal.addClass(\"modal\");\r\n                $('body').append(modal);\r\n                var loading = $(\".loading\");\r\n                loading.show();\r\n                var top = Math.max($(window).height() / 2 - loading[0].offsetHeight / 2, 0);\r\n                var left = Math.max($(window).width() / 2 - loading[0].offsetWidth / 2, 0);\r\n                loading.css({ top: top, left: left });\r\n            }, 200);\r\n        }\r\n        $('form').live(\"submit\", function () {\r\n            ShowProgress();\r\n        });\r\n    "
+      }
+    ],
+    "linkedClientFiles": [
+      "http://ajax.googleapis.com/ajax/libs/jquery/1.8.3/jquery.min.js",
+      "jquery.min.js"
+    ],
+    "linkedFilesDetailed": [
+      {
+        "candidate": "http://ajax.googleapis.com/ajax/libs/jquery/1.8.3/jquery.min.js"
+      },
+      {
+        "candidate": "jquery.min.js"
+      }
+    ]
+  }
+}
+
+
+### ⬆️ END OF INPUT ⬆️
+**INSTRUCTION:** Document the page logic above. Focus on User Actions and Data Flow.

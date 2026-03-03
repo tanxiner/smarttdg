@@ -1,0 +1,243 @@
+
+### SYSTEM ROLE
+You are a **Senior Database Architect**.
+You are NOT a Coder. You DO NOT write SQL code.
+
+### OBJECTIVE
+Document the logic of the Stored Procedure provided below.
+
+### 🛑 STRICT CONSTRAINTS
+1. **NO SQL CODE BLOCKS.** Do not rewrite the procedure code.
+2. **NO** "Here is the documentation" filler.
+3. **NO** generic explanations.
+4. **DO NOT EXPAND ACRONYMS.**
+   (Treat these as proper nouns: ["053A", "BUS_NO", "BUS_PREFIX", "DATA", "DUTY_NO", "MILEAGE", "MTV", "NON", "PLACE", "RUN_NO", "RUN_TIME", "SVC_NO", "VSVCNO"])
+
+### ✅ REQUIRED OUTPUT FORMAT
+Output exactly this structure:
+
+# Procedure: SAGE_GET_BC_Service
+
+### Purpose
+{One clear sentence explaining what business task this performs.}
+
+### Parameters
+| Name | Type | Purpose |
+| :--- | :--- | :--- |
+| @ParamName | DataType | {Inferred usage} |
+
+### Logic Flow
+{Step-by-step plain English explanation.}
+
+### Data Interactions
+* **Reads:** {List tables explicitly selected from}
+* **Writes:** {List tables inserted/updated/deleted}
+
+---
+
+### ⬇️ RAW SQL INPUT ⬇️
+ALTER PROCEDURE [dbo].[SAGE_GET_BC_Service]
+(
+@P_BusNo nvarchar(8),
+@P_ActDepTime varchar(30)
+)
+
+AS
+Begin 
+ Declare @v_current_time datetime;
+ Declare @v_trip_date datetime;
+ Declare @v_svc varchar(5);
+ Declare @v_terminal varchar(5);
+ Declare @v_dir varchar(2);
+ Declare @v_driver varchar(8);
+ Declare @v_act_time varchar(6);
+ Declare @v_runno  varchar(8),
+         @v_bus_no_without_prefix varchar(8),
+         @v_bus_no_prefix varchar(5),
+         @v_op_date datetime,
+         @v_dep_time varchar(4),
+         @v_trip_seq_no int,
+         @v_duty_no varchar(5),
+         @v_sch_arr_time varchar(4),
+         @v_sch_end_loc varchar(5),
+         @v_currecnt_time_minute as int,
+		 @v_sch_runtime as decimal(3,0),
+		 @v_SCH_DEP_TIME varchar(4),
+		 @v_vsvc varchar(5);
+
+ 
+
+ ------ FOR MTV NON MILEAGE
+ DECLARE @v_MTV_CATEGORY varchar(4),
+		@v_MTV_CODE_TYPE varchar(15),
+		@v_ST_STOP_CODE varchar(6),
+		@v_ED_STOP_CODE varchar(50),
+		@v_DISRUP_REMARK varchar(250),
+		@v_DISRUP_TXN_TYPE varchar(5)
+ 
+ SET @v_current_time = getdate();
+ SET @v_op_date = convert(datetime, convert(varchar,@v_current_time,103),103);
+ Set @v_currecnt_time_minute = datepart(hour,@v_current_time) * 60 + datepart(minute,@v_current_time) 
+ if datepart(hour,@v_current_time) < 4
+ Begin
+     SET @v_op_date = @v_op_date -1;
+     set @v_currecnt_time_minute = @v_currecnt_time_minute  + 1440;
+ End;
+  
+ --select @v_act_time= replace(substring(convert(varchar,cast(@P_ActDepTime as datetime),114),1,5),':','')
+ 
+ select @v_act_time= replace(substring(convert(varchar,cast(@v_current_time as datetime),114),1,5),':','')
+ 
+ if cast(substring(@v_act_time,1,2) as int) < 5 
+ begin
+     set @v_act_time= cast( ( cast (substring(@v_act_time,1,2) as int) + 24 ) as varchar)  + substring(@v_act_time,3,2);
+ end;
+ 
+ Set @v_bus_no_without_prefix = case len(@P_BusNo) when 8 then substring(@P_BusNo,4,5) when 7 then substring(@P_BusNo,3,5) else @P_BusNo end
+ Set @v_bus_no_prefix = case len(@P_BusNo) when 8 then substring(@P_BusNo,1,3) when 7 then substring(@P_BusNo,1,2) else substring(@P_BusNo,1,3) end
+ 
+ /*Select top 1 @v_svc =Svc_no,@v_runno = run_no
+ FROM dbo.SCS_CURR_RUN  (nolock)
+ where Bus_prefix = @v_bus_no_prefix 
+ and BUS_NO =@v_bus_no_without_prefix;
+ */
+ --check and get data from departure time sheet
+
+ select top 1 @v_terminal = a.orgt_loc_code,@v_driver = driver_no ,@v_dep_time=Act_dep_time,
+ @v_duty_no = b.DUTY_NO, @v_sch_arr_time= b.ENDPT_SCH_ARR_TIME,
+ @v_trip_seq_no = a.TRIP_SEQ_NO,@v_sch_end_loc  =b.ENDPT_LOC_CODE,
+ @v_svc = b.svc_no,@v_sch_runtime=b.RUN_TIME,@v_runno = run_no, @v_SCH_DEP_TIME = sch_dep_time
+ from dbo.scs_time_sheet_dep a (nolock)
+ join dbo.SCS_TRIP_DEPARTURE b (nolock) on a.ORGT_LOC_CODE = b.ORGT_LOC_CODE 
+ and a.SVC_NO = b.SVC_NO
+ and a.TRIP_SEQ_NO = b.TRIP_SEQ_NO
+ --join dbo.SCS_CURR_RUN  c (nolock) on b.RUN_NO=c.RUN_NO and case when substring(b.svc_no,4,1) in ('G','W') then substring(b.svc_no,1,3) else b.svc_no end  =c.svc_no
+ where a.bus_no = @v_bus_no_without_prefix
+ and a.BUS_PREFIX= @v_bus_no_prefix
+ and a.act_dep_time <= @v_act_time
+ --and @v_currecnt_time_minute <  case when ENDPT_SCH_ARR_TIME <>'2400' then  (cast(substring(ENDPT_SCH_ARR_TIME,1,2) as int) * 60 + cast(substring(ENDPT_SCH_ARR_TIME,3,2) as int) + 60) else (cast(substring(a.act_dep_time,1,2) as int) * 60 + cast(substring(a.act_dep_time,3,2) as int) + 120) end
+ and (  a.svc_no not in ('024','027','053','053A') and @v_currecnt_time_minute <  (cast(substring(a.act_dep_time,1,2) as int) * 60 + cast(substring(a.act_dep_time,3,2) as int) + isnull(b.run_time,0) + 40) 
+     or 
+	 a.svc_no in ('024','027','053','053A') and @v_currecnt_time_minute <  (cast(substring(a.act_dep_time,1,2) as int) * 60 + cast(substring(a.act_dep_time,3,2) as int) + isnull(b.run_time,0) * 2 + 40) 
+ )
+ AND isnull(a.TRIP_UPD_IND,'') <> 'D'
+ AND isnull(b.TRIP_UPD_IND,'') <> 'D'
+ --and c.Bus_prefix = @v_bus_no_prefix 
+ --and c.BUS_NO =@v_bus_no_without_prefix
+ and not exists (select 1 FROM dbo.SCS_TIME_SHEET_ARR d (nolock)
+     WHERE a.BUS_PREFIX= d.BUS_PREFIX
+     AND a.Bus_no =d.Bus_No
+     AND isnull(d.TRIP_UPD_IND,'') <> 'D'
+     AND (cast(substring(d.act_arr_time,1,2) as int) * 60 + cast(substring(d.act_arr_time,3,2) as int) - 10 ) > cast(substring(a.act_dep_time,1,2) as int) * 60 + cast(substring(a.act_dep_time,3,2) as int)   )
+ order by act_dep_time desc;  
+ 
+ if @v_driver is null
+ --from sch
+ Begin
+    print 'no departing yet'   
+    select top 1 @v_terminal = orgt_loc_code,@v_driver = null,@v_dep_time=sch_dep_time,
+    @v_duty_no = DUTY_NO, @v_sch_arr_time= ENDPT_SCH_ARR_TIME,
+    @v_trip_seq_no = TRIP_SEQ_NO,@v_sch_end_loc  =ENDPT_LOC_CODE,
+    @v_svc = a.svc_no,@v_sch_runtime  =a.RUN_TIME
+	,@v_runno = a.run_no, @v_SCH_DEP_TIME = sch_dep_time
+    from dbo.scs_trip_departure a (nolock)
+    join dbo.SCS_CURR_RUN  b (nolock) on a.RUN_NO=b.RUN_NO and case when substring(b.svc_no,4,1) in ('G','W') then substring(a.svc_no,1,3) else a.svc_no end =b.svc_no
+    where isnull(TRIP_UPD_IND,'') <> 'D'
+    AND (cast(substring(sch_dep_time,1,2) as int) * 60 + cast(substring(sch_dep_time,3,2) as int) ) > (@v_currecnt_time_minute - 5) -- 5 minute buffer for late departure
+    and b.Bus_prefix = @v_bus_no_prefix 
+    and b.BUS_NO =@v_bus_no_without_prefix
+    order by sch_dep_time asc;   
+ End;
+ 
+ if  @v_terminal is not null and @v_svc is not null
+ Begin
+     if substring(@v_svc,4,1) in ('G','W')
+     Begin
+         select top 1 @v_dir = FR_GW_SVC_REF_DIR 
+		 from dbo.BIBS_SVC_GW (nolock)
+         where FR_GW_SVC_REF_SVC= substring(@v_svc,1,3) and FR_GW_SVC_REF_GW = substring(@v_svc,4,1)
+         and @v_current_time between FR_GW_SVC_REF_START and FR_GW_SVC_REF_END;
+         set @v_svc=substring(@v_svc,1,3);
+     End
+     Else
+     Begin
+        select top 1 @v_dir = direction 
+		from dbo.BST_BSTMAST_DETAILS (nolock)
+        where service_no =@v_svc
+        and substring(stop_code,1,4) = @v_terminal 
+        order by stop_sn;
+     End
+
+	-- SELECT @v_SCH_DEP_TIME
+
+	
+ 
+	 --------- PLACE DISTRUPTION DATA IN
+	 SELECT 
+	 @v_MTV_CATEGORY = MTV_CATEGORY,
+		@v_MTV_CODE_TYPE = MTV_CODE_TYPE,
+		@v_ST_STOP_CODE = ST_STOP_CODE,
+		@v_ED_STOP_CODE = ED_STOP_CODE,
+		@v_DISRUP_REMARK = DISRUP_REMARK,
+		@v_DISRUP_TXN_TYPE = DISRUP_TXN_TYPE
+		
+		FROM SCS_MTV_NONOPN_MILEAGE_REP a
+  JOIN SCS_TRIP_DEPARTURE b ON a.op_date = b.trip_sch_date
+  AND a.svc_no = b.svc_no
+  AND a.duty_no = b.duty_no
+  AND a.run_no = b.run_no
+  AND a.trip_start_time = b.SCH_DEP_TIME
+  where b.SVC_NO =@v_svc
+  AND b.DUTY_NO = @v_duty_no
+  AND b.run_no = @v_runno
+  AND b.SCH_DEP_TIME = @v_SCH_DEP_TIME
+
+
+
+
+  
+
+--SELECT @v_vsvc = c.svc_no FROM
+--[SCS_TRIP_DEPARTURE_ORG_FORSAGE]  a
+--JOIN SCS_TRIP_DEPARTURE b 
+
+--ON a.TRIP_SCH_DATE = b.TRIP_SCH_DATE
+--AND a.ORGT_LOC_CODE = b.ORGT_LOC_CODE
+--AND a.SVC_NO = b.SVC_NO
+--AND a.TRIP_SEQ_NO = b.TRIP_SEQ_NO
+--JOIN [SCS_MTV_SCHED_TRIP_FORSAGE]  c   ON
+--b.TRIP_SCH_DATE = c.Op_date
+--AND b.run_no = c.run_no
+--AND b.Duty_no = c.duty_no
+--AND a.sch_dep_time = c.trip_start_time
+--AND substring(b.svc_no,1,3) = substring(c.svc_no,1,3)
+--where b.SVC_NO =@v_svc
+--  AND b.DUTY_NO = @v_duty_no
+--  AND b.run_no = @v_runno
+--  AND b.SCH_DEP_TIME = @v_SCH_DEP_TIME
+
+
+ end;
+ if @v_svc in ('024','027','053','053A')
+ Begin
+      set @v_sch_runtime = 2* @v_sch_runtime;
+ End;
+
+
+
+
+ select @v_svc svc,@v_dir dir ,@v_driver driver_no,@v_dep_time dep_time,
+        @v_duty_no duty_no,@v_sch_arr_time sch_arr_time, @v_trip_seq_no trip_seq_no,
+        @v_terminal start_loc_code,@v_sch_end_loc end_loc_code,@v_sch_runtime run_time
+		,@v_runno run_no, @v_SCH_DEP_TIME sch_dep_time
+		, @v_MTV_CATEGORY  MTV_CATEGORY,
+		@v_MTV_CODE_TYPE  MTV_CODE_TYPE,
+		@v_ST_STOP_CODE  ST_STOP_CODE,
+		@v_ED_STOP_CODE  ED_STOP_CODE,
+		@v_DISRUP_REMARK  DISRUP_REMARK,
+		@v_DISRUP_TXN_TYPE  DISRUP_TXN_TYPE , @v_vsvc VSVCNO;
+  
+End;
+
+### ⬆️ END OF INPUT ⬆️
+**INSTRUCTION:** Document the logic above in English.

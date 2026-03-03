@@ -1,0 +1,324 @@
+
+### SYSTEM ROLE
+You are a **Technical Writer** specializing in Legacy Web Applications.
+You are NOT a Developer. You DO NOT write code.
+
+### OBJECTIVE
+Analyze the "Code Behind" files to create a **Page Functionality Reference**.
+
+### IMPORTANT: DO NOT INFER DOMAIN
+- Do NOT infer business domain, product names, or concrete entities from filenames, base types, or project names.
+- Use only explicit evidence present in the provided IR/metadata (method names, control names, SQL table names, linked markup tokens).
+- If there is no explicit domain or entity name visible in the input, write the User Purpose exactly as:
+  This page's user purpose is Unknown (no explicit domain information in the code).
+- If you do include a purpose inferred from tokens, append the exact tokens used for the inference in parentheses, e.g. "(inferred from: baseType='SBSTransit.Common', file='RPEAS_Completed_Form.aspx.vb')".
+
+### 🛑 HARD NEGATIVE CONSTRAINTS
+1. **NO** Code blocks (C#, VB.NET, or SQL).
+2. **NO** "Installation" or "Setup" sections.
+3. **NO** explanation of standard ASP.NET concepts (e.g., don't explain what Page_Load is; explain what *this specific page* does inside it).
+4. **NO** mentions of `.designer.cs` or auto-generated controls.
+
+### ✅ STRICT OUTPUT FORMAT
+For every Page/Control found in the input, output this structure:
+
+# Page: {PageName}
+**File:** {Filename}
+
+### 1. User Purpose
+{One sentence explaining what the user does here. E.g., "Users fill out this form to request x."}
+If unknown, use the exact sentence above.
+
+### 2. Key Events & Logic
+| Event / Method | Business Logic Summary |
+| :--- | :--- |
+| {MethodName} | {Plain English description of what happens. E.g., "Validates inputs, calls DAO to save, sends email."} |
+
+### 3. Data Interactions
+* **Reads:** {List entities/tables loaded (e.g., User, BlockedTar)}
+* **Writes:** {List entities/tables saved or updated}
+
+--- 
+
+### ⬇️ RAW CODE BEHIND INPUT ⬇️
+{
+  "file": "RPEAS_Main.aspx.vb",
+  "language": "VB",
+  "namespaces": [],
+  "classes": [
+    {
+      "name": "RPEAS_Main",
+      "modifiers": "Partial Public",
+      "baseType": "",
+      "interfaces": [],
+      "Methods": [
+        "Page_Load",
+        "LinkButton1_Click",
+        "AddUrlParam",
+        "Generate_Menu"
+      ],
+      "Properties": []
+    }
+  ],
+  "methods": [
+    "Protected Page_Load(sender: Object, e: System.EventArgs): Void",
+    "Protected LinkButton1_Click(sender: System.Object, e: System.EventArgs): Void",
+    "AddUrlParam(sourceUrlParam: String, newUrlParam: String): String",
+    "Protected Generate_Menu(userid: String): Void"
+  ],
+  "ir": {
+    "file": "RPEAS_Main.aspx.vb",
+    "path": "RPEAS_Main.aspx.vb",
+    "namespaces": [],
+    "types": [
+      {
+        "kind": "Class",
+        "name": "RPEAS_Main",
+        "namespaceName": "",
+        "modifiers": "Partial Public",
+        "baseTypes": [],
+        "methods": [
+          {
+            "name": "Page_Load",
+            "modifiers": "Protected",
+            "returnType": "Void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "Object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "System.EventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "LinkButton1_Click",
+            "modifiers": "Protected",
+            "returnType": "Void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "System.Object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "System.EventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "AddUrlParam",
+            "modifiers": "",
+            "returnType": "String",
+            "parameters": [
+              {
+                "name": "sourceUrlParam",
+                "type": "String",
+                "defaultValue": null
+              },
+              {
+                "name": "newUrlParam",
+                "type": "String",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "Generate_Menu",
+            "modifiers": "Protected",
+            "returnType": "Void",
+            "parameters": [
+              {
+                "name": "userid",
+                "type": "String",
+                "defaultValue": null
+              }
+            ]
+          }
+        ],
+        "properties": [],
+        "fields": [
+          {
+            "name": "DAL",
+            "modifiers": "Dim",
+            "type": "Object"
+          }
+        ],
+        "sql": []
+      }
+    ]
+  },
+  "sql_usages": [],
+  "_matched_markup": {
+    "file": "RPEAS_Main.aspx",
+    "path": "RPEAS(Xin Er)\\RPEAS(Xin Er)\\RPEAS_Main.aspx",
+    "directives": [
+      {
+        "text": "<%@ Page Language=\"vb\" AutoEventWireup=\"false\" CodeBehind=\"RPEAS_Main.aspx.vb\" Inherits=\"RPEAS.RPEAS_Main\" %>",
+        "content": "Page Language=\"vb\" AutoEventWireup=\"false\" CodeBehind=\"RPEAS_Main.aspx.vb\" Inherits=\"RPEAS.RPEAS_Main\""
+      }
+    ],
+    "scriptBlocks": [
+      {
+        "tag": "script",
+        "attributes": "type=\"text/JavaScript\" src=\"js/curvycorners.src.js\"",
+        "attributes_parsed": {
+          "type": "\"text/JavaScript\"",
+          "src": "js/curvycorners."
+        },
+        "src": "js/curvycorners.",
+        "src_file": "js/curvycorners.",
+        "content": ""
+      },
+      {
+        "tag": "script",
+        "attributes": "language=\"javascript\" src=\"js/Common.js\" type=\"text/javascript\"",
+        "attributes_parsed": {
+          "language": "\"javascript\"",
+          "src": "\"js/Common.js\"",
+          "type": "\"text/javascript\""
+        },
+        "src": "\"js/Common.js\"",
+        "src_file": "js/Common.js",
+        "content": ""
+      },
+      {
+        "tag": "script",
+        "attributes": "type=\"text/javascript\"",
+        "attributes_parsed": {
+          "type": "\"text/javascript\""
+        },
+        "src": null,
+        "src_file": null,
+        "content": "\r\n        var offs = 0;\r\n        function ResizeI(e) {\r\n            var hgt, evt = e || window.event;\r\n            var elem = evt.target || evt.srcElement;\r\n            if (!offs) {\r\n                var obj = elem;\r\n                if (obj.offsetParent) {\r\n                    do {\r\n                        offs += obj.offsetTop;\r\n                    } while (obj = obj.offsetParent);\r\n                }\r\n            }\r\n            if (window.innerHeight) {\r\n                hgt = window.innerHeight;\r\n            }\r\n            else {\r\n                hgt = document.documentElement.clientHeight;\r\n            }\r\n            hgt -= offs;\r\n            if (!hgt || hgt <= 0) {\r\n                offs = 150; /* Aaargh! IE */\r\n                hgt = 600;\r\n            }\r\n            elem.style.height = (hgt - 20) + 'px';\r\n        }\r\n        function ResizeAllF() {\r\n            if (!offs) return true;\r\n            var fmes = document.getElementsByTagName('iframe');\r\n            if (window.innerHeight) {\r\n                hgt = window.innerHeight;\r\n            }\r\n            else {\r\n                hgt = document.documentElement.clientHeight;\r\n            }\r\n            hgt -= offs;\r\n            if (!hgt || hgt <= 0) hgt = 600;  /* Aaargh! IE */\r\n            for (var i = 0, iLen = fmes.length; i < iLen; i++) {\r\n                fmes[i].style.height = (hgt - 20) + 'px';\r\n            }\r\n        }\r\n    "
+      },
+      {
+        "tag": "script",
+        "attributes": "type=\"text/JavaScript\"",
+        "attributes_parsed": {
+          "type": "\"text/JavaScript\""
+        },
+        "src": null,
+        "src_file": null,
+        "content": "\r\n\r\n        curvyCorners.addEvent(window, 'load', initCorners);\r\n\r\n        function initCorners() {\r\n            var settings = {\r\n                tl: { radius: 17 },\r\n                tr: { radius: 2 },\r\n                bl: { radius: 2 },\r\n                br: { radius: 17 },\r\n                antiAlias: true\r\n            }\r\n            var settings2 = {\r\n                tl: { radius: 7 },\r\n                tr: { radius: 7 },\r\n                bl: { radius: 7 },\r\n                br: { radius: 7 },\r\n                antiAlias: true\r\n            }\r\n            var settings3 = {\r\n                tl: { radius: 35 },\r\n                tr: { radius: 0 },\r\n                bl: { radius: 0 },\r\n                br: { radius: 35 },\r\n                antiAlias: true\r\n            }\r\n\r\n            curvyCorners(settings2, \"#menubox\");\r\n            curvyCorners(settings, \"#divImgLogo\");\r\n        }\r\n    "
+      },
+      {
+        "tag": "script",
+        "attributes": "language=\"javascript\"",
+        "attributes_parsed": {
+          "language": "\"javascript\""
+        },
+        "src": null,
+        "src_file": null,
+        "content": "\r\n    function setIframe() {\r\n\r\n\r\n        var winW = 630;\r\n        var winH = 460;\r\n        if (document.body && document.body.offsetWidth) {\r\n            winW = document.body.offsetWidth;\r\n            winH = document.body.offsetHeight;\r\n        }\r\n        if (document.compatMode == 'CSS1Compat' &&\r\n            document.documentElement &&\r\n            document.documentElement.offsetWidth) {\r\n            winW = document.documentElement.offsetWidth;\r\n            winH = document.documentElement.offsetHeight;\r\n        }\r\n        if (window.innerWidth && window.innerHeight) {\r\n            winW = window.innerWidth;\r\n            winH = window.innerHeight;\r\n        }\r\n        if (winH > 500) {\r\n            winH = winH - 100;\r\n            document.getElementById(\"APFrame\").style.height = winH;\r\n        }\r\n        else {\r\n            document.getElementById(\"APFrame\").style.height = 500;\r\n        }\r\n\r\n    }\r\n"
+      }
+    ],
+    "linkedClientFiles": [
+      "js/curvycorners.",
+      "js/Common.js"
+    ],
+    "linkedFilesDetailed": [
+      {
+        "candidate": "js/curvycorners."
+      },
+      {
+        "file": "Common.js",
+        "path": "RPEAS(Xin Er)\\RPEAS(Xin Er)\\js\\Common.js",
+        "language": "",
+        "client_js_summary": {
+          "summary": "0 url_candidates; 4 functions; 0 API patterns",
+          "facts": {
+            "functions": [
+              "serverButtonClicked",
+              "Left",
+              "Right",
+              "SetValidatorStatus"
+            ],
+            "api_calls": [],
+            "url_candidates": []
+          }
+        }
+      }
+    ]
+  }
+}
+{
+  "file": "RPEAS_NO_ACESS.aspx.vb",
+  "language": "VB",
+  "namespaces": [],
+  "classes": [
+    {
+      "name": "RPEAS_NO_ACESS",
+      "modifiers": "Public Partial",
+      "baseType": "",
+      "interfaces": [],
+      "Methods": [
+        "Page_Load"
+      ],
+      "Properties": []
+    }
+  ],
+  "methods": [
+    "Protected Page_Load(sender: Object, e: EventArgs): Void"
+  ],
+  "ir": {
+    "file": "RPEAS_NO_ACESS.aspx.vb",
+    "path": "RPEAS_NO_ACESS.aspx.vb",
+    "namespaces": [],
+    "types": [
+      {
+        "kind": "Class",
+        "name": "RPEAS_NO_ACESS",
+        "namespaceName": "",
+        "modifiers": "Public Partial",
+        "baseTypes": [],
+        "methods": [
+          {
+            "name": "Page_Load",
+            "modifiers": "Protected",
+            "returnType": "Void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "Object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "EventArgs",
+                "defaultValue": null
+              }
+            ]
+          }
+        ],
+        "properties": [],
+        "fields": [],
+        "sql": []
+      }
+    ]
+  },
+  "sql_usages": [],
+  "_matched_markup": {
+    "file": "RPEAS_NO_ACESS.aspx",
+    "path": "RPEAS(Xin Er)\\RPEAS(Xin Er)\\RPEAS_NO_ACESS.aspx",
+    "directives": [
+      {
+        "text": "<%@ Page Language=\"vb\" AutoEventWireup=\"false\" CodeBehind=\"RPEAS_NO_ACESS.aspx.vb\" Inherits=\"RPEAS.RPEAS_NO_ACESS\" %>",
+        "content": "Page Language=\"vb\" AutoEventWireup=\"false\" CodeBehind=\"RPEAS_NO_ACESS.aspx.vb\" Inherits=\"RPEAS.RPEAS_NO_ACESS\""
+      }
+    ],
+    "scriptBlocks": [],
+    "linkedClientFiles": [],
+    "linkedFilesDetailed": []
+  }
+}
+
+
+### ⬆️ END OF INPUT ⬆️
+**INSTRUCTION:** Document the page logic above. Focus on User Actions and Data Flow.

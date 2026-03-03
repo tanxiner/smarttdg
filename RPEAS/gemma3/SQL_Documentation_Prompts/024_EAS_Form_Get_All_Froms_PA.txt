@@ -1,0 +1,145 @@
+
+### SYSTEM ROLE
+You are a **Senior Database Architect**.
+You are NOT a Coder. You DO NOT write SQL code.
+
+### OBJECTIVE
+Document the logic of the Stored Procedure provided below.
+
+### 🛑 STRICT CONSTRAINTS
+1. **NO SQL CODE BLOCKS.** Do not rewrite the procedure code.
+2. **NO** "Here is the documentation" filler.
+3. **NO** generic explanations.
+4. **DO NOT EXPAND ACRONYMS.**
+   (Treat these as proper nouns: ["ID", "PA", "ROLE", "USERID"])
+
+### ✅ REQUIRED OUTPUT FORMAT
+Output exactly this structure:
+
+# Procedure: EAS_Form_Get_All_Froms_PA
+
+### Purpose
+{One clear sentence explaining what business task this performs.}
+
+### Parameters
+| Name | Type | Purpose |
+| :--- | :--- | :--- |
+| @ParamName | DataType | {Inferred usage} |
+
+### Logic Flow
+{Step-by-step plain English explanation.}
+
+### Data Interactions
+* **Reads:** {List tables explicitly selected from}
+* **Writes:** {List tables inserted/updated/deleted}
+
+---
+
+### ⬇️ RAW SQL INPUT ⬇️
+CREATE procedure [dbo].[EAS_Form_Get_All_Froms_PA]
+
+	@P_FormStatus   varchar(1),
+	@P_FormTitle	varchar(100),
+	@P_DateFrom		varchar(10),
+	@P_DateTo		varchar(10),
+	@P_UserID		varchar(10)
+	 
+AS
+----------------------------------------
+BEGIN
+
+  declare @p_PAUserCnt int
+  
+ --check user is have PA role
+  SELECT  @p_PAUserCnt=count(*)
+  FROM [dbo].[EAS_User_Role] R,[EAS_User]  U
+  where R.userid=@P_UserID  
+  and  R.ROLE in ('PA') 
+  and  R.[Active]=1
+  and  R.USERID=u.Userid
+  and  U.[Active]=1
+  ---------------------------  
+  
+ if @P_FormStatus='P'--Progress Forms
+ BEGIN 
+	IF @p_PAUserCnt > 0 --no control ,can view all documents
+	BEGIN
+		/*select a.FormGuid,a.DocRefNo,a.DocType,a.Company,a.Title,a.updatedon as SubmitDate,		 
+					 (
+					 select (case NoDays when 0 then 
+							 'Pending Approval by ' + [dbo].[EAS_User_Name](Userid) 
+							   else 'Pending Approval by ' + [dbo].[EAS_User_Name](Userid)  +' For ' + cast(NoDays as varchar) +' Days'
+							   End )FormStatus
+						FROM (
+							Select top 1 * ,[dbo].[EAS_Form_Pending_NODays](FormGuid)as NoDays				 
+							from dbo.EAS_Form_Approve_Lvl  
+							where active=1
+							and FormGuid=a.FormGuid
+							and action is null
+							order by applevel asc 
+						)z
+					 ) as FormStatus 					 
+				     
+			 from EAS_Form_Master a 
+			 where   a.active=1  
+			 and a.FormStatus not in ('Closed','Rejected','Withdrawn')
+			 and a.Title like isnull ('%' + @P_FormTitle + '%' ,a.Title)		  
+			 and Convert(Date,a.CreatedOn) between Convert(DateTime,@P_DateFrom,103) and Convert(DateTime,@P_DateTo,103)      			 
+			 and [dbo].[EAS_Form_Get_Pending_User](a.FormGuid) in (select supervisorid
+					From   dbo.EAS_PA_Supervisor b					 
+					WHERE b.active=1
+					and b.userid=@P_UserID
+					) 		
+			 order by a.updatedon desc
+			 */			 
+			 
+			 select a.FormGuid,b.Applevel,b.userid,min(b.ID),
+					   a.DocRefNo,a.DocType,a.Company,a.Title,a.updatedon as SubmitDate,        
+					   (case [dbo].[EAS_Form_Pending_NODays](a.FormGuid) when 0 then 
+						'Pending Approval by ' + [dbo].[EAS_User_Name](Userid) 
+						else 'Pending Approval by ' + [dbo].[EAS_User_Name](Userid)  +' For ' + 
+						cast([dbo].[EAS_Form_Pending_NODays](a.FormGuid) as varchar) +' Days'
+						End )as FormStatus 	
+											   	
+				From EAS_Form_Master a,  dbo.EAS_Form_Approve_Lvl  b
+				WHERE a.FormGuid=b.FormGuid	
+				and b.Action is null 
+				and b.active=1
+				and a.active=1
+				and a.FormStatus not in ('Closed','Rejected','Withdrawn')
+				 and a.Title like '%' + isnull(@P_FormTitle,a.Title) + '%'--and a.Title like isnull ('%' + @P_FormTitle + '%' ,a.Title)		  
+			    and Convert(Date,a.CreatedOn) between Convert(DateTime,@P_DateFrom,103) and Convert(DateTime,@P_DateTo,103)      			 			
+				and b.userid in (select supervisorid
+								 From   dbo.EAS_PA_Supervisor b					 
+								 WHERE b.active=1
+								 and b.userid=@P_UserID)					
+				group by a.FormGuid,b.Applevel,b.userid,a.DocRefNo,
+				         a.DocType,a.Company,a.Title,a.updatedon 
+	END	 
+ END
+ ELSE--'C'--Completed Forms
+ BEGIn 
+	IF @p_PAUserCnt > 0 --no control ,can view all documents
+	BEGIN
+			select a.FormGuid,a.DocRefNo,a.DocType,a.Company,a.Title,a.updatedon as SubmitDate,
+				   a.FormStatus  
+				   				     
+			 from EAS_Form_Master a  
+			 where   a.active=1 
+			 and a.FormStatus in ('Closed','Rejected','Withdrawn')
+			  and a.Title like '%' + isnull(@P_FormTitle,a.Title) + '%'--and a.Title like isnull ('%' + @P_FormTitle + '%' ,a.Title)			
+			 and  Convert(Date,a.CreatedOn)  between Convert(DateTime,@P_DateFrom,103) and Convert(DateTime,@P_DateTo,103) 			 
+			 and a.FormGuid in (select a.FormGUID 
+					From  dbo.EAS_Form_Approve_Lvl a, dbo.EAS_PA_Supervisor b
+					WHERE a.Userid=b.supervisorid
+					and a.active=1
+					and b.userid=@P_UserID
+					) 
+		     order by a.updatedon desc
+	END	 
+ END
+ ------------------------------------
+END
+
+### ⬆️ END OF INPUT ⬆️
+**INSTRUCTION:** Document the logic above in English.

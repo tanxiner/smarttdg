@@ -1,0 +1,345 @@
+
+### SYSTEM ROLE
+You are a **Technical Writer** specializing in Legacy Web Applications.
+You are NOT a Developer. You DO NOT write code.
+
+### OBJECTIVE
+Analyze the "Code Behind" files to create a **Page Functionality Reference**.
+
+### IMPORTANT: DO NOT INFER DOMAIN
+- Do NOT infer business domain, product names, or concrete entities from filenames, base types, or project names.
+- Use only explicit evidence present in the provided IR/metadata (method names, control names, SQL table names, linked markup tokens).
+- If there is no explicit domain or entity name visible in the input, write the User Purpose exactly as:
+  This page's user purpose is Unknown (no explicit domain information in the code).
+- If you do include a purpose inferred from tokens, append the exact tokens used for the inference in parentheses, e.g. "(inferred from: baseType='SBSTransit.Common', file='RPEAS_Completed_Form.aspx.vb')".
+
+### 🛑 HARD NEGATIVE CONSTRAINTS
+1. **NO** Code blocks (C#, VB.NET, or SQL).
+2. **NO** "Installation" or "Setup" sections.
+3. **NO** explanation of standard ASP.NET concepts (e.g., don't explain what Page_Load is; explain what *this specific page* does inside it).
+4. **NO** mentions of `.designer.cs` or auto-generated controls.
+
+### ✅ STRICT OUTPUT FORMAT
+For every Page/Control found in the input, output this structure:
+
+# Page: {PageName}
+**File:** {Filename}
+
+### 1. User Purpose
+{One sentence explaining what the user does here. E.g., "Users fill out this form to request x."}
+If unknown, use the exact sentence above.
+
+### 2. Key Events & Logic
+| Event / Method | Business Logic Summary |
+| :--- | :--- |
+| {MethodName} | {Plain English description of what happens. E.g., "Validates inputs, calls DAO to save, sends email."} |
+
+### 3. Data Interactions
+* **Reads:** {List entities/tables loaded (e.g., User, BlockedTar)}
+* **Writes:** {List entities/tables saved or updated}
+
+--- 
+
+### ⬇️ RAW CODE BEHIND INPUT ⬇️
+{
+  "file": "Basepage.aspx.vb",
+  "language": "VB",
+  "namespaces": [],
+  "classes": [
+    {
+      "name": "Basepage",
+      "modifiers": "Partial Public",
+      "baseType": "",
+      "interfaces": [],
+      "Methods": [
+        "Page_Load",
+        "PromptJsMsg",
+        "OpenNewWindow",
+        "MsgBox",
+        "GetSqlConnection",
+        "GetSqlCommand",
+        "GetSqlDataAdapter",
+        "QuoteRemove"
+      ],
+      "Properties": []
+    }
+  ],
+  "methods": [
+    "Protected Page_Load(sender: Object, e: System.EventArgs): Void",
+    "Protected PromptJsMsg(msg: String): Void",
+    "Protected OpenNewWindow(fileName: String, Hidden1: HtmlInputHidden): Void",
+    "Public Shared MsgBox(message: String): Void",
+    "Public GetSqlConnection(): SqlConnection",
+    "Protected GetSqlCommand(cmdStr: String): SqlCommand",
+    "Protected GetSqlDataAdapter(cmd: SqlCommand): SqlDataAdapter",
+    "Public Shared QuoteRemove(s: String): String"
+  ],
+  "ir": {
+    "file": "Basepage.aspx.vb",
+    "path": "Basepage.aspx.vb",
+    "namespaces": [],
+    "types": [
+      {
+        "kind": "Class",
+        "name": "Basepage",
+        "namespaceName": "",
+        "modifiers": "Partial Public",
+        "baseTypes": [],
+        "methods": [
+          {
+            "name": "Page_Load",
+            "modifiers": "Protected",
+            "returnType": "Void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "Object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "System.EventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "PromptJsMsg",
+            "modifiers": "Protected",
+            "returnType": "Void",
+            "parameters": [
+              {
+                "name": "msg",
+                "type": "String",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "OpenNewWindow",
+            "modifiers": "Protected",
+            "returnType": "Void",
+            "parameters": [
+              {
+                "name": "fileName",
+                "type": "String",
+                "defaultValue": null
+              },
+              {
+                "name": "Hidden1",
+                "type": "HtmlInputHidden",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "MsgBox",
+            "modifiers": "Public Shared",
+            "returnType": "Void",
+            "parameters": [
+              {
+                "name": "message",
+                "type": "String",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "GetSqlConnection",
+            "modifiers": "Public",
+            "returnType": "SqlConnection",
+            "parameters": []
+          },
+          {
+            "name": "GetSqlCommand",
+            "modifiers": "Protected",
+            "returnType": "SqlCommand",
+            "parameters": [
+              {
+                "name": "cmdStr",
+                "type": "String",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "GetSqlDataAdapter",
+            "modifiers": "Protected",
+            "returnType": "SqlDataAdapter",
+            "parameters": [
+              {
+                "name": "cmd",
+                "type": "SqlCommand",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "QuoteRemove",
+            "modifiers": "Public Shared",
+            "returnType": "String",
+            "parameters": [
+              {
+                "name": "s",
+                "type": "String",
+                "defaultValue": null
+              }
+            ]
+          }
+        ],
+        "properties": [],
+        "fields": [
+          {
+            "name": "StrConn",
+            "modifiers": "Protected",
+            "type": "String"
+          },
+          {
+            "name": "SqlConn",
+            "modifiers": "Protected",
+            "type": "SqlConnection"
+          },
+          {
+            "name": "SqlDA",
+            "modifiers": "Protected",
+            "type": "SqlDataAdapter"
+          },
+          {
+            "name": "SqlReader",
+            "modifiers": "Protected",
+            "type": "SqlDataReader"
+          },
+          {
+            "name": "SqlCmd",
+            "modifiers": "Protected",
+            "type": "SqlCommand"
+          },
+          {
+            "name": "SqlTrans",
+            "modifiers": "Protected",
+            "type": "SqlTransaction"
+          },
+          {
+            "name": "SqlCmdBuilder",
+            "modifiers": "Protected",
+            "type": "SqlCommandBuilder"
+          },
+          {
+            "name": "StrErrMsg",
+            "modifiers": "Protected",
+            "type": "String"
+          },
+          {
+            "name": "StrCfgName",
+            "modifiers": "Protected",
+            "type": "String"
+          },
+          {
+            "name": "StrKeyName",
+            "modifiers": "Protected",
+            "type": "String"
+          },
+          {
+            "name": "CfgFile",
+            "modifiers": "Protected",
+            "type": "FileStream"
+          },
+          {
+            "name": "Xmldoc",
+            "modifiers": "Protected",
+            "type": "XmlDocument"
+          }
+        ],
+        "sql": []
+      }
+    ]
+  },
+  "sql_usages": [],
+  "_matched_markup": {
+    "file": "Basepage.aspx",
+    "path": "RPEAS(Xin Er)\\RPEAS(Xin Er)\\Basepage.aspx",
+    "directives": [
+      {
+        "text": "<%@ Page Language=\"vb\" AutoEventWireup=\"false\" CodeBehind=\"Basepage.aspx.vb\" Inherits=\"RPEAS.Basepage\" %>",
+        "content": "Page Language=\"vb\" AutoEventWireup=\"false\" CodeBehind=\"Basepage.aspx.vb\" Inherits=\"RPEAS.Basepage\""
+      }
+    ],
+    "scriptBlocks": [],
+    "linkedClientFiles": [],
+    "linkedFilesDetailed": []
+  }
+}
+{
+  "file": "EAS_Home.aspx.vb",
+  "language": "VB",
+  "namespaces": [],
+  "classes": [
+    {
+      "name": "EAS_Home",
+      "modifiers": "Public Partial",
+      "baseType": "",
+      "interfaces": [],
+      "Methods": [
+        "Page_Load"
+      ],
+      "Properties": []
+    }
+  ],
+  "methods": [
+    "Protected Page_Load(sender: Object, e: System.EventArgs): Void"
+  ],
+  "ir": {
+    "file": "EAS_Home.aspx.vb",
+    "path": "EAS_Home.aspx.vb",
+    "namespaces": [],
+    "types": [
+      {
+        "kind": "Class",
+        "name": "EAS_Home",
+        "namespaceName": "",
+        "modifiers": "Public Partial",
+        "baseTypes": [],
+        "methods": [
+          {
+            "name": "Page_Load",
+            "modifiers": "Protected",
+            "returnType": "Void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "Object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "System.EventArgs",
+                "defaultValue": null
+              }
+            ]
+          }
+        ],
+        "properties": [],
+        "fields": [],
+        "sql": []
+      }
+    ]
+  },
+  "sql_usages": [],
+  "_matched_markup": {
+    "file": "EAS_Home.aspx",
+    "path": "RPEAS(Xin Er)\\RPEAS(Xin Er)\\EAS_Home.aspx",
+    "directives": [
+      {
+        "text": "<%@ Page Language=\"vb\" AutoEventWireup=\"false\" CodeBehind=\"EAS_Home.aspx.vb\" Inherits=\"RPEAS.EAS_Home\" %>",
+        "content": "Page Language=\"vb\" AutoEventWireup=\"false\" CodeBehind=\"EAS_Home.aspx.vb\" Inherits=\"RPEAS.EAS_Home\""
+      }
+    ],
+    "scriptBlocks": [],
+    "linkedClientFiles": [],
+    "linkedFilesDetailed": []
+  }
+}
+
+
+### ⬆️ END OF INPUT ⬆️
+**INSTRUCTION:** Document the page logic above. Focus on User Actions and Data Flow.

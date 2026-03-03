@@ -1,0 +1,101 @@
+
+### SYSTEM ROLE
+You are a **Senior Database Architect**.
+You are NOT a Coder. You DO NOT write SQL code.
+
+### OBJECTIVE
+Document the logic of the Stored Procedure provided below.
+
+### 🛑 STRICT CONSTRAINTS
+1. **NO SQL CODE BLOCKS.** Do not rewrite the procedure code.
+2. **NO** "Here is the documentation" filler.
+3. **NO** generic explanations.
+4. **DO NOT EXPAND ACRONYMS.**
+   (Treat these as proper nouns: ["ID"])
+
+### ✅ REQUIRED OUTPUT FORMAT
+Output exactly this structure:
+
+# Procedure: EAS_Form_Save_Withdrawn_Action
+
+### Purpose
+{One clear sentence explaining what business task this performs.}
+
+### Parameters
+| Name | Type | Purpose |
+| :--- | :--- | :--- |
+| @ParamName | DataType | {Inferred usage} |
+
+### Logic Flow
+{Step-by-step plain English explanation.}
+
+### Data Interactions
+* **Reads:** {List tables explicitly selected from}
+* **Writes:** {List tables inserted/updated/deleted}
+
+---
+
+### ⬇️ RAW SQL INPUT ⬇️
+CREATE procedure [dbo].[EAS_Form_Save_Withdrawn_Action]
+
+	@P_Guid varchar(225),
+	@P_Userid varchar(15),
+	@P_GroupLvl int,
+	--@P_ActionID int,
+	@P_Status  varchar(50),
+	@P_Remarks varchar(1000),
+	@P_ChkConflict varchar(1),
+	@P_ErrorMsge varchar(500) output
+	 
+AS
+BEGIN
+
+set @P_ErrorMsge=''
+
+  BEGIN TRY  
+  BEGIN TRANSACTION;     
+     
+ --update Form Master
+ Update dbo.EAS_Form_Master  
+ set FormStatus =@P_Status,
+	 UpdatedBy =@P_Userid ,UpdatedOn =GETDATE ()  
+ where FormGuid=@P_Guid
+ ------------------------   
+ --update Form App Level
+ Update  dbo.EAS_Form_Approve_Lvl
+ set Action ='Withdrawn',ChkDeclareConflit=@P_ChkConflict,Remarks=@P_Remarks,
+	 ActionBy  =@P_Userid ,
+	 ActionOn  =GETDATE ()  
+ where FormGuid=@P_Guid
+-- and ID=@P_ActionID
+-- and AppLevel=@P_AppLevel
+ and UserID=@P_Userid
+ and active=1
+------------------------    
+ Insert into dbo.EAS_Form_Log_History
+ (FormGuid,Remarks,Action,ActionBy,ActionOn)
+ values(@P_Guid,@P_Remarks,'Withdrawn by',@P_Userid,GETDATE () )
+ -----------------------
+   
+   --Send Withdrawn Email
+ EXEC	 [dbo].[EAS_Send_Withdrawn_Email]
+			 @P_Guid ,
+			 @P_Userid,
+			-- @P_ActionID,
+			 @P_ErrorMsge OUTPUT
+	 -----------------------
+   		 
+  COMMIT TRANSACTION;  
+ END TRY  
+  --Catch Error Message  
+ BEGIN CATCH   
+   set @P_ErrorMsge= ERROR_MESSAGE();      
+  ROLLBACK TRANSACTION;  
+ END CATCH;   
+ Set @P_ErrorMsge=isnull(@P_ErrorMsge,'')  
+    
+ 
+END
+
+### ⬆️ END OF INPUT ⬆️
+**INSTRUCTION:** Document the logic above in English.

@@ -1,0 +1,101 @@
+
+### SYSTEM ROLE
+You are a **Senior Database Architect**.
+You are NOT a Coder. You DO NOT write SQL code.
+
+### OBJECTIVE
+Document the logic of the Stored Procedure provided below.
+
+### 🛑 STRICT CONSTRAINTS
+1. **NO SQL CODE BLOCKS.** Do not rewrite the procedure code.
+2. **NO** "Here is the documentation" filler.
+3. **NO** generic explanations.
+4. **DO NOT EXPAND ACRONYMS.**
+   (Treat these as proper nouns: ["EAS_USER", "PA", "RPEAS"])
+
+### ✅ REQUIRED OUTPUT FORMAT
+Output exactly this structure:
+
+# Procedure: EAS_Form_Check_Action_Access_Lists
+
+### Purpose
+{One clear sentence explaining what business task this performs.}
+
+### Parameters
+| Name | Type | Purpose |
+| :--- | :--- | :--- |
+| @ParamName | DataType | {Inferred usage} |
+
+### Logic Flow
+{Step-by-step plain English explanation.}
+
+### Data Interactions
+* **Reads:** {List tables explicitly selected from}
+* **Writes:** {List tables inserted/updated/deleted}
+
+---
+
+### ⬇️ RAW SQL INPUT ⬇️
+CREATE procedure [dbo].[EAS_Form_Check_Action_Access_Lists]
+
+	@P_Guid				varchar(225),
+	@P_UserID		    varchar(15), 
+	@P_ErrorMsg			varchar(500)  output	
+ 
+AS
+BEGIN
+
+set @P_ErrorMsg=''
+declare @p_Supervisorid varchar(10)
+declare @pcnt int
+declare @pPACnt int 
+    
+select @p_Supervisorid=a.userid
+From dbo.EAS_Form_Approve_Lvl a, EAS_USER b
+where FormGuid =@P_Guid
+and a.userid=b.userid
+and b.sysid='RPEAS'
+and a.active=b.active
+and a.active=1
+and a.Applevel=4
+
+
+Select @pcnt=COUNT(*)
+from EAS_Form_Approve_Lvl
+where formguid=@P_Guid
+and userid=@P_UserID	
+   
+
+select @pPACnt=count(a.userid)
+from EAS_USER a 
+where a.userid=@P_UserID	
+and a.userid in (
+		select userid
+		from dbo.EAS_PA_Supervisor
+		where supervisorid=@p_Supervisorid
+		and active=1)
+	and active=1
+	and a.userid in (Select userid 
+					 from EAS_USER_ROLE	
+					 where sysid='RPEAS'
+					 and Role='PA'
+					 and active=1
+					 )
+   
+--select @pcnt,@pPACnt,@p_Supervisorid
+		 
+	/*IF (Select COUNT(*)
+		from EAS_Form_Approve_Lvl
+		where formguid=@P_Guid
+		and userid=@P_UserID
+		)= 0*/
+	IF (@pcnt=0 and @pPACnt=0)
+	BEGIN
+	 set @p_Errormsg='You Are Not Authorised To View This Page.'
+	 return
+	END
+
+END
+
+### ⬆️ END OF INPUT ⬆️
+**INSTRUCTION:** Document the logic above in English.

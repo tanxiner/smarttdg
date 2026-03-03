@@ -1,4 +1,10 @@
-﻿using Newtonsoft.Json;
+﻿using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
+using System.Linq;
+using System.Text;
+using Newtonsoft.Json;
 using Roslyn.Analyzers;
 
 class Program
@@ -7,9 +13,62 @@ class Program
     {
         try
         {
+            // Prefer explicit FLASK_ROOT env var set by caller; otherwise try to locate the repository's "flask" folder
+            string? flaskRoot = null;
+            var flaskRootEnv = Environment.GetEnvironmentVariable("FLASK_ROOT");
+            if (!string.IsNullOrWhiteSpace(flaskRootEnv) && Directory.Exists(flaskRootEnv))
+            {
+                flaskRoot = flaskRootEnv;
+            }
+            else
+            {
+                var exeDir = AppContext.BaseDirectory;
+                flaskRoot = FindFolderUp(exeDir, "flask");
+            }
+
             if (args.Length == 0)
             {
                 Console.WriteLine(JsonConvert.SerializeObject(new { error = "No file path provided" }));
+                return 0;
+            }
+
+            // --- CHANGED: Support for @filelist argument to bypass CLI limits ---
+            List<string> filesToAnalyze = new List<string>();
+            
+            // Check if the first argument is a file list (starts with @ or just a .txt convention we establish)
+            // Ideally, we just check if args[0] is a text file that contains a list of paths.
+            // For robustness, we'll assume if args.Length == 1 and it's a valid text file, treat it as a list.
+            if (args.Length == 1 && File.Exists(args[0]) && Path.GetExtension(args[0]).Equals(".txt", StringComparison.OrdinalIgnoreCase))
+            {
+                try 
+                {
+                    // Read lines, trimming and ignoring empty ones
+                    var lines = File.ReadAllLines(args[0]);
+                    foreach (var line in lines)
+                    {
+                        var trimmed = line.Trim();
+                        if (!string.IsNullOrWhiteSpace(trimmed)) 
+                        {
+                            filesToAnalyze.Add(trimmed);
+                        }
+                    }
+                    Console.WriteLine(JsonConvert.SerializeObject(new { debug = "Read file list from input file", listFile = args[0], count = filesToAnalyze.Count }));
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine(JsonConvert.SerializeObject(new { error = "Failed to read file list", message = ex.Message }));
+                    return 1;
+                }
+            }
+            else
+            {
+                // Normal behavior: args are the files
+                filesToAnalyze.AddRange(args);
+            }
+
+            if (filesToAnalyze.Count == 0)
+            {
+                Console.WriteLine(JsonConvert.SerializeObject(new { error = "No files found to analyze" }));
                 return 0;
             }
 
@@ -17,7 +76,7 @@ class Program
             List<object> allResults = new List<object>();
 
             // Process each file
-            foreach (var filePath in args)
+            foreach (var filePath in filesToAnalyze)
             {
                 if (!File.Exists(filePath))
                 {
@@ -48,36 +107,20 @@ class Program
                         Console.WriteLine(JsonConvert.SerializeObject(new { debug = "Calling AnalyzeVisualBasic", filePath }));
                         result = VisualBasicAnalyzer.Analyze(code, filePath);
                     }
-                    else if (ext == ".cshtml")
-                    {
-                        Console.WriteLine(JsonConvert.SerializeObject(new { debug = "Calling AnalyzeCshtml", filePath }));
-                        result = CshtmlExtractor.Analyze(code, filePath);
-                    }
                     else if (ext == ".aspx" || ext == ".ascx" || ext == ".master")
                     {
                         Console.WriteLine(JsonConvert.SerializeObject(new { debug = "Calling AnalyzeAspx", filePath }));
-                        result = AspxExtractor.Analyze(code, filePath);
-
-                        // Debug: confirm AspxExtractor ran and returned something
-                        try
-                        {
-                            Console.WriteLine(JsonConvert.SerializeObject(new
-                            {
-                                debug = "AspxAnalyzerReturned",
-                                file = Path.GetFileName(filePath),
-                                ext,
-                                hasResult = result != null
-                            }, Formatting.None));
-                        }
-                        catch
-                        {
-                            Console.WriteLine(JsonConvert.SerializeObject(new
-                            {
-                                debug = "AspxAnalyzerReturned (serialization failed)",
-                                file = Path.GetFileName(filePath),
-                                ext
-                            }));
-                        }
+                        result = AspxAnalyzer.Analyze(code, filePath);
+                    }
+                    else if (ext == ".js")
+                    {
+                        Console.WriteLine(JsonConvert.SerializeObject(new { debug = "Calling AnalyzeJs", filePath }));
+                        result = JsAnalyzer.Analyze(code, filePath);
+                    }
+                    else if (ext == ".html")
+                    {
+                        Console.WriteLine(JsonConvert.SerializeObject(new { debug = "Calling AnalyzeHtml", filePath }));
+                        result = HtmlAnalyzer.Analyze(code, filePath);
                     }
                     else
                     {
@@ -107,18 +150,95 @@ class Program
             // Write ALL results ONCE at the end
             if (allResults.Count > 0)
             {
-                var outputPath = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-                    "all_analysis_results1.json"
-                );
+                // Determine output directory:
+                // 1) If caller sets ANALYZER_OUTPUT_DIR env var, use it.
+                // 2) Otherwise try current working directory.
+                // 3) Fallback to user's Documents.
+                string? outputDir = Environment.GetEnvironmentVariable("ANALYZER_OUTPUT_DIR");
+                if (string.IsNullOrWhiteSpace(outputDir))
+                {
+                    try
+                    {
+                        outputDir = Environment.CurrentDirectory;
+                    }
+                    catch
+                    {
+                        outputDir = null;
+                    }
+                }
+                if (string.IsNullOrWhiteSpace(outputDir))
+                {
+                    outputDir = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+                }
+
+                var outputPath = Path.Combine(outputDir, "all_analysis_results.json");
 
                 File.WriteAllText(outputPath, JsonConvert.SerializeObject(allResults, Formatting.Indented));
                 Console.WriteLine(JsonConvert.SerializeObject(new
                 {
                     savedTo = outputPath,
-                    totalFiles = args.Length,
+                    totalFiles = filesToAnalyze.Count,
                     successfulAnalyses = allResults.Count
                 }));
+
+                // --- AUTOMATION: invoke downstream Python processors (non-interactive) ---
+                try
+                {
+                    if (flaskRoot == null)
+                    {
+                        Console.WriteLine(JsonConvert.SerializeObject(new { debug = "flask folder not found; skipping downstream scripts" }));
+                    }
+                    else
+                    {
+                        // Analyzer scripts directory
+                        var analyzerRoot = Path.Combine(flaskRoot, "backend", "services", "analyzer");
+
+                        // Define scripts in the required order, with compile.py as the last entry
+                        var scripts = new[]
+                        {
+                            Path.Combine(analyzerRoot, "ai_analysis", "ai_splitter.py"),
+                            Path.Combine(analyzerRoot, "sql_analysis", "sql_splitter.py"),
+                            Path.Combine(analyzerRoot, "merge_manifests.py"),
+                            Path.Combine(analyzerRoot, "ai_analysis", "ai_analysis.py"),
+                            Path.Combine(analyzerRoot, "sql_analysis", "sql_analysis.py"),
+                            Path.Combine(flaskRoot, "backend", "compile.py")
+                        };
+
+                        var pythonExe = FindPythonExecutable() ?? "python";
+
+                        foreach (var script in scripts)
+                        {
+                            if (!File.Exists(script))
+                            {
+                                Console.WriteLine(JsonConvert.SerializeObject(new { debug = "script_not_found", script }));
+                                continue;
+                            }
+
+                            Console.WriteLine(JsonConvert.SerializeObject(new { debug = "running_script", script }));
+
+                            var workDir = Path.GetDirectoryName(script) ?? flaskRoot;
+                            var success = RunExternalScript(pythonExe, script, workDir, TimeSpan.FromMinutes(30), out var stdout, out var stderr);
+
+                            Console.WriteLine(JsonConvert.SerializeObject(new
+                            {
+                                script,
+                                success,
+                                stdout_summary = Shorten(stdout, 2000),
+                                stderr_summary = Shorten(stderr, 2000)
+                            }));
+                        }
+                    }
+                }
+                catch (Exception exScripts)
+                {
+                    Console.WriteLine(JsonConvert.SerializeObject(new
+                    {
+                        error = "Exception while running downstream scripts",
+                        exceptionType = exScripts.GetType().FullName,
+                        message = exScripts.Message,
+                        stackTrace = exScripts.StackTrace
+                    }));
+                }
             }
 
             return 0;
@@ -134,5 +254,120 @@ class Program
             }));
             return 1;
         }
+    }
+
+    // --- Helper: run external python script with timeout and capture output ---
+    static bool RunExternalScript(string pythonExe, string scriptPath, string workingDirectory, TimeSpan timeout, out string stdout, out string stderr)
+    {
+        stdout = "";
+        stderr = "";
+
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = pythonExe,
+                Arguments = $"\"{scriptPath}\"",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                WorkingDirectory = workingDirectory
+            };
+
+            using var proc = new Process { StartInfo = psi, EnableRaisingEvents = true };
+            var sbOut = new StringBuilder();
+            var sbErr = new StringBuilder();
+
+            proc.OutputDataReceived += (_, e) => { if (e.Data != null) sbOut.AppendLine(e.Data); };
+            proc.ErrorDataReceived += (_, e) => { if (e.Data != null) sbErr.AppendLine(e.Data); };
+
+            if (!proc.Start())
+            {
+                stderr = "Failed to start process.";
+                return false;
+            }
+
+            proc.BeginOutputReadLine();
+            proc.BeginErrorReadLine();
+
+            if (!proc.WaitForExit((int)timeout.TotalMilliseconds))
+            {
+                try
+                {
+                    proc.Kill(true);
+                }
+                catch { /* best-effort */ }
+
+                stderr = $"Process timed out after {timeout.TotalMinutes} minutes.";
+                stdout = sbOut.ToString();
+                return false;
+            }
+
+            stdout = sbOut.ToString();
+            stderr = sbErr.ToString();
+
+            return proc.ExitCode == 0;
+        }
+        catch (Exception ex)
+        {
+            stderr = ex.ToString();
+            return false;
+        }
+    }
+
+    // --- Helper: shorten long outputs for logs ---
+    static string Shorten(string s, int max)
+    {
+        if (string.IsNullOrEmpty(s)) return "";
+        if (s.Length <= max) return s;
+        return s.Substring(0, max) + "...(truncated)";
+    }
+
+    // --- Helper: find folder by walking parent directories ---
+    static string? FindFolderUp(string startDirectory, string folderName)
+    {
+        try
+        {
+            var dir = new DirectoryInfo(startDirectory);
+            while (dir != null)
+            {
+                var candidate = Path.Combine(dir.FullName, folderName);
+                if (Directory.Exists(candidate)) return candidate;
+                dir = dir.Parent;
+            }
+        }
+        catch { }
+        return null;
+    }
+
+    // --- Helper: try to resolve a usable python exe name by probing common names ---
+    static string? FindPythonExecutable()
+    {
+        var candidates = new[] { Environment.GetEnvironmentVariable("PYTHON_BIN") ?? "", "python", "python3" }
+                         .Where(s => !string.IsNullOrWhiteSpace(s));
+
+        foreach (var c in candidates)
+        {
+            try
+            {
+                var psi = new ProcessStartInfo
+                {
+                    FileName = c,
+                    Arguments = "--version",
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
+                using var p = Process.Start(psi);
+                if (p == null) continue;
+                if (!p.WaitForExit(3000)) { try { p.Kill(true); } catch { } continue; }
+                // If exit code is 0, treat as valid python
+                if (p.ExitCode == 0) return c;
+            }
+            catch { /* ignore and try next */ }
+        }
+        return null;
     }
 }

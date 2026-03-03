@@ -23,20 +23,27 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="backend\app.py" />
+    <Compile Include="backend\diagram_routes.py" />
     <Compile Include="backend\services\analyzer\analyzer_runner.py" />
+    <Compile Include="backend\services\analyzer\diagram_generator.py" />
+    <Compile Include="backend\services\analyzer\merge_manifests.py" />
+    <Compile Include="backend\services\analyzer\save_results.py" />
   </ItemGroup>
   <ItemGroup>
     <Folder Include="backend\" />
     <Folder Include="backend\services\" />
     <Folder Include="backend\services\analyzer\" />
     <Folder Include="frontend\" />
+    <Folder Include="frontend\src\components\" />
     <Folder Include="frontend\src\styles\" />
     <Folder Include="frontend\templates\" />
     <Folder Include="frontend\js\" />
     <Folder Include="frontend\src\" />
   </ItemGroup>
   <ItemGroup>
+    <Content Include="frontend\package.json" />
     <Content Include="frontend\src\App.tsx" />
+    <Content Include="frontend\src\components\DiagramViewer.tsx" />
     <Content Include="frontend\src\styles\globals.css" />
     <Content Include="frontend\templates\index.html" />
     <Content Include="frontend\src\Attributions.md" />

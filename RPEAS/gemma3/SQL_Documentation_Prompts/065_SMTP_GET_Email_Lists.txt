@@ -1,0 +1,77 @@
+
+### SYSTEM ROLE
+You are a **Senior Database Architect**.
+You are NOT a Coder. You DO NOT write SQL code.
+
+### OBJECTIVE
+Document the logic of the Stored Procedure provided below.
+
+### 🛑 STRICT CONSTRAINTS
+1. **NO SQL CODE BLOCKS.** Do not rewrite the procedure code.
+2. **NO** "Here is the documentation" filler.
+3. **NO** generic explanations.
+4. **DO NOT EXPAND ACRONYMS.**
+   (Treat these as proper nouns: ["ALERTID", "EALERTQ", "EALERTQTO", "GREETINGS", "RECIPIENT", "SENDER", "SMTP", "SUBJECT"])
+
+### ✅ REQUIRED OUTPUT FORMAT
+Output exactly this structure:
+
+# Procedure: SMTP_GET_Email_Lists
+
+### Purpose
+{One clear sentence explaining what business task this performs.}
+
+### Parameters
+| Name | Type | Purpose |
+| :--- | :--- | :--- |
+| @ParamName | DataType | {Inferred usage} |
+
+### Logic Flow
+{Step-by-step plain English explanation.}
+
+### Data Interactions
+* **Reads:** {List tables explicitly selected from}
+* **Writes:** {List tables inserted/updated/deleted}
+
+---
+
+### ⬇️ RAW SQL INPUT ⬇️
+CREATE  PROCEDURE [dbo].[SMTP_GET_Email_Lists]
+ 
+AS
+--------------------------------------------------------------------------------------------------------------
+-- Procedure Name 	: SMTP_GET_Email_Lists 
+-- Date Created		: 16/03/2018
+-- Purpose			: To Send Email Alert using SMTP
+---------------------------------------------------------------------------------------------------------------
+
+
+
+SET TRANSACTION ISOLATION LEVEL SERIALIZABLE
+ 
+
+ select A.GREETINGS,A.SUBJECT,
+	    A.AlertMsg ,A.SENDER,A.ALERTID,a.SYS  ,
+		[dbo].[SMTP_GET_EMAIL_CC_LISTS](A.ALERTID) as CCRecipient,
+		[dbo].[SMTP_GET_EMAIL_BCC_LISTS](A.ALERTID) as BCCRecipient,				 
+        X.RECIPIENT             
+ from EALERTQ A , ( SELECT ALERTID, 
+					STUFF((SELECT CAST(',' AS varchar(max)) + RECIPIENT 
+					FROM EALERTQTO  as b 
+					WHERE b.ALERTID = a.ALERTID 
+					AND b.Active=1
+					AND LTRIM(rtrim(RECIPIENT)) <> ''
+					FOR XML PATH(''), TYPE 
+					 ).value('.', 'varchar(max)' 
+					  ),1, 1,'') AS RECIPIENT 
+					FROM 
+					(SELECT DISTINCT ALERTID FROM EALERTQTO ) AS a  
+					  
+				 ) X
+ where A.status='Q'
+ and A.ALERTID=X.ALERTID
+ ORDER BY A.ALERTID;
+ -------------
+
+### ⬆️ END OF INPUT ⬆️
+**INSTRUCTION:** Document the logic above in English.

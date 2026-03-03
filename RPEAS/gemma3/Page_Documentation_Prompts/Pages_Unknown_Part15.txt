@@ -1,0 +1,222 @@
+
+### SYSTEM ROLE
+You are a **Technical Writer** specializing in Legacy Web Applications.
+You are NOT a Developer. You DO NOT write code.
+
+### OBJECTIVE
+Analyze the "Code Behind" files to create a **Page Functionality Reference**.
+
+### IMPORTANT: DO NOT INFER DOMAIN
+- Do NOT infer business domain, product names, or concrete entities from filenames, base types, or project names.
+- Use only explicit evidence present in the provided IR/metadata (method names, control names, SQL table names, linked markup tokens).
+- If there is no explicit domain or entity name visible in the input, write the User Purpose exactly as:
+  This page's user purpose is Unknown (no explicit domain information in the code).
+- If you do include a purpose inferred from tokens, append the exact tokens used for the inference in parentheses, e.g. "(inferred from: baseType='SBSTransit.Common', file='RPEAS_Completed_Form.aspx.vb')".
+
+### 🛑 HARD NEGATIVE CONSTRAINTS
+1. **NO** Code blocks (C#, VB.NET, or SQL).
+2. **NO** "Installation" or "Setup" sections.
+3. **NO** explanation of standard ASP.NET concepts (e.g., don't explain what Page_Load is; explain what *this specific page* does inside it).
+4. **NO** mentions of `.designer.cs` or auto-generated controls.
+
+### ✅ STRICT OUTPUT FORMAT
+For every Page/Control found in the input, output this structure:
+
+# Page: {PageName}
+**File:** {Filename}
+
+### 1. User Purpose
+{One sentence explaining what the user does here. E.g., "Users fill out this form to request x."}
+If unknown, use the exact sentence above.
+
+### 2. Key Events & Logic
+| Event / Method | Business Logic Summary |
+| :--- | :--- |
+| {MethodName} | {Plain English description of what happens. E.g., "Validates inputs, calls DAO to save, sends email."} |
+
+### 3. Data Interactions
+* **Reads:** {List entities/tables loaded (e.g., User, BlockedTar)}
+* **Writes:** {List entities/tables saved or updated}
+
+--- 
+
+### ⬇️ RAW CODE BEHIND INPUT ⬇️
+{
+  "file": "RPEAS_Form_View_Org.aspx.vb",
+  "language": "VB",
+  "namespaces": [],
+  "classes": [
+    {
+      "name": "RPEAS_Form_View_Org",
+      "modifiers": "Partial Public",
+      "baseType": "",
+      "interfaces": [],
+      "Methods": [
+        "Page_Load",
+        "hide_ReRoute_Withdraw",
+        "Check_UserViewAccess",
+        "PopulateData",
+        "Read_Only_Checkbox",
+        "Read_Only_Radiobutton",
+        "btncancel_Approver_Click"
+      ],
+      "Properties": []
+    }
+  ],
+  "methods": [
+    "Protected Page_Load(sender: Object, e: System.EventArgs): Void",
+    "Private hide_ReRoute_Withdraw(): Void",
+    "Private Check_UserViewAccess(errormsg: String): Void",
+    "Private PopulateData(): Void",
+    "Private Read_Only_Checkbox(chkbox: CheckBox): Void",
+    "Private Read_Only_Radiobutton(radio: RadioButton): Void",
+    "Protected btncancel_Approver_Click(sender: Object, e: EventArgs): Void"
+  ],
+  "ir": {
+    "file": "RPEAS_Form_View_Org.aspx.vb",
+    "path": "RPEAS_Form_View_Org.aspx.vb",
+    "namespaces": [],
+    "types": [
+      {
+        "kind": "Class",
+        "name": "RPEAS_Form_View_Org",
+        "namespaceName": "",
+        "modifiers": "Partial Public",
+        "baseTypes": [],
+        "methods": [
+          {
+            "name": "Page_Load",
+            "modifiers": "Protected",
+            "returnType": "Void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "Object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "System.EventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "hide_ReRoute_Withdraw",
+            "modifiers": "Private",
+            "returnType": "Void",
+            "parameters": []
+          },
+          {
+            "name": "Check_UserViewAccess",
+            "modifiers": "Private",
+            "returnType": "Void",
+            "parameters": [
+              {
+                "name": "errormsg",
+                "type": "String",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "PopulateData",
+            "modifiers": "Private",
+            "returnType": "Void",
+            "parameters": []
+          },
+          {
+            "name": "Read_Only_Checkbox",
+            "modifiers": "Private",
+            "returnType": "Void",
+            "parameters": [
+              {
+                "name": "chkbox",
+                "type": "CheckBox",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "Read_Only_Radiobutton",
+            "modifiers": "Private",
+            "returnType": "Void",
+            "parameters": [
+              {
+                "name": "radio",
+                "type": "RadioButton",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "btncancel_Approver_Click",
+            "modifiers": "Protected",
+            "returnType": "Void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "Object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "EventArgs",
+                "defaultValue": null
+              }
+            ]
+          }
+        ],
+        "properties": [],
+        "fields": [
+          {
+            "name": "DAL",
+            "modifiers": "Dim",
+            "type": "Object"
+          },
+          {
+            "name": "DAL_Error",
+            "modifiers": "Dim",
+            "type": "Object"
+          },
+          {
+            "name": "errormsg",
+            "modifiers": "Dim",
+            "type": "String"
+          }
+        ],
+        "sql": []
+      }
+    ]
+  },
+  "sql_usages": [],
+  "_matched_markup": {
+    "file": "RPEAS_Form_View_Org.aspx",
+    "path": "RPEAS(Xin Er)\\RPEAS(Xin Er)\\RPEAS_Form_View_Org.aspx",
+    "directives": [
+      {
+        "text": "<%@ Page Language=\"vb\" AutoEventWireup=\"false\" CodeBehind=\"RPEAS_Form_View_Org.aspx.vb\"\r\n    Inherits=\"RPEAS.RPEAS_Form_View_Org\" %>",
+        "content": "Page Language=\"vb\" AutoEventWireup=\"false\" CodeBehind=\"RPEAS_Form_View_Org.aspx.vb\"\r\n    Inherits=\"RPEAS.RPEAS_Form_View_Org\""
+      }
+    ],
+    "scriptBlocks": [
+      {
+        "tag": "script",
+        "attributes": "language=\"javascript\" type=\"text/javascript\"",
+        "attributes_parsed": {
+          "language": "\"javascript\"",
+          "type": "\"text/javascript\""
+        },
+        "src": null,
+        "src_file": null,
+        "content": "\r\n\r\n\r\n\r\n        function characterCounter(controlId, countControlId, maxCharlimit) {\r\n            //alert ('hi');\r\n            if (controlId.value.length > maxCharlimit)\r\n                controlId.value = controlId.value.substring(0, maxCharlimit);\r\n\r\n            else\r\n                countControlId.value = maxCharlimit - controlId.value.length;\r\n        }\r\n       \r\n\r\n    "
+      }
+    ],
+    "linkedClientFiles": [],
+    "linkedFilesDetailed": []
+  }
+}
+
+
+### ⬆️ END OF INPUT ⬆️
+**INSTRUCTION:** Document the page logic above. Focus on User Actions and Data Flow.

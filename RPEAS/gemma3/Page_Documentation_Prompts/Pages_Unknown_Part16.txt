@@ -1,0 +1,349 @@
+
+### SYSTEM ROLE
+You are a **Technical Writer** specializing in Legacy Web Applications.
+You are NOT a Developer. You DO NOT write code.
+
+### OBJECTIVE
+Analyze the "Code Behind" files to create a **Page Functionality Reference**.
+
+### IMPORTANT: DO NOT INFER DOMAIN
+- Do NOT infer business domain, product names, or concrete entities from filenames, base types, or project names.
+- Use only explicit evidence present in the provided IR/metadata (method names, control names, SQL table names, linked markup tokens).
+- If there is no explicit domain or entity name visible in the input, write the User Purpose exactly as:
+  This page's user purpose is Unknown (no explicit domain information in the code).
+- If you do include a purpose inferred from tokens, append the exact tokens used for the inference in parentheses, e.g. "(inferred from: baseType='SBSTransit.Common', file='RPEAS_Completed_Form.aspx.vb')".
+
+### 🛑 HARD NEGATIVE CONSTRAINTS
+1. **NO** Code blocks (C#, VB.NET, or SQL).
+2. **NO** "Installation" or "Setup" sections.
+3. **NO** explanation of standard ASP.NET concepts (e.g., don't explain what Page_Load is; explain what *this specific page* does inside it).
+4. **NO** mentions of `.designer.cs` or auto-generated controls.
+
+### ✅ STRICT OUTPUT FORMAT
+For every Page/Control found in the input, output this structure:
+
+# Page: {PageName}
+**File:** {Filename}
+
+### 1. User Purpose
+{One sentence explaining what the user does here. E.g., "Users fill out this form to request x."}
+If unknown, use the exact sentence above.
+
+### 2. Key Events & Logic
+| Event / Method | Business Logic Summary |
+| :--- | :--- |
+| {MethodName} | {Plain English description of what happens. E.g., "Validates inputs, calls DAO to save, sends email."} |
+
+### 3. Data Interactions
+* **Reads:** {List entities/tables loaded (e.g., User, BlockedTar)}
+* **Writes:** {List entities/tables saved or updated}
+
+--- 
+
+### ⬇️ RAW CODE BEHIND INPUT ⬇️
+{
+  "file": "RPEAS_Login.aspx.vb",
+  "language": "VB",
+  "namespaces": [],
+  "classes": [
+    {
+      "name": "RPEAS_Login",
+      "modifiers": "Partial Public",
+      "baseType": "",
+      "interfaces": [],
+      "Methods": [
+        "Page_Load",
+        "btnLogin_Click",
+        "authenticateUser",
+        "RetrieveToken",
+        "callPostMethod",
+        "callGetMethod",
+        "Encrypt",
+        "getLoginresponce",
+        "CheckAccess",
+        "LoadMenu",
+        "btnReset_Click"
+      ],
+      "Properties": []
+    }
+  ],
+  "methods": [
+    "Protected Page_Load(sender: Object, e: System.EventArgs): Void",
+    "Protected Async btnLogin_Click(sender: System.Object, e: System.EventArgs): Void",
+    "Public Async authenticateUser(uid: String, password: String): Threading.Tasks.Task(Of Object)",
+    "Public Async RetrieveToken(): Threading.Tasks.Task(Of String)",
+    "Public Async callPostMethod(url: String, token: String, arg: HttpContent): Threading.Tasks.Task(Of T)",
+    "Public Async callGetMethod(url: String): Threading.Tasks.Task(Of String)",
+    "Public Encrypt(val: String): String",
+    "Public getLoginresponce(uid: String, password: String): String",
+    "Private CheckAccess(): Void",
+    "Private LoadMenu(UserGUID: String): Void",
+    "Protected btnReset_Click(sender: System.Object, e: System.EventArgs): Void"
+  ],
+  "ir": {
+    "file": "RPEAS_Login.aspx.vb",
+    "path": "RPEAS_Login.aspx.vb",
+    "namespaces": [],
+    "types": [
+      {
+        "kind": "Class",
+        "name": "RPEAS_Login",
+        "namespaceName": "",
+        "modifiers": "Partial Public",
+        "baseTypes": [],
+        "methods": [
+          {
+            "name": "Page_Load",
+            "modifiers": "Protected",
+            "returnType": "Void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "Object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "System.EventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "btnLogin_Click",
+            "modifiers": "Protected Async",
+            "returnType": "Void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "System.Object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "System.EventArgs",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "authenticateUser",
+            "modifiers": "Public Async",
+            "returnType": "Threading.Tasks.Task(Of Object)",
+            "parameters": [
+              {
+                "name": "uid",
+                "type": "String",
+                "defaultValue": null
+              },
+              {
+                "name": "password",
+                "type": "String",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "RetrieveToken",
+            "modifiers": "Public Async",
+            "returnType": "Threading.Tasks.Task(Of String)",
+            "parameters": []
+          },
+          {
+            "name": "callPostMethod",
+            "modifiers": "Public Async",
+            "returnType": "Threading.Tasks.Task(Of T)",
+            "parameters": [
+              {
+                "name": "url",
+                "type": "String",
+                "defaultValue": null
+              },
+              {
+                "name": "token",
+                "type": "String",
+                "defaultValue": null
+              },
+              {
+                "name": "arg",
+                "type": "HttpContent",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "callGetMethod",
+            "modifiers": "Public Async",
+            "returnType": "Threading.Tasks.Task(Of String)",
+            "parameters": [
+              {
+                "name": "url",
+                "type": "String",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "Encrypt",
+            "modifiers": "Public",
+            "returnType": "String",
+            "parameters": [
+              {
+                "name": "val",
+                "type": "String",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "getLoginresponce",
+            "modifiers": "Public",
+            "returnType": "String",
+            "parameters": [
+              {
+                "name": "uid",
+                "type": "String",
+                "defaultValue": null
+              },
+              {
+                "name": "password",
+                "type": "String",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "CheckAccess",
+            "modifiers": "Private",
+            "returnType": "Void",
+            "parameters": []
+          },
+          {
+            "name": "LoadMenu",
+            "modifiers": "Private",
+            "returnType": "Void",
+            "parameters": [
+              {
+                "name": "UserGUID",
+                "type": "String",
+                "defaultValue": null
+              }
+            ]
+          },
+          {
+            "name": "btnReset_Click",
+            "modifiers": "Protected",
+            "returnType": "Void",
+            "parameters": [
+              {
+                "name": "sender",
+                "type": "System.Object",
+                "defaultValue": null
+              },
+              {
+                "name": "e",
+                "type": "System.EventArgs",
+                "defaultValue": null
+              }
+            ]
+          }
+        ],
+        "properties": [],
+        "fields": [
+          {
+            "name": "DAL",
+            "modifiers": "Dim",
+            "type": "Object"
+          }
+        ],
+        "sql": []
+      }
+    ]
+  },
+  "sql_usages": [],
+  "_matched_markup": {
+    "file": "RPEAS_Login.aspx",
+    "path": "RPEAS(Xin Er)\\RPEAS(Xin Er)\\RPEAS_Login.aspx",
+    "directives": [
+      {
+        "text": "<%@ Page Language=\"vb\" AutoEventWireup=\"false\" CodeBehind=\"RPEAS_Login.aspx.vb\"    Inherits=\"RPEAS.RPEAS_Login\" Async=\"true\" %>",
+        "content": "Page Language=\"vb\" AutoEventWireup=\"false\" CodeBehind=\"RPEAS_Login.aspx.vb\"    Inherits=\"RPEAS.RPEAS_Login\" Async=\"true\""
+      }
+    ],
+    "scriptBlocks": [
+      {
+        "tag": "script",
+        "attributes": "type=\"text/JavaScript\" src=\"js/curvycorners.src.js\"",
+        "attributes_parsed": {
+          "type": "\"text/JavaScript\"",
+          "src": "js/curvycorners."
+        },
+        "src": "js/curvycorners.",
+        "src_file": "js/curvycorners.",
+        "content": ""
+      },
+      {
+        "tag": "script",
+        "attributes": "src=\"js/Common.js\" type=\"text/javascript\"",
+        "attributes_parsed": {
+          "src": "\"js/Common.js\"",
+          "type": "\"text/javascript\""
+        },
+        "src": "\"js/Common.js\"",
+        "src_file": "js/Common.js",
+        "content": ""
+      },
+      {
+        "tag": "script",
+        "attributes": "type=\"text/javascript\"",
+        "attributes_parsed": {
+          "type": "\"text/javascript\""
+        },
+        "src": null,
+        "src_file": null,
+        "content": "  \r\n        var offs = 0;\r\n        function ResizeI(e) {\r\n            var hgt, evt = e || window.event;\r\n            var elem = evt.target || evt.srcElement;\r\n            if ( !offs ) {\r\n                var obj = elem;\r\n                if ( obj.offsetParent ) {\r\n                    do {\r\n                        offs += obj.offsetTop;\r\n                    } while ( obj = obj.offsetParent );\r\n                }\r\n            }\r\n            if ( window.innerHeight ) {\r\n                hgt = window.innerHeight; \r\n            }\r\n            else {\r\n                hgt = document.documentElement.clientHeight;\r\n            }\r\n            hgt -= offs;\r\n            if ( !hgt || hgt <= 0 ) {\r\n                offs = 150; /* Aaargh! IE */\r\n                hgt = 600;\r\n            }\r\n            elem.style.height = (hgt-13%) + 'px';\r\n        }\r\n        function ResizeAllF() {\r\n            if ( !offs ) return true;\r\n            var fmes = document.getElementsByTagName('iframe');\r\n            if ( window.innerHeight ) {\r\n                hgt = window.innerHeight; \r\n            }\r\n            else {\r\n                hgt = document.documentElement.clientHeight;\r\n            }\r\n            hgt -= offs;\r\n            if ( !hgt || hgt <= 0 ) hgt = 600;  /* Aaargh! IE */\r\n            for ( var i=0, iLen = fmes.length; i < iLen; i++ ) {\r\n                fmes[i].style.height = (hgt-13%) + 'px';\r\n            }\r\n        }\r\n    "
+      },
+      {
+        "tag": "script",
+        "attributes": "type=\"text/JavaScript\"",
+        "attributes_parsed": {
+          "type": "\"text/JavaScript\""
+        },
+        "src": null,
+        "src_file": null,
+        "content": "\r\n\r\n        curvyCorners.addEvent(window, 'load', initCorners);\r\n\r\n        function initCorners() {\r\n            var settings = {\r\n                tl: { radius: 17 },\r\n                tr: { radius: 2 },\r\n                bl: { radius: 2 },\r\n                br: { radius: 17 },\r\n                antiAlias: true\r\n            }\r\n            var settings2 = {\r\n                tl: { radius: 7 },\r\n                tr: { radius: 7 },\r\n                bl: { radius: 7 },\r\n                br: { radius: 7 },\r\n                antiAlias: true\r\n            }\r\n            var settings3 = {\r\n                tl: { radius: 35 },\r\n                tr: { radius: 0 },\r\n                bl: { radius: 0 },\r\n                br: { radius: 35 },\r\n                antiAlias: true\r\n            }\r\n            /*\r\n            Usage:\r\n\r\n    curvyCorners(settingsObj, selectorStr);\r\n            curvyCorners(settingsObj, Obj1[, Obj2[, Obj3[, . . . [, ObjN]]]]);\r\n\r\n    selectorStr ::= complexSelector [, complexSelector]...\r\n            complexSelector ::= singleSelector[ singleSelector]\r\n            singleSelector ::= idType | classType\r\n            idType ::= #id\r\n            classType ::= [tagName].className\r\n            tagName ::= div|p|form|blockquote|frameset // others may work\r\n            className : .name\r\n            selector examples:\r\n            #mydiv p.rounded\r\n            #mypara\r\n            .rounded\r\n            */\r\n            curvyCorners(settings2, \"#myBox\");\r\n            curvyCorners(settings2, \"#menubox\");\r\n            curvyCorners(settings, \"#divImgLogo\");\r\n        }\r\n\r\n    "
+      }
+    ],
+    "linkedClientFiles": [
+      "js/curvycorners.",
+      "js/Common.js"
+    ],
+    "linkedFilesDetailed": [
+      {
+        "candidate": "js/curvycorners."
+      },
+      {
+        "file": "Common.js",
+        "path": "RPEAS(Xin Er)\\RPEAS(Xin Er)\\js\\Common.js",
+        "language": "",
+        "client_js_summary": {
+          "summary": "0 url_candidates; 4 functions; 0 API patterns",
+          "facts": {
+            "functions": [
+              "serverButtonClicked",
+              "Left",
+              "Right",
+              "SetValidatorStatus"
+            ],
+            "api_calls": [],
+            "url_candidates": []
+          }
+        }
+      }
+    ]
+  }
+}
+
+
+### ⬆️ END OF INPUT ⬆️
+**INSTRUCTION:** Document the page logic above. Focus on User Actions and Data Flow.

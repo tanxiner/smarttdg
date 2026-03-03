@@ -120,7 +120,7 @@ namespace Roslyn.Analyzers
 							ClassName = methodSym?.ContainingType?.Name ?? Path.GetFileNameWithoutExtension(filePath),
 							MethodName = methodSym?.Name ?? "(top-level)",
 							MethodSignature = methodSym?.ToDisplayString() ?? "(unknown)",
-							Line = loc.StartLinePosition.Line + 1,
+							//Line = loc.StartLinePosition.Line + 1,
 							Kind = "DbWrapperCall",
 							SqlText = sqlText,
 							CommandTypeIsStoredProcedure = false,

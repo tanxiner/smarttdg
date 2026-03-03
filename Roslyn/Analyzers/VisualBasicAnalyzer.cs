@@ -1,5 +1,6 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.VisualBasic;
+using System;
 using System.IO;
 using System.Linq;
 using System.Collections.Generic;
@@ -12,12 +13,31 @@ namespace Roslyn.Analyzers
     {
         public static object Analyze(string code, string filePath)
         {
-            var tree = VisualBasicSyntaxTree.ParseText(code);
+            // include filePath so tree.FilePath is populated (helps other extractors)
+            var tree = VisualBasicSyntaxTree.ParseText(code, path: filePath);
             var root = (VBS.CompilationUnitSyntax)tree.GetCompilationUnitRoot();
+
+            // build a small references list (match C# approach and try to include System.Data if present)
+            var refs = new List<MetadataReference>
+            {
+                MetadataReference.CreateFromFile(typeof(object).Assembly.Location)
+            };
+            try
+            {
+                var sd = AppDomain.CurrentDomain.GetAssemblies()
+                    .FirstOrDefault(a => a.GetName().Name.Equals("System.Data", StringComparison.OrdinalIgnoreCase)
+                                      || a.GetName().Name.Equals("Microsoft.Data.SqlClient", StringComparison.OrdinalIgnoreCase));
+                if (sd != null && !string.IsNullOrEmpty(sd.Location))
+                    refs.Add(MetadataReference.CreateFromFile(sd.Location));
+            }
+            catch
+            {
+                // non-fatal
+            }
 
             var compilation = VisualBasicCompilation.Create("VBAnalysis")
                 .AddSyntaxTrees(tree)
-                .AddReferences(MetadataReference.CreateFromFile(typeof(object).Assembly.Location));
+                .AddReferences(refs);
 
             var model = compilation.GetSemanticModel(tree);
 
@@ -165,8 +185,8 @@ namespace Roslyn.Analyzers
              .ToArray();
 
 
-            // NAMESPACES
-            var namespaces = root.Members
+            // NAMESPACES - use DescendantNodes to catch nested namespaces like C# approach
+            var namespaces = root.DescendantNodes()
                 .OfType<VBS.NamespaceBlockSyntax>()
                 .Select(n => n.NamespaceStatement.Name?.ToString())
                 .Where(s => !string.IsNullOrWhiteSpace(s))
@@ -385,7 +405,7 @@ namespace Roslyn.Analyzers
             {
                 file = Path.GetFileName(filePath),
                 path = filePath,
-                namespaces = root.Members.OfType<VBS.NamespaceBlockSyntax>().Select(n => n.NamespaceStatement.Name?.ToString()).Where(s => !string.IsNullOrWhiteSpace(s)).Distinct().ToArray(),
+                namespaces = root.DescendantNodes().OfType<VBS.NamespaceBlockSyntax>().Select(n => n.NamespaceStatement.Name?.ToString()).Where(s => !string.IsNullOrWhiteSpace(s)).Distinct().ToArray(),
                 imports = root.Imports.SelectMany(i => i.ImportsClauses.OfType<VBS.SimpleImportsClauseSyntax>()).Select(c => c.Name?.ToString()).Where(s => !string.IsNullOrWhiteSpace(s)).Distinct().ToArray(),
                 types = types.ToArray(),
                 file_level_sql = fileLevelSql
