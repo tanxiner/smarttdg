@@ -5,6 +5,7 @@ import re
 DOCS_FOLDER = 'Final_Documentation_Chapters'
 UTIL_FOLDER = 'Final_Utility_Chapters'
 SQL_FOLDER = 'Final_SQL_Docs'
+API_FOLDER = 'Final_API_Docs'
 OUTPUT_FILENAME = 'Complete_Documentation.md'
 
 # Base paths
@@ -154,6 +155,7 @@ def find_folder(folder_name):
         os.path.join(base, "prompts_output", folder_name),
         os.path.join(base, "services", "analyzer", "ai_analysis", folder_name),
         os.path.join(base, "services", "analyzer", "sql_analysis", folder_name),
+        os.path.join(base, "services", "analyzer", "api_analysis", folder_name),
         os.path.join(base, "services", "analyzer", folder_name)
     ]
 
@@ -181,6 +183,7 @@ def main():
     docs_path = find_folder(DOCS_FOLDER)
     util_path = find_folder(UTIL_FOLDER)
     sql_path = find_folder(SQL_FOLDER)
+    api_path = find_folder(API_FOLDER)
 
     # --- PROCESS FOLDER 1: Documentation Chapters (Web Pages) ---
     if docs_path:
@@ -199,6 +202,12 @@ def main():
         process_folder(sql_path, "Database Reference (SQL)", toc_lines, body_content, is_module=False)
     else:
         print(f"No SQL docs found (expected folder '{SQL_FOLDER}').")
+
+    # --- PROCESS FOLDER 4: API Reference ---
+    if api_path:
+        process_folder(api_path, "API Reference", toc_lines, body_content, is_module=False)
+    else:
+        print(f"No API docs found (expected folder '{API_FOLDER}').")
 
     # --- WRITE MASTER FILE ---
     if not body_content:

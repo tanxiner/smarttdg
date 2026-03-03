@@ -240,6 +240,17 @@ namespace Roslyn.Analyzers
             // Build VB IR and include in returned result
             var ir = BuildIR(root, model, compilation, merged.ToList(), filePath);
 
+            // Discover API endpoints (best-effort, non-fatal)
+            List<ApiEndpoint> apiEndpoints = new List<ApiEndpoint>();
+            try
+            {
+                apiEndpoints = ApiEndpointAnalyzer.Analyze(root, filePath);
+            }
+            catch
+            {
+                // non-fatal: proceed without API endpoint data
+            }
+
             return new
             {
                 file = Path.GetFileName(filePath),
@@ -255,6 +266,20 @@ namespace Roslyn.Analyzers
                 //fields,
                 //dependencies,
                 ir,
+                api_endpoints = apiEndpoints.Count > 0
+                    ? apiEndpoints.Select(e => new
+                    {
+                        e.Kind,
+                        e.ControllerOrServiceName,
+                        e.OperationName,
+                        e.FilePath,
+                        e.Route,
+                        e.HttpMethods,
+                        parameters = e.Parameters.Select(p => new { p.Name, p.Type }).ToArray(),
+                        e.ReturnType,
+                        e.Evidence
+                    }).ToArray()
+                    : null,
                 sql_usages = merged.Select(s => new {
                     file = Path.GetFileName(s.FilePath),
                     s.Namespace,

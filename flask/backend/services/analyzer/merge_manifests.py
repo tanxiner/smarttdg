@@ -8,6 +8,7 @@ PROMPTS_OUTPUT_BASE = os.path.join(BACKEND_DIR, "prompts_output")
 PAGE_DIR = os.path.join(PROMPTS_OUTPUT_BASE, "Page_Documentation_Prompts")
 UTIL_DIR = os.path.join(PROMPTS_OUTPUT_BASE, "Utility_Documentation_Prompts")
 SQL_DIR = os.path.join(PROMPTS_OUTPUT_BASE, "SQL_Documentation_Prompts")
+API_DIR = os.path.join(PROMPTS_OUTPUT_BASE, "API_Documentation_Prompts")
 
 def read_manifest(path):
     try:
@@ -18,7 +19,7 @@ def read_manifest(path):
 
 def collect_txt_files():
     files = []
-    for d in (PAGE_DIR, UTIL_DIR, SQL_DIR):
+    for d in (PAGE_DIR, UTIL_DIR, SQL_DIR, API_DIR):
         if os.path.isdir(d):
             for f in sorted(os.listdir(d)):
                 if f.endswith(".txt"):
@@ -29,6 +30,7 @@ def main():
     job_id = os.environ.get("ANALYZER_JOB_ID") or os.environ.get("JOB_ID") or "global"
     ai_manifest_path = os.path.join(PROMPTS_OUTPUT_BASE, f"manifest_ai_{job_id}.json")
     sql_manifest_path = os.path.join(PROMPTS_OUTPUT_BASE, f"manifest_sql_{job_id}.json")
+    api_manifest_path = os.path.join(PROMPTS_OUTPUT_BASE, f"manifest_api_{job_id}.json")
     final_manifest_path = os.path.join(PROMPTS_OUTPUT_BASE, f"manifest_{job_id}.json")
 
     files_set = set()
@@ -41,8 +43,12 @@ def main():
     if sql_m and isinstance(sql_m.get("files"), list):
         files_set.update(sql_m["files"])
 
-    # If either manifest missing, fall back to scanning prompt folders to be safe
-    if not ai_m or not sql_m:
+    api_m = read_manifest(api_manifest_path)
+    if api_m and isinstance(api_m.get("files"), list):
+        files_set.update(api_m["files"])
+
+    # If any manifest is missing, fall back to scanning prompt folders to be safe
+    if not ai_m or not sql_m or not api_m:
         files_set.update(collect_txt_files())
 
     files = sorted(files_set)
