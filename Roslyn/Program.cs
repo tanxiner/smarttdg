@@ -183,6 +183,18 @@ class Program
                 }));
 
                 // --- AUTOMATION: invoke downstream Python processors (non-interactive) ---
+                // Skip when called from Flask (ROSLYN_SKIP_DOWNSTREAM=1) because app.py owns
+                // the downstream pipeline in that context.  When invoked directly from the CLI
+                // (no such flag), Program.cs runs the full pipeline itself.
+                var skipDownstream = string.Equals(
+                    Environment.GetEnvironmentVariable("ROSLYN_SKIP_DOWNSTREAM") ?? "",
+                    "1", StringComparison.Ordinal);
+
+                if (skipDownstream)
+                {
+                    Console.WriteLine(JsonConvert.SerializeObject(new { debug = "ROSLYN_SKIP_DOWNSTREAM=1; downstream scripts will be run by the calling process (Flask)" }));
+                }
+                else
                 try
                 {
                     if (flaskRoot == null)

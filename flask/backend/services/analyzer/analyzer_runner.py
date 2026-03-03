@@ -152,7 +152,7 @@ def analyze_code(*file_paths: str, job_id: Optional[str] = None) -> Any:
         print(f"[Warn] Failed to create arg list file: {e}. Falling back to CLI args.")
         args = list(file_paths)
 
-    # Use dotnet directly — avoid requiring a .env file via `dotenv run`
+    # Use dotnet directly ï¿½ avoid requiring a .env file via `dotenv run`
     cmd = [
         "dotnet", "run",
         "--project", analyzer_project_dir,
@@ -167,6 +167,11 @@ def analyze_code(*file_paths: str, job_id: Optional[str] = None) -> Any:
     flask_root = os.path.abspath(os.path.join(this_dir, "..", "..", ".."))
     if os.path.isdir(flask_root):
         env["FLASK_ROOT"] = flask_root
+
+    # Tell Program.cs NOT to run the downstream scripts â€” Flask (app.py) owns that
+    # responsibility.  Without this flag both Program.cs and app.py would execute the
+    # full pipeline, causing every script to run twice.
+    env["ROSLYN_SKIP_DOWNSTREAM"] = "1"
 
     # Platform-specific process-group handling so we can kill entire tree
     popen_kwargs = {
