@@ -168,11 +168,6 @@ def analyze_code(*file_paths: str, job_id: Optional[str] = None) -> Any:
     if os.path.isdir(flask_root):
         env["FLASK_ROOT"] = flask_root
 
-    # Tell Program.cs NOT to run the downstream scripts — Flask (app.py) owns that
-    # responsibility.  Without this flag both Program.cs and app.py would execute the
-    # full pipeline, causing every script to run twice.
-    env["ROSLYN_SKIP_DOWNSTREAM"] = "1"
-
     # Platform-specific process-group handling so we can kill entire tree
     popen_kwargs = {
         "stdout": subprocess.PIPE,
