@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using Roslyn.Analyzers;
 
 class Program
@@ -190,21 +191,40 @@ class Program
                     }
                     else
                     {
-                        // Analyzer scripts directory
-                        var analyzerRoot = Path.Combine(flaskRoot, "backend", "services", "analyzer");
+                        // Load the canonical pipeline from the shared pipeline.json file.
+                        // This is the single source of truth for script ordering; edit that file to
+                        // add, remove, or reorder steps.
+                        var backendRoot = Path.Combine(flaskRoot, "backend");
+                        var pipelineJsonPath = Path.Combine(backendRoot, "pipeline.json");
 
-                        // Define scripts in the required order, with compile.py as the last entry
-                        var scripts = new[]
+                        string[] scripts;
+                        if (File.Exists(pipelineJsonPath))
                         {
-                            Path.Combine(analyzerRoot, "ai_analysis", "ai_splitter.py"),
-                            Path.Combine(analyzerRoot, "sql_analysis", "sql_splitter.py"),
-                            Path.Combine(analyzerRoot, "api_analysis", "api_splitter.py"),
-                            Path.Combine(analyzerRoot, "merge_manifests.py"),
-                            Path.Combine(analyzerRoot, "ai_analysis", "ai_analysis.py"),
-                            Path.Combine(analyzerRoot, "sql_analysis", "sql_analysis.py"),
-                            Path.Combine(analyzerRoot, "api_analysis", "api_analysis.py"),
-                            Path.Combine(flaskRoot, "backend", "compile.py")
-                        };
+                            try
+                            {
+                                var pipelineObj = JObject.Parse(File.ReadAllText(pipelineJsonPath));
+                                var steps = (JArray?)pipelineObj["steps"] ?? new JArray();
+                                var scriptList = new List<string>();
+                                foreach (var step in steps)
+                                {
+                                    var rel = ((string?)step["script"] ?? "").Replace('/', Path.DirectorySeparatorChar);
+                                    if (!string.IsNullOrWhiteSpace(rel))
+                                        scriptList.Add(Path.Combine(backendRoot, rel));
+                                }
+                                scripts = scriptList.ToArray();
+                                Console.WriteLine(JsonConvert.SerializeObject(new { debug = "Loaded pipeline from pipeline.json", stepCount = scripts.Length, path = pipelineJsonPath }));
+                            }
+                            catch (Exception exJson)
+                            {
+                                Console.WriteLine(JsonConvert.SerializeObject(new { error = "Failed to parse pipeline.json; skipping downstream scripts. Please verify the JSON syntax in pipeline.json.", path = pipelineJsonPath, message = exJson.Message }));
+                                scripts = Array.Empty<string>();
+                            }
+                        }
+                        else
+                        {
+                            Console.WriteLine(JsonConvert.SerializeObject(new { error = $"pipeline.json not found; skipping downstream scripts. Expected path: {pipelineJsonPath}" }));
+                            scripts = Array.Empty<string>();
+                        }
 
                         var pythonExe = FindPythonExecutable() ?? "python";
 
