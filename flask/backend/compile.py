@@ -48,6 +48,20 @@ def make_slug(section_name, base_name, idx, title):
     return slug
 
 
+def normalize_whitespace(text):
+    """
+    Normalize whitespace in markdown text to prevent extra blank lines in compiled output:
+    - Strip trailing spaces from each line.
+    - Convert whitespace-only lines into truly empty lines.
+    - Collapse 3 or more consecutive newlines into 2 (preserve paragraph breaks).
+    """
+    lines = text.split('\n')
+    lines = [line.rstrip() for line in lines]
+    text = '\n'.join(lines)
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    return text
+
+
 def process_folder(folder_path, section_name, toc_lines, body_content, is_module=False):
     """
     Reads each .md/.txt file and creates a TOC entry and anchor for every H1 header
@@ -111,7 +125,7 @@ def process_folder(folder_path, section_name, toc_lines, body_content, is_module
             slug = make_slug(kind_label, base_name, 1, title)
             toc_lines.append(f"- [{title}](#{slug})")
             body_content.append(f"\n<a id='{slug}'></a>\n")
-            body_content.append(content.strip())
+            body_content.append(normalize_whitespace(content.strip()))
             body_content.append("\n\n---\n\n")
             continue
 
@@ -135,7 +149,7 @@ def process_folder(folder_path, section_name, toc_lines, body_content, is_module
             if is_module:
                 # replace leading "# Module:" with a clean H1 using cleaned_title
                 section_text = re.sub(r'^\s*#\s*Module\s*:\s*.*$', f"# {title}", section_text, flags=re.IGNORECASE | re.MULTILINE)
-            body_content.append(section_text.strip())
+            body_content.append(normalize_whitespace(section_text.strip()))
             body_content.append("\n\n---\n\n")
 
 
