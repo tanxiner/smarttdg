@@ -198,9 +198,11 @@ class Program
                         {
                             Path.Combine(analyzerRoot, "ai_analysis", "ai_splitter.py"),
                             Path.Combine(analyzerRoot, "sql_analysis", "sql_splitter.py"),
+                            Path.Combine(analyzerRoot, "api_analysis", "api_splitter.py"),
                             Path.Combine(analyzerRoot, "merge_manifests.py"),
                             Path.Combine(analyzerRoot, "ai_analysis", "ai_analysis.py"),
                             Path.Combine(analyzerRoot, "sql_analysis", "sql_analysis.py"),
+                            Path.Combine(analyzerRoot, "api_analysis", "api_analysis.py"),
                             Path.Combine(flaskRoot, "backend", "compile.py")
                         };
 
