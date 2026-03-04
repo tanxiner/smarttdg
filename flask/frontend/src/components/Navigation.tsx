@@ -41,13 +41,13 @@ export function Navigation({ currentPage, onPageChange, onShowDownload }: Naviga
             >
               How To
             </Button>
-            <Button
-              variant="outline"
-              onClick={onShowDownload}
-              className="bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100"
-            >
-              Download (Demo)
-            </Button>
+            {/*<Button*/}
+            {/*  variant="outline"*/}
+            {/*  onClick={onShowDownload}*/}
+            {/*  className="bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100"*/}
+            {/*>*/}
+            {/*  Download (Demo)*/}
+            {/*</Button>*/}
           </nav>
         </div>
       </div>

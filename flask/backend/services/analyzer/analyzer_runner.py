@@ -5,7 +5,7 @@ import signal
 import threading
 import re
 import tempfile
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Callable
 
 # Map job_id -> Popen
 _PROCS: Dict[str, subprocess.Popen] = {}
@@ -118,11 +118,12 @@ def _clean_and_parse_json(stdout_content: str) -> Any:
 
     raise json.JSONDecodeError("No valid JSON found after cleaning attempts", stdout_content, 0)
 
-def analyze_code(*file_paths: str, job_id: Optional[str] = None) -> Any:
+def analyze_code(*file_paths: str, job_id: Optional[str] = None, progress_callback: Optional[Callable[[int, int], None]] = None) -> Any:
     """
     Run the respective analyzers on the given file(s).
     Accepts one or more file paths and returns JSON output as a Python object.
     Optional job_id registers the child process for cancellation.
+    Optional progress_callback(processed_count, total_files) to receive updates during execution.
     """
     if len(file_paths) == 0:
         # Return empty list if no files - consistent with analyzer behavior
@@ -152,7 +153,7 @@ def analyze_code(*file_paths: str, job_id: Optional[str] = None) -> Any:
         print(f"[Warn] Failed to create arg list file: {e}. Falling back to CLI args.")
         args = list(file_paths)
 
-    # Use dotnet directly � avoid requiring a .env file via `dotenv run`
+    # Use dotnet directly  avoid requiring a .env file via `dotenv run`
     cmd = [
         "dotnet", "run",
         "--project", analyzer_project_dir,
@@ -176,6 +177,7 @@ def analyze_code(*file_paths: str, job_id: Optional[str] = None) -> Any:
         "encoding": "utf-8",
         "errors": "replace",
         "env": env,
+        "bufsize": 1 # Line buffered
     }
 
     if os.name == "nt":
@@ -190,8 +192,66 @@ def analyze_code(*file_paths: str, job_id: Optional[str] = None) -> Any:
     if job_id:
         _register_proc(job_id, proc)
 
+    # Capture outputs
+    captured_stdout = []
+    captured_stderr = []
+
+    # Thread for stderr to capture logs without blocking stdout reading
+    def read_stderr(p, out_list):
+        try:
+            for line in p.stderr:
+                out_list.append(line)
+        except:
+            pass
+    
+    stderr_thread = threading.Thread(target=read_stderr, args=(proc, captured_stderr))
+    stderr_thread.start()
+
+    # Tracking vars for progress
+    total_files_known = len(file_paths)
+    processed_count = 0
+
     try:
-        stdout, stderr = proc.communicate()
+        # Read stdout line by line to detect progress in real-time
+        # We iterate proc.stdout directly; it yields lines as they are flushed
+        for line in proc.stdout:
+            captured_stdout.append(line)
+            
+            # Heuristic detection of progress logic
+            if progress_callback:
+                sline = line.strip()
+                
+                # Check for Roslyn activity markers (either JSON debug or plain text)
+                activity_detected = False
+                
+                # 1. Check for JSON debug lines: { "debug": "Analyzing file...", ... }
+                if sline.startswith("{") and sline.endswith("}"):
+                    try:
+                        data = json.loads(sline)
+                        if isinstance(data, dict):
+                            # If tool reports count explicitly
+                            if "count" in data and isinstance(data["count"], int):
+                                total_files_known = data["count"]
+                            
+                            # If tool reports file analysis
+                            if "debug" in data and ("Analyzing" in data["debug"] or "Processing" in data["debug"]):
+                                activity_detected = True
+                    except:
+                        pass
+                
+                # 2. Check for plain text logs: "[Info] Analyzing file X" or just "Analyzing..."
+                elif "Analyzing" in sline or "Processing" in sline:
+                    activity_detected = True
+
+                if activity_detected:
+                    processed_count += 1
+                    # Fire callback
+                    progress_callback(processed_count, total_files_known)
+
+        # Wait for exit
+        proc.wait()
+        stderr_thread.join(timeout=2.0)
+
     finally:
         if job_id:
             _unregister_proc(job_id)
@@ -203,8 +263,8 @@ def analyze_code(*file_paths: str, job_id: Optional[str] = None) -> Any:
             except:
                 pass
 
-    stdout = (stdout or "").strip()
-    stderr = (stderr or "").strip()
+    stdout = "".join(captured_stdout).strip()
+    stderr = "".join(captured_stderr).strip()
 
     if proc.returncode != 0:
         raise RuntimeError(f"Analyzer failed (returncode={proc.returncode}):\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}")

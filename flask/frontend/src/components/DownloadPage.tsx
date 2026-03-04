@@ -21,6 +21,7 @@ type Totals = {
   webChapters: number;     // Final Documentation Chapters (.md)
   sqlChapters: number;     // SQL Documentation Chapters (.md)
   utilityChapters: number; // Utility Documentation Chapters (.md)
+  apiChapters: number;     // API Documentation Chapters (.md)
 };
 
 /**
@@ -46,6 +47,7 @@ function accumulateTotals(analysis?: any): Totals {
       webChapters: Number(analysis.computedTotals.webChapters ?? 0),
       sqlChapters: Number(analysis.computedTotals.sqlChapters ?? 0),
       utilityChapters: Number(analysis.computedTotals.utilityChapters ?? 0),
+      apiChapters: Number(analysis.computedTotals.apiChapters ?? 0),
     };
   }
 
@@ -56,6 +58,7 @@ function accumulateTotals(analysis?: any): Totals {
       webChapters: Number(analysis.totals.webChapters ?? 0),
       sqlChapters: Number(analysis.totals.sqlChapters ?? 0),
       utilityChapters: Number(analysis.totals.utilityChapters ?? 0),
+      apiChapters: Number(analysis.totals.api ?? analysis.totals.apiChapters ?? 0),
     };
   }
 
@@ -68,6 +71,7 @@ function accumulateTotals(analysis?: any): Totals {
       webChapters: Number(legacyTotals.classes ?? 0),
       sqlChapters: Number(legacyTotals.methods ?? 0),
       utilityChapters: Number(legacyTotals.others ?? 0),
+      apiChapters: Number(legacyTotals.api ?? 0),
     };
   }
 
@@ -75,10 +79,17 @@ function accumulateTotals(analysis?: any): Totals {
   let webChapters = 0;
   let sqlChapters = 0;
   let utilityChapters = 0;
+  let apiChapters = 0;
 
   for (const r of results) {
     const filePath = (r?.file || r?.path || "").toString().toLowerCase();
     const res = r?.result ?? r;
+
+    // Try to catch API endpoints if they appear in results (rare in current pipeline structure but possible)
+    if (res?.kind === "webapi" || r?.kind === "webapi") {
+      apiChapters++;
+      continue;
+    }
 
     const looksLikePage =
       filePath.endsWith(".aspx") ||
@@ -110,7 +121,7 @@ function accumulateTotals(analysis?: any): Totals {
     utilityChapters++;
   }
 
-  return { filesProcessed, webChapters, sqlChapters, utilityChapters };
+  return { filesProcessed, webChapters, sqlChapters, utilityChapters, apiChapters };
 }
 
 function formatDuration(ms: number): string {
@@ -274,8 +285,10 @@ export function DownloadPage({ onStartOver, analysis }: DownloadPageProps) {
             Complete
           </Badge>
         </div>
-
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+        <div
+            className="grid gap-3 text-center"
+            style={{ gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))" }}
+              >
           <div className="space-y-1">
             <div className="text-xl font-medium text-gray-900">
               {totals.filesProcessed}
@@ -287,21 +300,27 @@ export function DownloadPage({ onStartOver, analysis }: DownloadPageProps) {
               {totals.webChapters}
             </div>
             <div className="text-sm text-gray-600">
-              Final Documentation Chapters
+              Web Docs
             </div>
           </div>
           <div className="space-y-1">
             <div className="text-xl font-medium text-gray-900">
               {totals.sqlChapters}
             </div>
-            <div className="text-sm text-gray-600">SQL Documentation Chapters</div>
+            <div className="text-sm text-gray-600">SQL Docs</div>
+          </div>
+           <div className="space-y-1">
+            <div className="text-xl font-medium text-gray-900">
+              {totals.apiChapters}
+            </div>
+            <div className="text-sm text-gray-600">API Docs</div>
           </div>
           <div className="space-y-1">
             <div className="text-xl font-medium text-gray-900">
               {totals.utilityChapters}
             </div>
             <div className="text-sm text-gray-600">
-              Other Documentation Chapters
+              Other Docs
             </div>
           </div>
         </div>

@@ -7,6 +7,7 @@ import shutil
 import time
 import uuid
 import threading
+import subprocess
 from pathlib import Path
 from typing import Dict, Any
 
@@ -22,11 +23,31 @@ def register_diagram_routes(app: Flask):
     os.makedirs(STATIC_OUTPUT_DIR, exist_ok=True)
     
     DIAGRAM_JOBS: Dict[str, Dict[str, Any]] = {}
-    
+
     def _update_diagram_job(job_id: str, **kwargs):
         st = DIAGRAM_JOBS.setdefault(job_id, {})
         st.update(kwargs)
-    
+
+    def _is_diagram_job_canceled(job_id: str) -> bool:
+        st = DIAGRAM_JOBS.get(job_id) or {}
+        return bool(st.get("canceled")) or st.get("step") in ("cancel_requested", "canceled")
+
+    @app.route("/diagram_cancel/<job_id>", methods=["POST"])
+    def cancel_diagram_job(job_id: str):
+        st = DIAGRAM_JOBS.get(job_id)
+        if not st:
+            return jsonify({"error": "job not found"}), 404
+
+        st["step"] = "cancel_requested"
+        st["canceled"] = True
+        st.setdefault("progress", 0)
+
+        # Note: current implementation can't stop the running analyzer thread.
+        # This just makes the UI stop and the status reflect cancellation.
+        st["step"] = "canceled"
+        st["progress"] = 0
+        return jsonify({"status": "ok", "message": "cancel requested"}), 200
+
     @app.route("/upload_for_diagrams", methods=["POST"])
     def upload_for_diagrams():
         """Upload ZIP file specifically for diagram generation only."""
@@ -129,7 +150,17 @@ def register_diagram_routes(app: Flask):
                         # Run analyzer
                         # We don't care about the return value's data content anymore, just success/fail.
                         # The real data goes to the file.
-                        result_meta = analyzer_runner.analyze_code(*unique_rel_paths, job_id=job_id)
+                        
+                        def _on_static_progress(curr, tot):
+                            if tot > 0:
+                                # Map 0..1 to 30..90 range for diagrams phase
+                                # Static analysis is the main lengthy part, diagram generation is fast
+                                ratio = min(curr, tot) / tot
+                                p = 30 + int(ratio * 60)
+                                _update_diagram_job(job_id, progress=p, 
+                                                  step=f"analyzing_file_{curr}_of_{tot}")
+
+                        result_meta = analyzer_runner.analyze_code(*unique_rel_paths, job_id=job_id, progress_callback=_on_static_progress)
                         
                         # Check if file exists now
                         if not os.path.exists(analysis_results_file):                            
@@ -147,7 +178,7 @@ def register_diagram_routes(app: Flask):
                                               error=f"Failed to read analysis output file: {str(e)}")
                             return
 
-                        _update_diagram_job(job_id, progress=60, step="generating_diagrams")
+                        _update_diagram_job(job_id, progress=90, step="generating_diagrams")
                         
                         # Validate data
                         if not analysis_data or not isinstance(analysis_data, list):
@@ -262,5 +293,51 @@ def register_diagram_routes(app: Flask):
             return jsonify({"message": f"Cleared {count} diagrams", "count": count})
         except Exception as e:
             return jsonify({"error": str(e)}), 500
+
+    @app.route("/diagrams/<diagram_type>/svg", methods=["GET"])
+    def download_diagram_svg(diagram_type):
+        """Generate and download SVG for a diagram, even if too large to render in browser."""
+        diagrams_dir = os.path.join(BASE_DIR, "analysis_output", "Diagrams")
+        md_file = os.path.join(diagrams_dir, f"{diagram_type}.md")
+        
+        if not os.path.exists(md_file):
+            return jsonify({"error": "Diagram not found"}), 404
+        
+        try:
+            # Create temp SVG file
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.svg', delete=False) as svg_file:
+                svg_path = svg_file.name
+            
+            # Use mermaid CLI to convert MD to SVG
+            result = subprocess.run(
+                ['mmdc', '-i', md_file, '-o', svg_path, '-b', 'transparent'],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            
+            if result.returncode != 0:
+                return jsonify({"error": f"SVG generation failed: {result.stderr}"}), 500
+            
+            # Send SVG file
+            return send_from_directory(
+                os.path.dirname(svg_path),
+                os.path.basename(svg_path),
+                as_attachment=True,
+                download_name=f"{diagram_type}.svg",
+                mimetype="image/svg+xml"
+            )
+            
+        except subprocess.TimeoutExpired:
+            return jsonify({"error": "SVG generation timed out"}), 500
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+        finally:
+            # Cleanup temp file
+            try:
+                if os.path.exists(svg_path):
+                    os.remove(svg_path)
+            except:
+                pass
 
     print(f"[DiagramRoutes] Registered diagram routes with BASE_DIR: {BASE_DIR}")

@@ -35,7 +35,7 @@ export function HomePage({ onDocumentationReady }: HomePageProps) {
   return (
     <div className="space-y-8">
       {/* Hero Section */}
-      <div className="text-center py-12 mb-4">
+      <div className="text-center py-6 mb-4">
         <h1 className="text-4xl font-medium text-gray-900 mb-0">
           SmartTDG: AI-Powered Technical Document Generator
         </h1>

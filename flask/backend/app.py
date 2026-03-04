@@ -15,12 +15,9 @@ import ctypes
 import subprocess
 import sys
 
-# Import the analyzer runner module (we need to call cancel_analyzer)
 import services.analyzer.analyzer_runner as analyzer_runner
-# keep a local alias for convenience
 run_analyzer = analyzer_runner.analyze_code
 
-# Add this import at the top with other imports
 from services.diagram_routes import register_diagram_routes
 
 BASE_DIR = os.path.dirname(__file__)
@@ -61,8 +58,18 @@ def _update_job(job_id: str, **kwargs):
     st = JOB_STATUS.setdefault(job_id, {})
     st.update(kwargs)
 
+def _is_job_canceled(job_id: str | None) -> bool:
+    if not job_id:
+        return False
+    st = JOB_STATUS.get(job_id) or {}
+    return bool(st.get("canceled")) or st.get("step") in ("cancel_requested", "canceled")
+
+def _ensure_not_canceled(job_id: str | None) -> None:
+    if _is_job_canceled(job_id):
+        raise RuntimeError("canceled")
+
 def analyze_zip(zip_path: str, job_id: str | None = None) -> dict:
-    _update_job(job_id, progress=5, step="queued") if job_id else None
+    _update_job(job_id, progress=5, step="") if job_id else None
 
     # --- Explicitly clear output folders and OLD MANIFESTS at start ---
     prompts_base = os.path.join(BASE_DIR, "prompts_output")
@@ -73,9 +80,11 @@ def analyze_zip(zip_path: str, job_id: str | None = None) -> dict:
         os.path.join(prompts_base, "Page_Documentation_Prompts"),
         os.path.join(prompts_base, "Utility_Documentation_Prompts"),
         os.path.join(prompts_base, "SQL_Documentation_Prompts"),
+        os.path.join(prompts_base, "API_Documentation_Prompts"),
         os.path.join(analysis_base, "Final_Documentation_Chapters"),
         os.path.join(analysis_base, "Final_Utility_Chapters"),
-        os.path.join(analysis_base, "Final_SQL_Docs")
+        os.path.join(analysis_base, "Final_SQL_Docs"),
+        os.path.join(analysis_base, "Final_API_Docs")
     ]
 
     for d in dirs_to_clean:
@@ -106,7 +115,7 @@ def analyze_zip(zip_path: str, job_id: str | None = None) -> dict:
 
     temp_dir = tempfile.mkdtemp(prefix="smarttdg_", dir=short_base)
     try:
-        _update_job(job_id, progress=10, step="extracting") if job_id else None
+        _update_job(job_id, progress=5, step="extracting") if job_id else None
 
         with zipfile.ZipFile(zip_path, 'r') as z:
             print("Files in ZIP:", [f.filename for f in z.infolist()])
@@ -221,7 +230,7 @@ def analyze_zip(zip_path: str, job_id: str | None = None) -> dict:
         ]
         files_to_analyze.sort(key=lambda p: str(p.relative_to(temp_dir)).lower())
 
-        _update_job(job_id, progress=30, step="collecting_files", filesDiscovered=len(files_to_analyze)) if job_id else None
+        _update_job(job_id, progress=10, step="collecting_files", filesDiscovered=len(files_to_analyze)) if job_id else None
 
         if not files_to_analyze:
             result = {
@@ -251,7 +260,7 @@ def analyze_zip(zip_path: str, job_id: str | None = None) -> dict:
         if duplicates:
             print(f"[Debug] Detected duplicate relative paths (ignored): {duplicates}")
 
-        _update_job(job_id, progress=40, step="running_analyzer", files=len(rel_paths)) if job_id else None
+        _update_job(job_id, progress=15, step="running_analyzer", files=len(rel_paths)) if job_id else None
 
         # --- Monitor Process (Updated to NOT guess Expected until explicitly told) ---
         monitor_thread = None
@@ -260,27 +269,24 @@ def analyze_zip(zip_path: str, job_id: str | None = None) -> dict:
             stop_monitor = threading.Event()
             def _monitor():
                 analysis_base = os.path.join(BASE_DIR, "analysis_output")
-                analysis_folders = ("Final_Documentation_Chapters", "Final_Utility_Chapters", "Final_SQL_Docs")
+                analysis_folders = ("Final_Documentation_Chapters", "Final_Utility_Chapters", "Final_SQL_Docs", "Final_API_Docs")
 
                 while not stop_monitor.is_set():
                     try:
+                        if _is_job_canceled(job_id):
+                            return
+
                         # Only count generated chapters here (MD files)
                         def _count_md_any(folder_root, af):
                             try:
                                 a = os.path.join(folder_root, af)
                                 if os.path.isdir(a):
-                                    cnt = 0
-                                    for fname in os.listdir(a):
-                                        if fname.endswith(".md"):
-                                            cnt += 1
-                                    return cnt
+                                    return sum(1 for fname in os.listdir(a) if fname.endswith(".md"))
                             except Exception:
                                 pass
                             return 0
 
-                        observed_generated = 0
-                        for af in analysis_folders:
-                            observed_generated += _count_md_any(analysis_base, af)
+                        observed_generated = sum(_count_md_any(analysis_base, af) for af in analysis_folders)
 
                         # We do NOT set expected_chapters here anymore. 
                         # We only update chapters_generated.
@@ -316,10 +322,24 @@ def analyze_zip(zip_path: str, job_id: str | None = None) -> dict:
                 env_base["ANALYZER_JOB_ID"] = job_id
 
             # STEP 1: Static Analysis
-            _update_job(job_id, progress=42, step="running_static_analyzer") if job_id else None
+            _update_job(job_id, progress=20, step="running_static_analyzer") if job_id else None
             print("[Pipeline] STEP 1: Running static analyzer (Roslyn)")
             try:
-                analysis_result = run_analyzer(*unique_rel_paths, job_id=job_id)
+                # Define callback to increment progress during static analysis (range 42% -> 50%)
+                def _on_static_progress(current, total):
+                    if job_id and total > 0:
+                        # Ensure we don't exceed 100% relative to total
+                        safe_current = min(current, total)
+                        
+                        # Map current/total (0.0 to 1.0) to range 42 to 50
+                        # 42 is start, 8 is the width (50 - 42)
+                        ratio = safe_current / total
+                        prog = 20 + int(ratio * 8)
+                        
+                        # Only update if meaningful change
+                        _update_job(job_id, progress=prog, step=f"analyzing_file_{safe_current}_of_{total}")
+
+                analysis_result = run_analyzer(*unique_rel_paths, job_id=job_id, progress_callback=_on_static_progress)
                 print("[Pipeline] STEP 1 COMPLETE: Static analysis finished")
             except Exception as e:
                 msg = f"Static analyzer failed: {str(e)}"
@@ -340,7 +360,7 @@ def analyze_zip(zip_path: str, job_id: str | None = None) -> dict:
             # The ordered step list is loaded from pipeline.json (single source of truth).
             # Both this web entrypoint and the Roslyn CLI entrypoint (Program.cs) read that file.
             pipeline_steps = _load_pipeline_steps()
-            step_progress = 45
+            step_progress = 30
 
             # Group steps by phase so we can preserve phase-level progress tracking and
             # the post-splitter expected_chapters calculation.
@@ -352,7 +372,7 @@ def analyze_zip(zip_path: str, job_id: str | None = None) -> dict:
             # STEP 1.5: Diagrams
             print("[Pipeline] STEP 1.5: Generating diagrams from static analysis")
             if job_id:
-                _update_job(job_id, progress=step_progress, step="generating_diagrams")
+                _update_job(job_id, progress=step_progress, step="generating...")
             for _step in _diagram_steps:
                 _name   = _step["name"]
                 _script = os.path.join(BASE_DIR, _step["script"].replace("/", os.sep))
@@ -376,7 +396,7 @@ def analyze_zip(zip_path: str, job_id: str | None = None) -> dict:
                         _update_job(job_id, diagram_stdout=dout[:2000], diagram_stderr=derr[:2000])
                 except Exception as e:
                     print(f"[Pipeline] {_name} error: {e}, but continuing")
-            step_progress = 50
+            step_progress = 32
 
             # STEP 2: Run splitters
             # Progress increments by 6 per step (a small fixed slice of the 50-100 range
@@ -416,7 +436,7 @@ def analyze_zip(zip_path: str, job_id: str | None = None) -> dict:
             if job_id:
                 try:
                     _pb = os.path.join(BASE_DIR, "prompts_output")
-                    _pf = ("Page_Documentation_Prompts", "Utility_Documentation_Prompts", "SQL_Documentation_Prompts")
+                    _pf = ("Page_Documentation_Prompts", "Utility_Documentation_Prompts", "SQL_Documentation_Prompts", "API_Documentation_Prompts")
                     total_prompts = 0
                     for fldr in _pf:
                         fp = os.path.join(_pb, fldr)
@@ -510,7 +530,7 @@ def analyze_zip(zip_path: str, job_id: str | None = None) -> dict:
 
         # --- Count final documentation chapters and totals ---
         try:
-            analysis_folders = ("Final_Documentation_Chapters", "Final_Utility_Chapters", "Final_SQL_Docs")
+            analysis_folders = ("Final_Documentation_Chapters", "Final_Utility_Chapters", "Final_SQL_Docs", "Final_API_Docs")
             analysis_base = os.path.join(BASE_DIR, "analysis_output")
             
             # Simple final count
@@ -521,15 +541,16 @@ def analyze_zip(zip_path: str, job_id: str | None = None) -> dict:
             web_count = _cnt("Final_Documentation_Chapters")
             util_count = _cnt("Final_Utility_Chapters")
             sql_count = _cnt("Final_SQL_Docs")
+            api_count = _cnt("Final_API_Docs")
             
-            totals_payload = {"classes": web_count, "methods": sql_count, "others": util_count}
+            totals_payload = {"classes": web_count, "methods": sql_count, "others": util_count, "api": api_count}
             if isinstance(analysis_result, dict):
                 analysis_result.setdefault("totals", {}).update(totals_payload)
             elif isinstance(analysis_result, list):
                 analysis_result = {"analysis_list": analysis_result, "totals": totals_payload}
 
-            computed_totals = {"webChapters": web_count, "sqlChapters": sql_count, "utilityChapters": util_count}
-            total_chapters = web_count + util_count + sql_count
+            computed_totals = {"webChapters": web_count, "sqlChapters": sql_count, "utilityChapters": util_count, "apiChapters": api_count}
+            total_chapters = web_count + util_count + sql_count + api_count
 
             if job_id:
                 # Force final sync
@@ -539,11 +560,12 @@ def analyze_zip(zip_path: str, job_id: str | None = None) -> dict:
                     webChapters=web_count,
                     sqlChapters=sql_count,
                     utilityChapters=util_count,
+                    apiChapters=api_count,
                     expected_chapters=max(expected_now, total_chapters),
                     chapters_generated=total_chapters
                 )
         except Exception:
-            computed_totals = {"webChapters": 0, "sqlChapters": 0, "utilityChapters": 0}
+            computed_totals = {"webChapters": 0, "sqlChapters": 0, "utilityChapters": 0, "apiChapters": 0}
 
         _update_job(job_id, progress=75, step="analyzer_finished", analysis=analysis_result) if job_id else None
 
@@ -571,13 +593,18 @@ def analyze_zip(zip_path: str, job_id: str | None = None) -> dict:
             "computedTotals": computed_totals
         }
 
-        _update_job(job_id, progress=95, step="postprocessing", result=final) if job_id else None
+        # ✅ Make completion unambiguous for the frontend poller:
+        if job_id:
+            _update_job(job_id, progress=100, step="done", result=final)
 
         return final
     except Exception as ex:
-        if job_id and JOB_STATUS.get(job_id, {}).get("canceled"):
-            _update_job(job_id, progress=100, step="canceled", error=str(ex))
+        # Treat explicit cancellation as canceled, not error
+        if _is_job_canceled(job_id) or str(ex).lower() == "canceled":
+            if job_id:
+                _update_job(job_id, progress=100, step="canceled")
             return {"status": "canceled", "message": "Analysis canceled", "results": []}
+
         _update_job(job_id, progress=100, step="error", error=str(ex)) if job_id else None
         return {"status": "error", "message": f"Analysis failed: {str(ex)}", "results": []}
     finally:
@@ -586,10 +613,19 @@ def analyze_zip(zip_path: str, job_id: str | None = None) -> dict:
         except OSError:
             pass
         shutil.rmtree(temp_dir, ignore_errors=True)
+
+        # IMPORTANT: don't mark done if canceled/error already
         if job_id:
-            final_step = JOB_STATUS.get(job_id, {}).get("step", "")
-            if final_step not in ("canceled", "error", "done"):
-                _update_job(job_id, progress=100, step="done")
+            st = (JOB_STATUS.get(job_id) or {})
+            final_step = st.get("step", "")
+
+            # Only auto-mark done if we actually have a result payload
+            if final_step not in ("canceled", "cancel_requested", "error", "done"):
+                if "result" in st and st["result"] is not None:
+                    _update_job(job_id, progress=100, step="done")
+                else:
+                    # keep the current step; don't lie to the frontend
+                    pass
 
 
 @app.route("/analyze", methods=["POST"])
@@ -664,6 +700,7 @@ def analyze():
             totals.setdefault("classes", ct.get("webChapters", 0))
             totals.setdefault("methods", ct.get("sqlChapters", 0))
             totals.setdefault("others", ct.get("utilityChapters", 0))
+            totals.setdefault("api", ct.get("apiChapters", 0))
 
             # expose clearer keys too
             result.setdefault("totals", {}).update(ct)
@@ -673,7 +710,8 @@ def analyze():
                 totals_payload = {
                     "classes": ct.get("webChapters", 0),
                     "methods": ct.get("sqlChapters", 0),
-                    "others": ct.get("utilityChapters", 0)
+                    "others": ct.get("utilityChapters", 0),
+                    "api": ct.get("apiChapters", 0)
                 }
 
                 totals_entry = {"result": {"totals": totals_payload}}
@@ -687,7 +725,7 @@ def analyze():
                     else:
                         analysis_dict["results"][0] = totals_entry
             except Exception:
-                # non-fatal � we still have analysis_result["totals"] and computedTotals for other consumers
+                # non-fatal  we still have analysis_result["totals"] and computedTotals for other consumers
                 pass
 
         duration_ms = int((time.perf_counter() - start) * 1000)
@@ -735,12 +773,10 @@ def analyze_async():
         print(f"[Debug] ANALYSIS_MODEL set to: {model_choice}")
 
     job_id = str(uuid.uuid4())
-    # Ensure numeric keys exist immediately so frontend reads stable values
     JOB_STATUS[job_id] = {"progress": 0, "step": "queued", "created": time.time(), "expected_chapters": 0, "chapters_generated": 0}
 
     def _run():
         try:
-            # Export job id so splitter/analysis scripts can write a per-job manifest
             os.environ["ANALYZER_JOB_ID"] = job_id
             _update_job(job_id, progress=2, step="saved")
 
@@ -755,44 +791,47 @@ def analyze_async():
             res = analyze_zip(filepath, job_id=job_id)
             duration_ms = int((time.perf_counter() - start) * 1000)
 
-            # Ensure result is a dict and expose the same metadata as the synchronous endpoint
+            # Always force a dict result so the frontend poller can navigate
             if res is None:
-                res = {}
-            if isinstance(res, dict):
-                # expose analyzer output under predictable keys (same shim as sync analyze)
-                if "analysisOutput" in res and res["analysisOutput"] is not None:
-                    res["analysis"] = res.get("analysisOutput")
-                    if isinstance(res["analysisOutput"], list):
-                        res["results"] = res["analysisOutput"]
-                # Propagate model choice into async result payload as well
-                if model_choice:
-                    res["analysisModel"] = model_choice
-                    res["model"] = res.get("model", model_choice)
-                    res.setdefault("analysis", {}).setdefault("model", model_choice)
-                # attach documentation size for async results too
-                try:
-                    final_md_async = os.path.join(BASE_DIR, "final_output", "Complete_Documentation.md")
-                    if os.path.exists(final_md_async):
-                        sza = os.path.getsize(final_md_async)
-                        res["documentationSizeBytes"] = int(sza)
-                        res["documentationSizeMB"] = round(sza / 1024 / 1024, 2)
-                        # also include inside nested `analysis` for frontend compatibility
-                        try:
-                            res.setdefault("analysis", {}).setdefault("documentationSizeBytes", int(sza))
-                            res.setdefault("analysis", {}).setdefault("documentationSizeMB", round(sza / 1024 / 1024, 2))
-                        except Exception:
-                            pass
-                except Exception:
-                    pass
-                res.update({
-                    "zipFilename": filename,
-                    "sizeMB": size_mb,
-                    "processingMs": duration_ms
-                })
+                res = {"status": "error", "message": "No result returned from analyzer."}
+            elif not isinstance(res, dict):
+                res = {"status": "ok", "data": res}
+
+            # ✅ Propagate model choice into async result (DownloadPage reads analysisModel/model)
+            if model_choice:
+                res["analysisModel"] = model_choice
+                res["model"] = res.get("model", model_choice)
+                res.setdefault("analysis", {}).setdefault("model", model_choice)
+
+            # ✅ Attach documentation size (DownloadPage reads documentationSizeMB/Bytes)
+            try:
+                final_md_async = os.path.join(BASE_DIR, "final_output", "Complete_Documentation.md")
+                if os.path.exists(final_md_async):
+                    sz = os.path.getsize(final_md_async)
+                    res["documentationSizeBytes"] = int(sz)
+                    res["documentationSizeMB"] = round(sz / 1024 / 1024, 2)
+                    # also nest for compatibility
+                    res.setdefault("analysis", {}).setdefault("documentationSizeBytes", int(sz))
+                    res.setdefault("analysis", {}).setdefault("documentationSizeMB", round(sz / 1024 / 1024, 2))
+            except Exception:
+                pass
+
+            # attach async metadata (DownloadPage reads zipFilename/sizeMB/processingMs)
+            res.update({
+                "zipFilename": filename,
+                "sizeMB": size_mb,
+                "processingMs": duration_ms
+            })
 
             _update_job(job_id, progress=100, step="done", result=res)
         except Exception as e:
-            _update_job(job_id, progress=100, step="error", error=str(e))
+            _update_job(
+                job_id,
+                progress=100,
+                step="error",
+                error=str(e),
+                result={"status": "error", "message": str(e)}
+            )
 
     thread = threading.Thread(target=_run, daemon=True)
     thread.start()

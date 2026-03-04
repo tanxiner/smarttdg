@@ -1,7 +1,7 @@
-﻿import React, { useState, useEffect, useRef } from 'react';
+﻿import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
-import { Upload, FileArchive, BarChart3, PlayCircle, X, Loader2, CheckCircle, Code, Eye, Download, ChevronRight } from 'lucide-react';
+import { Upload, FileArchive, BarChart3, PlayCircle, X, Loader2, CheckCircle, Code, Eye, Download, ChevronRight, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
 import { Progress } from './ui/progress';
 import mermaid from 'mermaid'; // Import directly for offline use
 
@@ -26,53 +26,219 @@ const MermaidRenderer: React.FC<MermaidRendererProps> = ({ chart, onSvgRendered 
   const containerRef = useRef<HTMLDivElement>(null);
   const [svg, setSvg] = useState<string>('');
   const [renderError, setRenderError] = useState<string>('');
+    const [scale, setScale] = useState<number>(1);
+    // Initialize to true if chart exists to prevent flash of empty state before effect runs
+    const [isRendering, setIsRendering] = useState<boolean>(!!chart);
 
   useEffect(() => {
     mermaid.initialize({ 
       startOnLoad: false, 
       theme: 'default',
-      securityLevel: 'loose', 
+      securityLevel: 'loose',
     });
   }, []);
 
   useEffect(() => {
+    let mounted = true;
+
     const renderChart = async () => {
-      if (!chart) return;
+      // 1. Prepare clean content first
+      const cleanChart = extractMermaid(chart);
+
+      // Option C: hard guardrail to avoid Mermaid "max text size exceeded" + tab lockups
+      const MAX_RENDER_CHARS = 250_000;
+      if (cleanChart.length > MAX_RENDER_CHARS) {
+        if (mounted) {
+          setSvg('');
+          setRenderError(
+            `Diagram too large to render (${cleanChart.length.toLocaleString()} chars). ` +
+            `Try regenerating diagrams; output may be truncated for safety.`
+          );
+          setIsRendering(false);
+        }
+        return;
+      }
+
+      // 2. Check for empty string
+      if (!cleanChart) {
+        if (mounted) {
+          setSvg('');
+          setRenderError('');
+          setIsRendering(false);
+        }
+        return;
+      }
+
+      // 3. Heuristic: Check if chart contains only definitions/styles but no data
+      const isSkeletonOnly = () => {
+          const lines = cleanChart.split('\n').map(l => l.trim()).filter(l => l);
+          const meaningfulLines = lines.filter(l => {
+              // Ignore comments
+              if (l.startsWith('%%')) return false;
+              // Ignore style definitions
+              if (l.startsWith('classDef')) return false;
+              // Ignore diagram type declarations
+              if (/^(graph|flowchart)\s+[A-Za-z0-9]+$/.test(l)) return false;
+              if (l === 'classDiagram') return false;
+              if (l === 'erDiagram') return false;
+              return true;
+          });
+          return meaningfulLines.length === 0;
+      };
+
+      if (isSkeletonOnly()) {
+        if (mounted) {
+            setSvg('');
+            setRenderError('');
+            setIsRendering(false);
+        }
+        return;
+      }
+      
+      // 4. Content exists, start rendering state
+      if (mounted) setIsRendering(true);
       
       try {
-        const cleanChart = chart.replace(/```mermaid/g, '').replace(/```/g, '').trim();
         const id = `mermaid-${Math.random().toString(36).substr(2, 9)}`;
         const { svg } = await mermaid.render(id, cleanChart);
-        setSvg(svg);
-        setRenderError('');
-        if (onSvgRendered) onSvgRendered(svg);
+        
+        if (mounted) {
+            // Check if SVG is effectively empty (mermaid sometimes returns empty SVG for empty graph)
+            if (!svg || svg.length < 50) { 
+               setSvg(''); 
+            } else {
+               setSvg(svg);
+               setScale(1); // Reset zoom on new chart
+               if (onSvgRendered) onSvgRendered(svg);
+            }
+            setRenderError('');
+        }
       } catch (err) {
         console.error("Mermaid rendering error:", err);
-        setRenderError('Failed to render diagram. Code syntax might be invalid.');
-        setSvg('');
+
+        const msg =
+          err instanceof Error
+            ? (err.message || String(err))
+            : String(err);
+
+        if (mounted) {
+          if (/maximum text size/i.test(msg)) {
+            setRenderError("Diagram too large to render (Mermaid maximum text size exceeded).");
+          } else {
+            // ✅ show the real parser error
+            setRenderError(msg);
+          }
+          setSvg("");
+        }
+      } finally {
+        if (mounted) setIsRendering(false);
       }
     };
 
     renderChart();
+    
+    return () => { mounted = false; };
   }, [chart, onSvgRendered]);
 
   if (renderError) {
     return (
-      <div className="flex items-center justify-center p-8 text-red-500 bg-red-50 rounded-lg border border-red-100">
+      <div className="flex items-center justify-center p-8 text-red-500 bg-red-50 rounded-lg border border-red-100 h-full" style={{ minHeight: '500px' }}>
         <p className="font-semibold text-sm">Render Error: {renderError}</p>
       </div>
     );
   }
 
-  // Improved container: centering and auto-scaling
   return (
-    <div 
-      ref={containerRef} 
-      className="mermaid-output flex items-start justify-center min-h-[500px] w-full p-4 overflow-auto bg-white"
-      dangerouslySetInnerHTML={{ __html: svg }} 
-    />
+    <div className="flex flex-col h-full w-full border rounded-lg bg-white overflow-hidden relative min-h-[400px]">
+      {/* Zoom Controls Toolbar */}
+      <div className="flex items-center justify-end p-2 gap-2 bg-gray-50 border-b z-20">
+        <span className="text-xs text-gray-500 font-medium uppercase tracking-wide mr-2">Zoom</span>
+        
+        <Button 
+          variant="outline" 
+          size="sm" 
+          className="h-8 w-8 p-0" 
+          onClick={() => setScale(s => Math.max(0.25, s - 0.25))}
+          title="Zoom Out"
+          disabled={!svg}
+        >
+          <ZoomOut className="h-4 w-4" />
+        </Button>
+        
+        <span className="text-sm font-medium w-12 text-center text-gray-700">
+          {Math.round(scale * 100)}%
+        </span>
+        
+        <Button 
+          variant="outline" 
+          size="sm" 
+          className="h-8 w-8 p-0" 
+          onClick={() => setScale(s => Math.min(5, s + 0.25))}
+          title="Zoom In"
+          disabled={!svg}
+        >
+          <ZoomIn className="h-4 w-4" />
+        </Button>
+        
+        <div className="w-px h-4 bg-gray-300 mx-1" />
+        
+        <Button 
+          variant="outline" 
+          size="sm" 
+          className="h-8 px-2 text-xs" 
+          onClick={() => setScale(1)}
+          title="Reset Zoom"
+          disabled={!svg}
+        >
+          <RotateCcw className="h-3 w-3 mr-1" />
+          Reset
+        </Button>
+      </div>
+
+      {/* Scrollable Container */}
+      <div className="flex-1 overflow-auto p-4 bg-gray-50/30 relative">
+        {/* Loading Indicator */}
+        {isRendering && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/80 z-10 backdrop-blur-sm">
+                <Loader2 className="h-10 w-10 animate-spin text-primary mb-3" />
+                <p className="text-gray-600 font-medium animate-pulse">Rendering diagram...</p>
+            </div>
+        )}
+
+        {/* Empty Indicator */}
+        {!isRendering && !svg && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-400">
+                <BarChart3 className="h-16 w-16 mb-4 opacity-20" />
+                <p className="text-gray-500 font-medium">No diagram content generated.</p>
+                <p className="text-xs text-gray-400 mt-1">Try analyzing a different set of files.</p>
+            </div>
+        )}
+
+        <div 
+          ref={containerRef} 
+          className="mermaid-output flex items-start justify-center origin-top-left transition-all duration-200 ease-in-out"
+          style={{ 
+            width: scale === 1 ? '100%' : `${scale * 100}%`,
+            minWidth: '100%',
+            opacity: isRendering ? 0 : 1
+          }}
+          dangerouslySetInnerHTML={{ __html: svg }} 
+        />
+      </div>
+    </div>
   );
 };
+
+function extractMermaid(chart: string): string {
+  if (!chart) return "";
+
+  // Prefer fenced mermaid blocks
+  const fenced = chart.match(/```mermaid\s*([\s\S]*?)```/i);
+  if (fenced?.[1]) return fenced[1].trim();
+
+  // Fallback: old behavior (in case backend returns raw mermaid)
+  return chart.replace(/```mermaid/gi, "").replace(/```/g, "").trim();
+}
 
 const DiagramViewer: React.FC = () => {
   const [diagrams, setDiagrams] = useState<DiagramInfo[]>([]);
@@ -90,6 +256,12 @@ const DiagramViewer: React.FC = () => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [currentJobId, setCurrentJobId] = useState<string | null>(null);
+
+  const pollHandleRef = useRef<number | null>(null);
+  const runTokenRef = useRef(0);
+  const activeJobIdRef = useRef<string | null>(null);
 
   // Clear diagrams function
   const clearDiagrams = async () => {
@@ -125,6 +297,12 @@ const DiagramViewer: React.FC = () => {
   };
 
   const uploadAndGenerateDiagrams = async (file: File) => {
+    await clearDiagrams();
+
+    runTokenRef.current += 1;
+    const myRunToken = runTokenRef.current;
+    clearPollTimer();
+
     setUploading(true);
     setError('');
     setUploadProgress(0);
@@ -139,17 +317,81 @@ const DiagramViewer: React.FC = () => {
         body: formData,
       });
 
-      if (!response.ok) {
-        throw new Error(`Upload failed: ${response.statusText}`);
-      }
+      if (!response.ok) throw new Error(`Upload failed: ${response.statusText}`);
 
       const { jobId } = await response.json();
-      await pollDiagramJobStatus(jobId);
-      
+      setCurrentJobId(jobId);
+      activeJobIdRef.current = jobId;
+
+      setAnalysisStatus("Starting...");
+      setUploadProgress(0);
+
+      pollHandleRef.current = window.setInterval(async () => {
+        if (runTokenRef.current !== myRunToken) return;
+        if (activeJobIdRef.current !== jobId) return;
+
+        try {
+          const sres = await fetch(`/diagram_status/${jobId}`);
+          if (sres.status === 404) {
+            clearPollTimer();
+            setAnalysisStatus("Job not found or expired.");
+            setUploadProgress(0);
+            setUploading(false);
+            setCurrentJobId(null);
+            activeJobIdRef.current = null;
+            return;
+          }
+          if (!sres.ok) throw new Error(`Status ${sres.status}`);
+
+          const st = await sres.json();
+
+          // terminal states
+          if (st.step === "error") {
+            clearPollTimer();
+            setError(st.error || "Diagram generation failed");
+            setUploading(false);
+            setCurrentJobId(null);
+            activeJobIdRef.current = null;
+            return;
+          }
+
+          if (st.step === "cancel_requested" || st.step === "canceled" || st.canceled) {
+            clearPollTimer();
+            setAnalysisStatus("Canceled");
+            setUploadProgress(0);
+            setUploading(false);
+            setCurrentJobId(null);
+            activeJobIdRef.current = null;
+            return;
+          }
+
+          // done
+          if (st.step === "done") {
+            clearPollTimer();
+            setAnalysisStatus("Diagram generation complete!");
+            setUploadProgress(100);
+            await loadDiagrams();
+            setUploading(false);
+            setSelectedFile(null);
+            setCurrentJobId(null);
+            activeJobIdRef.current = null;
+            return;
+          }
+
+          // progress updates
+          setUploadProgress(typeof st.progress === "number" ? st.progress : 0);
+          setAnalysisStatus(st.step || "Processing...");
+        } catch (e) {
+          console.warn("Polling error", e);
+        }
+      }, 1000);
+
     } catch (error) {
       console.error('Upload error:', error);
       setError(`Upload failed: ${error}`);
       setUploading(false);
+      setCurrentJobId(null);
+      activeJobIdRef.current = null;
     }
   };
 
@@ -276,21 +518,73 @@ const DiagramViewer: React.FC = () => {
     fileInputRef.current?.click();
   };
 
-  const downloadSvg = () => {
-    if (!currentSvg || !selectedDiagram) return;
-    const blob = new Blob([currentSvg], { type: 'image/svg+xml;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `${selectedDiagram}.svg`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  const downloadSvg = async () => {
+    if (!selectedDiagram) return;
+    
+    // If we have rendered SVG, use it
+    if (currentSvg) {
+      const blob = new Blob([currentSvg], { type: 'image/svg+xml;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${selectedDiagram}.svg`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      return;
+    }
+    
+    // Otherwise, request server-side generation
+    try {
+      const response = await fetch(`/diagrams/${selectedDiagram}/svg`);
+      if (!response.ok) throw new Error('Server-side SVG generation failed');
+      
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${selectedDiagram}.svg`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('SVG download failed:', error);
+      setError(`Failed to download SVG: ${error}`);
+    }
   };
+
+  const clearPollTimer = useCallback(() => {
+    if (pollHandleRef.current != null) {
+      window.clearInterval(pollHandleRef.current);
+      pollHandleRef.current = null;
+    }
+  }, []);
+
+  const cancelJob = useCallback(async (jobId: string | null) => {
+    if (!jobId) return;
+    try {
+      await fetch(`/diagram_cancel/${jobId}`, { method: "POST" });
+    } catch (e) {
+      console.warn("Cancel request failed", e);
+    } finally {
+      clearPollTimer();
+      setAnalysisStatus("Canceled");
+      setUploadProgress(0);
+      setUploading(false);
+      setCurrentJobId(null);
+      activeJobIdRef.current = null;
+    }
+  }, [clearPollTimer]);
 
   useEffect(() => {
     clearDiagrams();
-  }, []);
+    return () => {
+      runTokenRef.current += 1;
+      clearPollTimer();
+    };
+  }, [clearPollTimer]);
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
@@ -317,6 +611,20 @@ const DiagramViewer: React.FC = () => {
               </div>
               <Progress value={uploadProgress} className="h-3" />
             </div>
+
+            {currentJobId && (
+              <div className="flex items-center justify-center space-x-1 mt-1">
+                <Button
+                  variant="destructive"
+                  onClick={async () => {
+                    setAnalysisStatus("Canceling...");
+                    await cancelJob(currentJobId);
+                  }}
+                >
+                  Cancel
+                </Button>
+              </div>
+            )}
           </Card>
         ) : !selectedFile ? (
           <Card
@@ -417,7 +725,7 @@ const DiagramViewer: React.FC = () => {
 
           {/* Main Viewer */}
           <div className="lg:col-span-9">
-            <Card className="h-full shadow-sm border-gray-200 flex flex-col min-h-[600px]">
+            <Card className="h-full shadow-sm border-gray-200 flex flex-col min-h-[400px]">
               {selectedDiagram ? (
                 <>
                   {/* Header Toolbar */}
@@ -432,8 +740,8 @@ const DiagramViewer: React.FC = () => {
                         size="sm" 
                         className="gap-2 h-9"
                         onClick={downloadSvg}
-                        disabled={!currentSvg || showCode}
-                      >
+                        disabled={!selectedDiagram || showCode}
+                        >
                         <Download className="h-4 w-4" />
                         <span className="hidden sm:inline">SVG</span>
                       </Button>
@@ -452,18 +760,19 @@ const DiagramViewer: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Canvas */}
-                  <div className="flex-1 bg-white p-6 overflow-auto">
+                  {/* Canvas: Updated to support full-height & no extra padding so scroll/zoom works best */}
+                  <div className="flex-1 bg-white overflow-hidden flex flex-col">
                     {loading ? (
-                      <div className="h-full flex flex-col items-center justify-center text-gray-400">
+                      <div className="h-full flex flex-col items-center justify-center text-gray-400 p-8">
                         <Loader2 className="h-8 w-8 animate-spin mb-3 text-primary" />
                         <p>Rendering diagram...</p>
                       </div>
                     ) : showCode ? (
-                      <pre className="text-sm text-gray-700 font-mono bg-gray-50 p-4 rounded-lg border border-gray-100 overflow-auto h-full">
+                      <pre className="text-sm text-gray-700 font-mono bg-gray-50 p-4 m-4 rounded-lg border border-gray-100 overflow-auto flex-1">
                         {diagramContent}
                       </pre>
                     ) : (
+                      // Render directly, no extra overflow wrapper here, renderer handles it
                       <MermaidRenderer 
                         chart={diagramContent} 
                         onSvgRendered={setCurrentSvg} 
@@ -472,7 +781,7 @@ const DiagramViewer: React.FC = () => {
                   </div>
                 </>
               ) : (
-                <div className="h-full flex flex-col items-center justify-center text-gray-400 p-8">
+                <div className="h-full flex flex-col items-center justify-center text-gray-400 p-8 min-h-[400px]">
                   <div className="bg-gray-100 p-4 rounded-full mb-4">
                     <BarChart3 className="h-8 w-8 text-gray-400" />
                   </div>

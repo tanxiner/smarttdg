@@ -6,7 +6,11 @@ import re
 
 class DiagramGenerator:
     """Generate various diagrams from static analysis output."""
-    
+
+    MAX_PAYLOAD_LINES = 2500
+    MAX_METHODS_PER_CLASS = 25
+    MAX_PROPERTIES_PER_CLASS = 25
+
     def __init__(self, analysis_data: List[Dict], output_dir: str = None):
         # Ensure analysis_data is a list of dicts, not strings
         self.analysis_data = []
@@ -39,6 +43,57 @@ class DiagramGenerator:
             os.path.dirname(__file__), "..", "..", "analysis_output", "Diagrams"
         )
         os.makedirs(self.output_dir, exist_ok=True)
+
+    def _clamp_mermaid(self, lines: List[str], diagram_type: str) -> List[str]:
+        """
+        Clamp Mermaid output to avoid 'Maximum text size exceeded' and browser lockups.
+        Preserves:
+          - the opening fence + diagram declaration
+          - style/classDef lines (these are cheap)
+          - the closing fence
+        Truncates:
+          - payload lines (nodes/edges/class bodies) after MAX_PAYLOAD_LINES
+        """
+        if not lines:
+            return lines
+
+        # Find fences
+        start_idx = 0
+        end_idx = len(lines) - 1
+        if lines[0].strip() != "```mermaid":
+            # unexpected format; still clamp naïvely
+            start_idx = 0
+        if lines[-1].strip() != "```":
+            end_idx = len(lines) - 1
+
+        header = []
+        footer = []
+        if lines and lines[0].strip() == "```mermaid":
+            header.append(lines[0])
+            if len(lines) > 1:
+                header.append(lines[1])  # diagram type line, e.g. graph TD / classDiagram
+            start_idx = len(header)
+
+        if lines and lines[-1].strip() == "```":
+            footer = [lines[-1]]
+            end_idx = len(lines) - 2
+
+        body = lines[start_idx:end_idx + 1] if end_idx >= start_idx else []
+
+        # Keep style lines regardless (cheap + helpful)
+        style_lines = [l for l in body if l.strip().startswith("classDef") or l.strip().startswith("class ")]
+        payload_lines = [l for l in body if l not in style_lines]
+
+        truncated = False
+        if len(payload_lines) > self.MAX_PAYLOAD_LINES:
+            payload_lines = payload_lines[: self.MAX_PAYLOAD_LINES]
+            truncated = True
+
+        out = header + payload_lines + style_lines
+        if truncated:
+            out.append(f"%% NOTE: Diagram '{diagram_type}' truncated to {self.MAX_PAYLOAD_LINES} payload lines for rendering safety.")
+        out += footer
+        return out
     
     def generate_all_diagrams(self) -> Dict[str, str]:
         """Generate all available diagrams and return file paths."""
@@ -88,16 +143,21 @@ class DiagramGenerator:
         for cls in classes:
             safe_name = self._sanitize_class_name(cls['name'])
             mermaid_code.append(f"    class {safe_name} {{")
-            
-            # Add properties
-            for prop in cls.get('properties', []):
-                mermaid_code.append(f"        +{prop}")
-            
-            # Add methods
-            for method in cls.get('methods', []):
-                method_name = method.split('(')[0] if '(' in method else method
-                mermaid_code.append(f"        +{method_name}()")
-            
+
+            for prop in (cls.get('properties', [])[: self.MAX_PROPERTIES_PER_CLASS]):
+                p = self._sanitize_member_text(prop)
+                if p:
+                    mermaid_code.append(f"        +{p}")
+
+            for method in (cls.get('methods', [])[: self.MAX_METHODS_PER_CLASS]):
+                m = self._sanitize_member_text(method)
+                if not m:
+                    continue
+                method_name = m.split('(')[0] if '(' in m else m
+                method_name = self._sanitize_member_text(method_name)
+                if method_name:
+                    mermaid_code.append(f"        +{method_name}()")
+
             mermaid_code.append("    }")
             
             # Add inheritance relationships
@@ -111,6 +171,8 @@ class DiagramGenerator:
                 mermaid_code.append(f"    {if_safe} <|.. {safe_name}")
         
         mermaid_code.append("```")
+        # Do NOT clamp classDiagram - line truncation breaks class block syntax
+        # Size is controlled via MAX_METHODS_PER_CLASS and MAX_PROPERTIES_PER_CLASS
         
         output_file = os.path.join(self.output_dir, "class_diagram.md")
         with open(output_file, 'w', encoding='utf-8') as f:
@@ -172,11 +234,14 @@ class DiagramGenerator:
         ])
         
         mermaid_code.append("```")
-        
+
+        # ✅ clamp for Mermaid safety
+        mermaid_code = self._clamp_mermaid(mermaid_code, "dependency_graph")
+
         output_file = os.path.join(self.output_dir, "dependency_graph.md")
         with open(output_file, 'w', encoding='utf-8') as f:
             f.write('\n'.join(mermaid_code))
-        
+
         return output_file
     
     def generate_file_structure_diagram(self) -> str:
@@ -225,7 +290,7 @@ class DiagramGenerator:
         
         output_file = os.path.join(self.output_dir, "file_structure.md")
         with open(output_file, 'w', encoding='utf-8') as f:
-            f.write('\n'.join(mermaid_code))
+            f.write('\n'.join(self._clamp_mermaid(mermaid_code, "file_structure")))
         
         return output_file
     
@@ -268,7 +333,7 @@ class DiagramGenerator:
         
         output_file = os.path.join(self.output_dir, "namespace_overview.md")
         with open(output_file, 'w', encoding='utf-8') as f:
-            f.write('\n'.join(mermaid_code))
+            f.write('\n'.join(self._clamp_mermaid(mermaid_code, "namespace_overview")))
         
         return output_file
     
@@ -322,7 +387,7 @@ class DiagramGenerator:
         
         output_file = os.path.join(self.output_dir, "inheritance_hierarchy.md")
         with open(output_file, 'w', encoding='utf-8') as f:
-            f.write('\n'.join(mermaid_code))
+            f.write('\n'.join(self._clamp_mermaid(mermaid_code, "inheritance_hierarchy")))
         
         return output_file
     
@@ -371,13 +436,35 @@ class DiagramGenerator:
         
         return output_file
     
+    def _sanitize_member_text(self, text: str) -> str:
+        """
+        Mermaid classDiagram member lines must not contain '{' or '}'.
+        Also remove backticks and non-printing chars that commonly break Mermaid lexing.
+        """
+        if text is None:
+            return ""
+        s = str(text)
+
+        # prevent breaking the class { } block
+        s = s.replace("{", "").replace("}", "")
+
+        # remove markdown/code artifacts or weird characters
+        s = s.replace("`", "").replace("\u0000", "")
+
+        # collapse whitespace
+        s = re.sub(r"\s+", " ", s).strip()
+        return s
+
     def _sanitize_class_name(self, name: str) -> str:
         """Sanitize class name for Mermaid compatibility."""
         if not name or name == 'null':
             return 'Unknown'
-        # Replace dots and special characters
-        return re.sub(r'[^\w]', '_', name)
+        s = re.sub(r'[^\w]', '_', name)
+        if s and s[0].isdigit():
+            s = f"C_{s}"
+        return s
     
+
     def _sanitize_node_name(self, name: str) -> str:
         """Sanitize node name for Mermaid compatibility."""
         if not name:
