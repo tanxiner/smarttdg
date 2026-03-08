@@ -1,5 +1,5 @@
 {
-  "name": "SmartTDG",
+  "name": "smarttdg",
   "version": "0.1.0",
   "private": true,
   "dependencies": {
@@ -37,9 +37,10 @@
     "input-otp": "^1.4.2",
     "lucide-react": "^0.487.0",
     "mdx-mermaid": "^2.0.3",
-    "mermaid": "^11.12.2",
+    "mermaid": "^11.12.3",
     "next-themes": "^0.4.6",
     "path": "^0.12.7",
+    "playwright": "^1.58.2",
     "react": "^18.3.1",
     "react-day-picker": "^8.10.1",
     "react-dom": "^18.3.1",
@@ -63,5 +64,10 @@
     "dev": "vite",
     "build": "vite build",
     "build:frontend": "vite build --config ./flask/frontend/vite.config.ts"
-  }
+  },
+  "description": "",
+  "main": "index.js",
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
 }

@@ -75,13 +75,15 @@ class Program
 
                 var code = File.ReadAllText(filePath);
                 var ext = Path.GetExtension(filePath).ToLowerInvariant();
+                var pathLower = (filePath ?? "").ToLowerInvariant();
                 object result = null;
 
                 try
                 {
                     Console.WriteLine(JsonConvert.SerializeObject(new { debug = "Analyzing file", filePath, ext }));
 
-                    if (ext == ".cs")
+                    // Prefer compound checks (code-behind for Razor pages) before single-extension checks
+                    if (pathLower.EndsWith(".cshtml.cs") || pathLower.EndsWith(".razor.cs") || ext == ".cs")
                     {
                         Console.WriteLine(JsonConvert.SerializeObject(new { debug = "Calling AnalyzeCSharp", filePath }));
                         result = CSharpAnalyzer.Analyze(code, filePath);
@@ -91,20 +93,26 @@ class Program
                         Console.WriteLine(JsonConvert.SerializeObject(new { debug = "Calling AnalyzeVisualBasic", filePath }));
                         result = VisualBasicAnalyzer.Analyze(code, filePath);
                     }
-                    else if (ext == ".aspx" || ext == ".ascx" || ext == ".master")
+                    else if (pathLower.EndsWith(".aspx") || pathLower.EndsWith(".ascx") || pathLower.EndsWith(".master"))
                     {
                         Console.WriteLine(JsonConvert.SerializeObject(new { debug = "Calling AnalyzeAspx", filePath }));
                         result = AspxAnalyzer.Analyze(code, filePath);
                     }
-                    else if (ext == ".js")
+                    else if (ext == ".js" || ext == ".jsx")
                     {
                         Console.WriteLine(JsonConvert.SerializeObject(new { debug = "Calling AnalyzeJs", filePath }));
                         result = JsAnalyzer.Analyze(code, filePath);
                     }
-                    else if (ext == ".html")
+                    else if (pathLower.EndsWith(".html"))
                     {
                         Console.WriteLine(JsonConvert.SerializeObject(new { debug = "Calling AnalyzeHtml", filePath }));
                         result = HtmlAnalyzer.Analyze(code, filePath);
+                    }
+                    // Razor markup (.cshtml) and Blazor components (.razor) -> use CshtmlExtractor
+                    else if (pathLower.EndsWith(".cshtml") || pathLower.EndsWith(".razor"))
+                    {
+                        Console.WriteLine(JsonConvert.SerializeObject(new { debug = "Calling CshtmlExtractor.Analyze (Razor/Blazor)", filePath }));
+                        result = CshtmlExtractor.Analyze(code, filePath);
                     }
                     else
                     {

@@ -29,6 +29,12 @@ PROMPTS_INPUT_BASE = os.path.join(BACKEND_DIR, "prompts_output")                
 # --- OUTPUT BASE: place analysis results under flask/backend/analysis_output (unchanged) ---
 ANALYSIS_OUTPUT_BASE = os.path.join(BACKEND_DIR, "analysis_output")              # flask/backend/analysis_output
 
+def remove_raw_input_block(text: str) -> str:
+    marker = re.search(r'RAW INPUT', text, flags=re.IGNORECASE)
+    if marker:
+        return text[:marker.start()].rstrip()
+    return text
+
 # --- 1. CLEANER FUNCTION (Avoids Retries) ---
 def clean_response(text):
     """
@@ -77,6 +83,7 @@ def clean_response(text):
 
     # Remove conversational filler at the END (only a few trailing phrases)
     text = re.sub(r'(I hope this helps|Let me know|Feel free to ask).*?$', '', text, flags=re.IGNORECASE | re.DOTALL)
+    text = remove_raw_input_block(text)
 
     return text.strip()
 

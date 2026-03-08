@@ -47,6 +47,12 @@
       "script": "compile.py",
       "phase": "compile",
       "timeout_seconds": 120
+    },
+    {
+      "name": "convert_doc",
+      "script": "convert_doc.py",
+      "phase": "compile",
+      "timeout_seconds": 120
     }
   ]
 }

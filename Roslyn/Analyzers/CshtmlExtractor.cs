@@ -10,24 +10,32 @@ namespace Roslyn.Analyzers
         public static bool IsCshtmlPath(string filePath)
             => !string.IsNullOrEmpty(filePath) && filePath.EndsWith(".cshtml", StringComparison.OrdinalIgnoreCase);
 
+        public static bool IsRazorComponentPath(string filePath)
+            => !string.IsNullOrEmpty(filePath) && filePath.EndsWith(".razor", StringComparison.OrdinalIgnoreCase);
+
         public static object Analyze(string code, string filePath)
         {
             if (code == null) code = string.Empty;
 
             var modelDeclarations = ExtractModelDeclarations(code);
-            var razorCodeBlocks = ExtractRazorCodeBlocks(code);
+            var razorCodeBlocks = ExtractRazorAndNamedCodeBlocks(code);
             var scriptBlocks = ExtractScriptBlocks(code);
             var htmlTags = ExtractHtmlTags(code);
+            var directives = ExtractDirectives(code);
+            var componentUsages = ExtractComponentUsages(code);
 
             return new
             {
                 file = System.IO.Path.GetFileName(filePath ?? ""),
                 path = filePath,
                 isCshtml = IsCshtmlPath(filePath ?? ""),
+                isRazorComponent = IsRazorComponentPath(filePath ?? ""),
                 modelDeclarations,
+                directives,
                 razorCodeBlocks,
                 scriptBlocks,
-                htmlTags
+                htmlTags,
+                componentUsages
             };
         }
 
@@ -49,22 +57,30 @@ namespace Roslyn.Analyzers
             return list.ToArray();
         }
 
-        // Extract Razor @{ ... } blocks with simple brace-balancing and line numbers
-        private static object[] ExtractRazorCodeBlocks(string code)
+        // Extract named Razor blocks: @{ ... }, @code { ... }, @functions { ... }
+        private static object[] ExtractRazorAndNamedCodeBlocks(string code)
         {
             var results = new List<object>();
             for (int i = 0; i < code.Length - 1; i++)
             {
-                if (code[i] == '@' && i + 1 < code.Length && code[i + 1] == '{')
+                if (code[i] != '@') continue;
+
+                int look = i + 1;
+                // skip whitespace
+                while (look < code.Length && char.IsWhiteSpace(code[look])) look++;
+
+                // If next char is '{' this is an @{ ... } block
+                if (look < code.Length && code[look] == '{')
                 {
+                    // start at i, content begins at look
                     int start = i;
-                    int pos = i + 2;
+                    int pos = look + 1;
                     int depth = 1;
                     while (pos < code.Length && depth > 0)
                     {
                         char c = code[pos];
 
-                        // skip strings to avoid braces inside them interfering
+                        // skip strings
                         if (c == '"' || c == '\'')
                         {
                             char quote = c;
@@ -82,21 +98,75 @@ namespace Roslyn.Analyzers
                         else if (c == '}') depth--;
                         pos++;
                     }
-
                     int end = Math.Min(pos, code.Length);
                     var snippet = code.Substring(start, end - start);
                     results.Add(new
                     {
+                        kind = "@{ }",
                         text = snippet,
-                        content = snippet.Length > 2 ? snippet.Substring(2, Math.Max(0, snippet.Length - 3)) : string.Empty, // remove leading "@{" and trailing "}"
+                        content = snippet.Length > 2 ? snippet.Substring(2, Math.Max(0, snippet.Length - 3)) : string.Empty,
                         startLine = GetLineNumber(code, start),
                         endLine = GetLineNumber(code, Math.Max(0, end - 1)),
                         startIndex = start,
                         endIndex = end
                     });
-
                     i = end - 1;
+                    continue;
                 }
+
+                // Read identifier after @ (e.g., code, functions)
+                int j = look;
+                while (j < code.Length && (char.IsLetter(code[j]) || code[j] == '_')) j++;
+                var ident = code.Substring(look, Math.Max(0, j - look));
+                // Only interested in code or functions blocks (case-insensitive)
+                if (!string.IsNullOrEmpty(ident) && (string.Equals(ident, "code", StringComparison.OrdinalIgnoreCase) || string.Equals(ident, "functions", StringComparison.OrdinalIgnoreCase)))
+                {
+                    // skip whitespace to find '{'
+                    int k = j;
+                    while (k < code.Length && char.IsWhiteSpace(code[k])) k++;
+                    if (k < code.Length && code[k] == '{')
+                    {
+                        int start = i;
+                        int pos = k + 1;
+                        int depth = 1;
+                        while (pos < code.Length && depth > 0)
+                        {
+                            char c = code[pos];
+                            if (c == '"' || c == '\'')
+                            {
+                                char quote = c;
+                                pos++;
+                                while (pos < code.Length)
+                                {
+                                    if (code[pos] == '\\') { pos += 2; continue; }
+                                    if (code[pos] == quote) { pos++; break; }
+                                    pos++;
+                                }
+                                continue;
+                            }
+
+                            if (c == '{') depth++;
+                            else if (c == '}') depth--;
+                            pos++;
+                        }
+                        int end = Math.Min(pos, code.Length);
+                        var snippet = code.Substring(start, end - start);
+                        results.Add(new
+                        {
+                            kind = "@" + ident,
+                            text = snippet,
+                            content = snippet.Length > 0 ? snippet.Substring(snippet.IndexOf('{') + 1, Math.Max(0, snippet.Length - (snippet.IndexOf('{') + 2))) : string.Empty,
+                            startLine = GetLineNumber(code, start),
+                            endLine = GetLineNumber(code, Math.Max(0, end - 1)),
+                            startIndex = start,
+                            endIndex = end
+                        });
+                        i = end - 1;
+                        continue;
+                    }
+                }
+
+                // Not a recognized block — continue scanning
             }
             return results.ToArray();
         }
@@ -139,6 +209,46 @@ namespace Roslyn.Analyzers
                     tag,
                     attributes = attrs,
                     text = m.Value,
+                    line = GetLineNumber(code, idx),
+                    startIndex = idx,
+                    endIndex = idx + m.Length
+                });
+            }
+            return list.ToArray();
+        }
+
+        // Extract top-level Razor directives like @page, @inherits, @using, @inject, @typeparam, @attribute, @layout
+        private static object[] ExtractDirectives(string code)
+        {
+            var list = new List<object>();
+            var rx = new Regex(@"^\s*@(page|inherits|using|inject|typeparam|attribute|layout|implements)\b(?:\s+(.*))?$", RegexOptions.IgnoreCase | RegexOptions.Multiline);
+            foreach (Match m in rx.Matches(code))
+            {
+                var name = m.Groups[1].Value;
+                var arg = m.Groups[2].Success ? m.Groups[2].Value.Trim() : "";
+                list.Add(new
+                {
+                    directive = "@" + name,
+                    value = arg,
+                    line = GetLineNumber(code, m.Index)
+                });
+            }
+            return list.ToArray();
+        }
+
+        // Extract component-like usages (PascalCase tags or tags with dots) to help Blazor analysis
+        private static object[] ExtractComponentUsages(string code)
+        {
+            var rx = new Regex(@"<([A-Z][A-Za-z0-9_.]+)(\s[^>]*)?>", RegexOptions.Singleline);
+            var list = new List<object>();
+            foreach (Match m in rx.Matches(code))
+            {
+                var comp = m.Groups[1].Value;
+                int idx = m.Index;
+                list.Add(new
+                {
+                    component = comp,
+                    attributes = (m.Groups[2].Value ?? "").Trim(),
                     line = GetLineNumber(code, idx),
                     startIndex = idx,
                     endIndex = idx + m.Length

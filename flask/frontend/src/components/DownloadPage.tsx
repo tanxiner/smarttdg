@@ -25,12 +25,12 @@ type Totals = {
 };
 
 /**
- * Uses backend-computed .md counts from analysis_output folders.
+ * Use only backend-computed .md counts from analysis_output folders.
  * Priority:
- *  1) analysis.computedTotals.{webChapters, sqlChapters, utilityChapters}
- *  2) analysis.totals.{webChapters, sqlChapters, utilityChapters}
- *  3) legacy: analysis.analysis.totals.{classes, methods, others}
- *  4) fallback heuristic (your old logic)
+ *  1) analysis.computedTotals.{webChapters, sqlChapters, utilityChapters, apiChapters}
+ *  2) analysis.totals.{webChapters, sqlChapters, utilityChapters, apiChapters}
+ *  3) legacy: analysis.analysis.totals.{classes, methods, others, api}
+ *  4) fallback: zero (do not guess by inspecting results)
  */
 function accumulateTotals(analysis?: any): Totals {
   const results = Array.isArray(analysis?.results) ? analysis.results : [];
@@ -40,14 +40,19 @@ function accumulateTotals(analysis?: any): Totals {
       ? analysis.filesAnalyzed
       : results.length;
 
+  const toNumber = (v: any) => {
+    const n = Number(v ?? 0);
+    return Number.isFinite(n) ? n : 0;
+  };
+
   // 1) BEST: backend already counted .md files in analysis_output folders
   if (analysis?.computedTotals) {
     return {
       filesProcessed,
-      webChapters: Number(analysis.computedTotals.webChapters ?? 0),
-      sqlChapters: Number(analysis.computedTotals.sqlChapters ?? 0),
-      utilityChapters: Number(analysis.computedTotals.utilityChapters ?? 0),
-      apiChapters: Number(analysis.computedTotals.apiChapters ?? 0),
+      webChapters: toNumber(analysis.computedTotals.webChapters),
+      sqlChapters: toNumber(analysis.computedTotals.sqlChapters),
+      utilityChapters: toNumber(analysis.computedTotals.utilityChapters),
+      apiChapters: toNumber(analysis.computedTotals.apiChapters),
     };
   }
 
@@ -55,73 +60,27 @@ function accumulateTotals(analysis?: any): Totals {
   if (analysis?.totals) {
     return {
       filesProcessed,
-      webChapters: Number(analysis.totals.webChapters ?? 0),
-      sqlChapters: Number(analysis.totals.sqlChapters ?? 0),
-      utilityChapters: Number(analysis.totals.utilityChapters ?? 0),
-      apiChapters: Number(analysis.totals.api ?? analysis.totals.apiChapters ?? 0),
+      webChapters: toNumber(analysis.totals.webChapters),
+      sqlChapters: toNumber(analysis.totals.sqlChapters),
+      utilityChapters: toNumber(analysis.totals.utilityChapters),
+      apiChapters: toNumber(analysis.totals.api ?? analysis.totals.apiChapters),
     };
   }
 
-  // 3) LEGACY SHIM: your app.py also maps computed totals into analysis.totals
-  //    but if you ever pass nested objects, this catches older structures.
+  // 3) LEGACY SHIM: preserve compatibility with older analyzer shapes
   const legacyTotals = analysis?.analysis?.totals;
   if (legacyTotals) {
     return {
       filesProcessed,
-      webChapters: Number(legacyTotals.classes ?? 0),
-      sqlChapters: Number(legacyTotals.methods ?? 0),
-      utilityChapters: Number(legacyTotals.others ?? 0),
-      apiChapters: Number(legacyTotals.api ?? 0),
+      webChapters: toNumber(legacyTotals.classes),
+      sqlChapters: toNumber(legacyTotals.methods),
+      utilityChapters: toNumber(legacyTotals.others),
+      apiChapters: toNumber(legacyTotals.api),
     };
   }
 
-  // 4) LAST RESORT: derive counts from results array (heuristics)
-  let webChapters = 0;
-  let sqlChapters = 0;
-  let utilityChapters = 0;
-  let apiChapters = 0;
-
-  for (const r of results) {
-    const filePath = (r?.file || r?.path || "").toString().toLowerCase();
-    const res = r?.result ?? r;
-
-    // Try to catch API endpoints if they appear in results (rare in current pipeline structure but possible)
-    if (res?.kind === "webapi" || r?.kind === "webapi") {
-      apiChapters++;
-      continue;
-    }
-
-    const looksLikePage =
-      filePath.endsWith(".aspx") ||
-      filePath.endsWith(".html") ||
-      filePath.endsWith(".htm") ||
-      res?.isAspx ||
-      res?.isHtml ||
-      res?.kind === "Page" ||
-      (res?.types && res.types.some((t: any) => /page/i.test(t.name)));
-
-    if (looksLikePage) {
-      webChapters++;
-      continue;
-    }
-
-    const looksLikeSql =
-      filePath.endsWith(".sql") ||
-      (Array.isArray(res?.sql) && res.sql.length > 0) ||
-      (res?.ir &&
-        Array.isArray(res.ir.file_level_sql) &&
-        res.ir.file_level_sql.length > 0) ||
-      res?.kind === "StoredProcedure";
-
-    if (looksLikeSql) {
-      sqlChapters++;
-      continue;
-    }
-
-    utilityChapters++;
-  }
-
-  return { filesProcessed, webChapters, sqlChapters, utilityChapters, apiChapters };
+  // 4) Do not attempt to derive counts client-side anymore.
+  return { filesProcessed, webChapters: 0, sqlChapters: 0, utilityChapters: 0, apiChapters: 0 };
 }
 
 function formatDuration(ms: number): string {
@@ -143,6 +102,48 @@ function formatFileSizeFromMB(sizeMB?: number): string {
     return `${ kb.toFixed(2) } KB`;
   }
   return `${ sizeMB.toFixed(2) } MB`;
+}
+
+// Helpers for Content-Disposition parsing and safe filenames
+function safeDecodeFilenameStar(raw: string): string {
+  try {
+    // RFC5987 format: charset'lang'%XX...
+    // keep everything after the last single-quote sections (encoded part)
+    const firstQuote = raw.indexOf("'");
+    if (firstQuote === -1) {
+      return decodeURIComponent(raw);
+    }
+    // parts: charset'lang'encoded
+    const parts = raw.split("'");
+    const encoded = parts.slice(2).join("'");
+    return decodeURIComponent(encoded);
+  } catch {
+    return raw;
+  }
+}
+
+function sanitizeFilename(name: string): string {
+  const base = name.replace(/.*[\\/]/, "");
+  // remove control and reserved characters
+  return base.replace(/[\u0000-\u001f<>:"\/\\|?*\x7f]/g, "_").trim();
+}
+
+function getFilenameFromResponse(res: Response, defaultName: string) {
+  const cd = res.headers.get("content-disposition");
+  if (!cd) return defaultName;
+  // Try filename* first (RFC5987)
+  const mStar = cd.match(/filename\*\s*=\s*([^;]+)/i);
+  if (mStar && mStar[1]) {
+    let val = mStar[1].trim().replace(/^['"]|['"]$/g, "");
+    val = safeDecodeFilenameStar(val);
+    return sanitizeFilename(val) || defaultName;
+  }
+  // Fallback to filename=
+  const m = cd.match(/filename\s*=\s*["']?([^;"']+)["']?/i);
+  if (m && m[1]) {
+    return sanitizeFilename(m[1].trim()) || defaultName;
+  }
+  return defaultName;
 }
 
 export function DownloadPage({ onStartOver, analysis }: DownloadPageProps) {
@@ -171,69 +172,55 @@ export function DownloadPage({ onStartOver, analysis }: DownloadPageProps) {
     analysis?.analysis?.model ??
     "—";
 
-  const handleDownload = async (format: string) => {
-    console.log("handleDownload()", format);
+  // Consider docs present only when at least one chapter count > 0
+  const docsAvailable =
+    (totals.webChapters ?? 0) +
+    (totals.sqlChapters ?? 0) +
+    (totals.utilityChapters ?? 0) +
+    (totals.apiChapters ?? 0) > 0;
+
+  // Unified fetch-based downloader used for Markdown, Word and PDF.
+  const doFetchDownload = async (url: string, defaultFileName: string) => {
     setIsDownloading(true);
     setDownloadProgress(0);
+    try {
+      const res = await fetch(url, { method: "GET" });
+      if (!res.ok) {
+        const t = await res.text().catch(() => "");
+        console.error("Download failed", res.status, t);
+        alert(`Download failed: ${ res.status }`);
+        setIsDownloading(false);
+        return;
+      }
 
-    // Only special-case Markdown (server serves text/markdown attachment)
-    if (format === "Markdown") {
-      const url = "/download/complete_documentation";
+      const filename = getFilenameFromResponse(res, defaultFileName);
 
-      try {
-        const res = await fetch(url, { method: "GET" });
+      // Try streaming if content-length is present
+      const contentLengthHeader = res.headers.get("content-length");
+      if (res.body && contentLengthHeader) {
+        const total = parseInt(contentLengthHeader, 10);
+        const reader = res.body.getReader();
+        const chunks: Uint8Array[] = [];
+        let received = 0;
 
-        if (!res.ok) {
-          const t = await res.text().catch(() => "");
-          console.error("Download failed", res.status, t);
-          alert(`Download failed: ${ res.status } `);
-          setIsDownloading(false);
-          return;
-        }
-
-        // Try streaming with progress if Content-Length is present
-        const contentLengthHeader = res.headers.get("content-length");
-        if (res.body && contentLengthHeader) {
-          const total = parseInt(contentLengthHeader, 10);
-          const reader = res.body.getReader();
-          const chunks: Uint8Array[] = [];
-          let received = 0;
-
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            if (value) {
-              chunks.push(value);
-              received += value.length;
-              if (total > 0) {
-                setDownloadProgress(
-                  Math.min(100, Math.floor((received / total) * 100))
-                );
-              }
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (value) {
+            chunks.push(value);
+            received += value.length;
+            if (total > 0) {
+              setDownloadProgress(Math.min(100, Math.floor((received / total) * 100)));
             }
           }
-
-          const blob = new Blob(chunks, { type: "text/markdown" });
-          const href = URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = href;
-          a.download = "Complete_Documentation.md";
-          document.body.appendChild(a);
-          a.click();
-          a.remove();
-          URL.revokeObjectURL(href);
-
-          setDownloadProgress(100);
-          setTimeout(() => setIsDownloading(false), 400);
-          return;
         }
 
-        // Fallback: server didn't provide a streamable body or content-length
-        const blob = await res.blob();
+        const contentType = res.headers.get("content-type") || "application/octet-stream";
+        const blob = new Blob(chunks, { type: contentType });
         const href = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = href;
-        a.download = "Complete_Documentation.md";
+        a.download = filename;
         document.body.appendChild(a);
         a.click();
         a.remove();
@@ -242,25 +229,58 @@ export function DownloadPage({ onStartOver, analysis }: DownloadPageProps) {
         setDownloadProgress(100);
         setTimeout(() => setIsDownloading(false), 400);
         return;
-      } catch (err) {
-        console.error("Download error:", err);
-        // final fallback: navigate to endpoint
-        try {
-          window.location.href = url;
-        } catch (_) {
-          alert("Unable to download file.");
-        } finally {
-          setIsDownloading(false);
-        }
-        return;
+      }
+
+      // Fallback: blob()
+      const blob = await res.blob();
+      const href = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = href;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(href);
+
+      setDownloadProgress(100);
+      setTimeout(() => setIsDownloading(false), 400);
+      return;
+    } catch (err) {
+      console.error("Download error:", err);
+      // final fallback: navigate to endpoint which will trigger browser download
+      try {
+        window.location.href = url;
+      } catch (_) {
+        alert("Unable to download file.");
+      } finally {
+        setIsDownloading(false);
       }
     }
+  };
 
-    // Placeholder behavior for other formats (existing behavior)
-    setTimeout(() => {
-      alert(`Downloading ${ format } documentation...`);
-      setIsDownloading(false);
-    }, 2000);
+  const handleDownload = async (format: string) => {
+    console.log("handleDownload()", format);
+
+    const safeProject = sanitizeFilename(projectName);
+    const zipQuery = encodeURIComponent(analysis?.zipFilename || analysis?.zip || "");
+    let url = "";
+    let defaultFileName = "";
+
+    if (format === "Word") {
+      // use the backend's expected query name "zipFilename"
+      url = "/download/word_documentation" + (zipQuery ? `?zipFilename=${zipQuery}` : "");
+      defaultFileName = `${safeProject}_Technical_Documentation.docx`;
+    } else if (format === "PDF") {
+      url = "/download/pdf_documentation" + (zipQuery ? `?zipFilename=${zipQuery}` : "");
+      defaultFileName = `${safeProject}_Technical_Documentation.pdf`;
+    } else if (format === "Markdown") {
+      url = "/download/md_documentation" + (zipQuery ? `?zipFilename=${zipQuery}` : "");
+      defaultFileName = `${safeProject}_Technical_Documentation.md`;
+    } else {
+      return;
+    }
+
+    await doFetchDownload(url, defaultFileName);
   };
 
   return (
@@ -338,45 +358,53 @@ export function DownloadPage({ onStartOver, analysis }: DownloadPageProps) {
             </div>
             <Progress value={downloadProgress} className="h-2" />
           </div>
-        )}
+              )}
+
+          {/* If no documentation chapters were generated, show message and disable downloads */}
+          {!docsAvailable && !isDownloading && (
+            <div className="mb-4 p-4 rounded bg-yellow-50 border border-yellow-100 text-sm text-yellow-800">
+              No documentation chapters were generated. Downloads are disabled.
+            </div>
+          )}
 
           <div className="space-y-3">
           <Button
-            onClick={() => handleDownload("HTML")}
+              onClick={() => handleDownload("Markdown")}
               className="w-full justify-start"
-            disabled={isDownloading}
-          >
-            <Globe className="h-4 w-4 mr-2" />
-            Word Document
+              disabled={isDownloading || !docsAvailable}
+           >
+        <Globe className="h-4 w-4 mr-2" />
+            Markdown Document
             <span className="ml-auto text-xs text-gray-500">Recommended</span>
+              </Button>
+
+         
+          <Button
+            onClick={() => handleDownload("Word")}
+            variant="outline"
+              className="w-full justify-start"
+            disabled={isDownloading || !docsAvailable}
+          >
+            <FileArchive className="h-4 w-4 mr-2" />
+            Word Document
+            <span className="ml-auto text-xs text-gray-500">—</span>
           </Button>
 
           <Button
             onClick={() => handleDownload("PDF")}
             variant="outline"
               className="w-full justify-start"
-            disabled={isDownloading}
+            disabled={isDownloading || !docsAvailable}
           >
             <FileText className="h-4 w-4 mr-2" />
             PDF Document
-            <span className="ml-auto text-xs text-gray-500">—</span>
-          </Button>
-
-          <Button
-            onClick={() => handleDownload("Markdown")}
-            variant="outline"
-              className="w-full justify-start"
-            disabled={isDownloading}
-          >
-            <FileArchive className="h-4 w-4 mr-2" />
-            Markdown Document
             <span className="ml-auto text-xs text-gray-500">—</span>
           </Button>
         </div>
 
       </Card>
 
-      {/* Project Info */}
+    {/* Project Info */}
       <Card className="p-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-medium text-gray-900">Project Details</h2>

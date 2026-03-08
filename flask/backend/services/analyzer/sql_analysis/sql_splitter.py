@@ -97,17 +97,14 @@ def get_dynamic_acronyms(text):
 
 def extract_proc_name(proc_sql):
     pattern = (
-        r'(?:CREATE|ALTER)\s+'
+        r'(?is)\b(?:CREATE|ALTER)\s+'
         r'(?:OR\s+ALTER\s+)?'
         r'(?:PROC|PROCEDURE)\s+'
-        r'(?:\[?\w+\]?\.?)?'
-        r'\[?([a-zA-Z0-9_]+)\]?'
+        r'(?:(?:\[[^\]]+\]|\w+)\s*\.\s*)?'
+        r'\[?([A-Za-z0-9_]+)\]?'
     )
-    match = re.search(pattern, proc_sql, re.IGNORECASE)
-    if match:
-        return match.group(1)
-    # Fallback: try to find filename hint if present in comments? No, just unknown.
-    return "Unknown_Proc"
+    match = re.search(pattern, proc_sql)
+    return match.group(1) if match else "Unknown_Proc"
 
 def sanitize_filename(name):
     return re.sub(r'[\\/*?:"<>|]', "", name)

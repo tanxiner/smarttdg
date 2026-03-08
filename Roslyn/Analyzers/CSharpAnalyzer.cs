@@ -1,4 +1,4 @@
-using Microsoft.CodeAnalysis;
+﻿using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using System;
@@ -54,16 +54,63 @@ namespace Roslyn.Analyzers
             string GetModifiers(SyntaxTokenList mods)
                 => string.Join(" ", mods.Select(m => m.Text));
 
-            var classDetails = root.DescendantNodes().OfType<CSS.ClassDeclarationSyntax>()
-                .Select(c => new
+            var classDetails = root.DescendantNodes()
+                .OfType<CSS.ClassDeclarationSyntax>()
+                .Select(c =>
                 {
-                    name = c.Identifier.Text,
-                    modifiers = GetModifiers(c.Modifiers),
-                    baseType = c.BaseList?.Types.FirstOrDefault()?.Type.ToString(),
-                    interfaces = c.BaseList?.Types.Skip(1).Select(t => t.Type.ToString()).ToArray() ?? Array.Empty<string>()
+                    // Methods declared in THIS class only
+                    var classMethods = c.Members
+                        .OfType<CSS.MethodDeclarationSyntax>()
+                        .Select(m =>
+                        {
+                            var name = m.Identifier.Text;
+                            var returnType = GetTypeName(m.ReturnType);
+                            var parameters = FormatParameters(m.ParameterList);
+                            var mods = GetModifiers(m.Modifiers);
+                            return $"{mods} {name}({parameters}): {returnType}".Trim();
+                        })
+                        .Distinct()
+                        .ToArray();
+
+                    // Properties declared in THIS class only
+                    var classProperties = c.Members
+                        .OfType<CSS.PropertyDeclarationSyntax>()
+                        .Select(p =>
+                        {
+                            var mods = GetModifiers(p.Modifiers);
+                            var name = p.Identifier.Text;
+                            var type = GetTypeName(p.Type);
+                            return $"{mods} {name}: {type}".Trim();
+                        })
+                        .Distinct()
+                        .ToArray();
+
+                    // (Optional) Fields declared in THIS class only
+                    var classFields = c.Members
+                        .OfType<CSS.FieldDeclarationSyntax>()
+                        .SelectMany(f =>
+                        {
+                            var mods = GetModifiers(f.Modifiers);
+                            var type = f.Declaration.Type?.ToString() ?? "object";
+                            return f.Declaration.Variables.Select(v => $"{mods} {v.Identifier.Text}: {type}".Trim());
+                        })
+                        .Distinct()
+                        .ToArray();
+
+                    return new
+                    {
+                        name = c.Identifier.Text,
+                        modifiers = GetModifiers(c.Modifiers),
+                        baseType = c.BaseList?.Types.FirstOrDefault()?.Type.ToString(),
+                        interfaces = c.BaseList?.Types.Skip(1).Select(t => t.Type.ToString()).ToArray() ?? Array.Empty<string>(),
+
+                        // ✅ These are what your Python Mermaid generator expects:
+                        Methods = classMethods,
+                        Properties = classProperties,
+                        Fields = classFields
+                    };
                 })
                 .ToArray();
-
             var interfaces = root.DescendantNodes().OfType<CSS.InterfaceDeclarationSyntax>()
                 .Select(i => new
                 {
@@ -188,7 +235,7 @@ namespace Roslyn.Analyzers
                 file = Path.GetFileName(filePath),
                 language = "C#",
                 namespaces,
-                //usings,
+                imports = usings,
                 classes = classDetails,
                 //interfaces,
                 //structs,

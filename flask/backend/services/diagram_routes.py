@@ -1,4 +1,5 @@
-from flask import Flask, jsonify, send_from_directory, request
+﻿from flask import Flask, jsonify, send_from_directory, request, send_file, after_this_request
+import re
 import os
 import json
 import tempfile
@@ -296,48 +297,218 @@ def register_diagram_routes(app: Flask):
 
     @app.route("/diagrams/<diagram_type>/svg", methods=["GET"])
     def download_diagram_svg(diagram_type):
-        """Generate and download SVG for a diagram, even if too large to render in browser."""
+        """
+        Export diagram(s) to SVG using Node+Playwright exporter.
+
+        Special handling:
+        - If class_diagram.md is NOT a mermaid diagram (e.g., an index),
+          auto-pick the first split part instead.
+        """
         diagrams_dir = os.path.join(BASE_DIR, "analysis_output", "Diagrams")
-        md_file = os.path.join(diagrams_dir, f"{diagram_type}.md")
-        
-        if not os.path.exists(md_file):
-            return jsonify({"error": "Diagram not found"}), 404
-        
-        try:
-            # Create temp SVG file
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.svg', delete=False) as svg_file:
-                svg_path = svg_file.name
-            
-            # Use mermaid CLI to convert MD to SVG
-            result = subprocess.run(
-                ['mmdc', '-i', md_file, '-o', svg_path, '-b', 'transparent'],
-                capture_output=True,
-                text=True,
-                timeout=30
-            )
-            
-            if result.returncode != 0:
-                return jsonify({"error": f"SVG generation failed: {result.stderr}"}), 500
-            
-            # Send SVG file
-            return send_from_directory(
-                os.path.dirname(svg_path),
-                os.path.basename(svg_path),
-                as_attachment=True,
-                download_name=f"{diagram_type}.svg",
-                mimetype="image/svg+xml"
-            )
-            
-        except subprocess.TimeoutExpired:
-            return jsonify({"error": "SVG generation timed out"}), 500
-        except Exception as e:
-            return jsonify({"error": str(e)}), 500
-        finally:
-            # Cleanup temp file
+
+        def has_mermaid_block(path: str) -> bool:
             try:
-                if os.path.exists(svg_path):
-                    os.remove(svg_path)
+                with open(path, "r", encoding="utf-8") as f:
+                    md = f.read()
+                return re.search(r"```mermaid\s*([\s\S]*?)```", md, re.IGNORECASE) is not None
             except:
-                pass
+                return False
+
+        def pick_md_file() -> str:
+            # default behavior
+            primary = os.path.join(diagrams_dir, f"{diagram_type}.md")
+            if os.path.exists(primary) and has_mermaid_block(primary):
+                return primary
+
+            # special: class_diagram may be split
+            if diagram_type == "class_diagram":
+                # Prefer paged files first (p1)
+                candidates = []
+                for fn in os.listdir(diagrams_dir):
+                    if not fn.endswith(".md"):
+                        continue
+                    # class_diagram__TAMS__p1.md etc
+                    if fn.startswith("class_diagram__") and ("__p1.md" in fn or fn.count("__") == 1):
+                        candidates.append(fn)
+
+                # stable ordering: p1 first then alpha
+                def sort_key(fn: str):
+                    # p1 first, then p2...
+                    m = re.search(r"__p(\d+)\.md$", fn)
+                    if m:
+                        return (0, int(m.group(1)), fn.lower())
+                    return (1, 999999, fn.lower())
+
+                candidates.sort(key=sort_key)
+
+                for fn in candidates:
+                    path = os.path.join(diagrams_dir, fn)
+                    if has_mermaid_block(path):
+                        return path
+
+            # fallback: if file exists but no mermaid, still return primary for proper error msg
+            return primary
+
+        md_file = pick_md_file()
+
+        if not os.path.exists(md_file):
+            return jsonify({"error": f"Diagram not found: {os.path.basename(md_file)}"}), 404
+
+        node_script = os.path.join(BASE_DIR, "render_mermaid_svg.mjs")
+        if not os.path.exists(node_script):
+            return jsonify({"error": f"Exporter script not found: {node_script}"}), 500
+
+        tmp_dir = None
+
+        try:
+            # 1) Read MD
+            with open(md_file, "r", encoding="utf-8") as f:
+                md = f.read()
+
+            # 2) Extract mermaid block
+            m = re.search(r"```mermaid\s*([\s\S]*?)```", md, re.IGNORECASE)
+            if not m:
+                return jsonify({
+                    "error": "No ```mermaid``` block found",
+                    "file": os.path.basename(md_file)
+                }), 400
+
+            mermaid_src = m.group(1).strip()
+            if not mermaid_src:
+                return jsonify({"error": "Mermaid block is empty"}), 400
+
+            print("[SVG EXPORT] diagram_type =", diagram_type)
+            print("[SVG EXPORT] md_file =", md_file)
+            print("[SVG EXPORT] mermaid_src length =", len(mermaid_src))
+            print("[SVG EXPORT] node_script =", node_script)
+
+            # 3) Create a temp working dir
+            tmp_dir = tempfile.mkdtemp(prefix=f"svgexp_{diagram_type}_")
+
+            def run_export(mmd_text: str, out_svg_path: str):
+                mmd_path = os.path.join(tmp_dir, f"input_{uuid.uuid4().hex}.mmd")
+                with open(mmd_path, "w", encoding="utf-8") as mf:
+                    mf.write(mmd_text)
+
+                res = subprocess.run(
+                    ["node", node_script, mmd_path, out_svg_path],
+                    cwd=BASE_DIR,
+                    capture_output=True,
+                    text=True,
+                    timeout=180
+                )
+
+                print("[SVG EXPORT] node returncode =", res.returncode)
+                if res.stdout:
+                    print("[SVG EXPORT] node stdout (first 2k) =", res.stdout[:2000])
+                if res.stderr:
+                    print("[SVG EXPORT] node stderr (first 2k) =", res.stderr[:2000])
+
+                if res.returncode != 0:
+                    raise RuntimeError(res.stderr or res.stdout or "Node exporter failed")
+
+            # 4) Heuristic split: if too many lines/edges, split into multiple parts
+            lines = mermaid_src.splitlines()
+
+            # Keep the first "graph ..." / "flowchart ..." / "classDiagram" line as header
+            header = None
+            body = []
+
+            for ln in lines:
+                stripped = ln.strip()
+                if header is None and stripped.startswith(("graph", "flowchart", "classDiagram")):
+                    header = stripped
+                    # only rewrite direction for graph/flowchart (NOT classDiagram)
+                    if header.startswith(("graph", "flowchart")):
+                        header = re.sub(r"\b(LR|RL)\b", "TD", header)
+                else:
+                    body.append(ln)
+
+            if header is None:
+                # fall back — better than failing
+                header = "flowchart TD"
+
+            MAX_BODY_LINES_SINGLE = 2500
+            CHUNK_BODY_LINES = 2000
+
+            # ✅ classDiagram should not be split by line-chunking (it breaks braces)
+            # If it's too large, you should already have split files. So just export single.
+            if header.strip() == "classDiagram":
+                out_svg = os.path.join(tmp_dir, f"{diagram_type}.svg")
+                run_export("\n".join([header] + body), out_svg)
+
+                @after_this_request
+                def cleanup(response):
+                    try:
+                        shutil.rmtree(tmp_dir, ignore_errors=True)
+                    except:
+                        pass
+                    return response
+
+                return send_file(
+                    out_svg,
+                    as_attachment=True,
+                    download_name=f"{diagram_type}.svg",
+                    mimetype="image/svg+xml"
+                )
+
+            if len(body) <= MAX_BODY_LINES_SINGLE:
+                out_svg = os.path.join(tmp_dir, f"{diagram_type}.svg")
+                run_export("\n".join([header] + body), out_svg)
+
+                @after_this_request
+                def cleanup(response):
+                    try:
+                        shutil.rmtree(tmp_dir, ignore_errors=True)
+                    except:
+                        pass
+                    return response
+
+                return send_file(
+                    out_svg,
+                    as_attachment=True,
+                    download_name=f"{diagram_type}.svg",
+                    mimetype="image/svg+xml"
+                )
+
+            # Multi-part export -> ZIP (for flowcharts only)
+            svg_paths = []
+            part = 1
+            for i in range(0, len(body), CHUNK_BODY_LINES):
+                chunk = body[i:i + CHUNK_BODY_LINES]
+                out_svg = os.path.join(tmp_dir, f"{diagram_type}_part{part}.svg")
+                run_export("\n".join([header] + chunk), out_svg)
+                svg_paths.append(out_svg)
+                part += 1
+
+            zip_path = os.path.join(tmp_dir, f"{diagram_type}_svgs.zip")
+            with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as z:
+                for p in svg_paths:
+                    z.write(p, arcname=os.path.basename(p))
+
+            @after_this_request
+            def cleanup(response):
+                try:
+                    shutil.rmtree(tmp_dir, ignore_errors=True)
+                except:
+                    pass
+                return response
+
+            return send_file(
+                zip_path,
+                as_attachment=True,
+                download_name=f"{diagram_type}_svgs.zip",
+                mimetype="application/zip"
+            )
+
+        except subprocess.TimeoutExpired:
+            if tmp_dir:
+                shutil.rmtree(tmp_dir, ignore_errors=True)
+            return jsonify({"error": "SVG export timed out"}), 500
+
+        except Exception as e:
+            if tmp_dir:
+                shutil.rmtree(tmp_dir, ignore_errors=True)
+            return jsonify({"error": str(e)}), 500
 
     print(f"[DiagramRoutes] Registered diagram routes with BASE_DIR: {BASE_DIR}")

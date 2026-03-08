@@ -20,7 +20,6 @@ export function HomePage({ onDocumentationReady }: HomePageProps) {
   const MODELS = [
     "gemma3:latest",
     "llama3.2:latest",
-    "llama3.3:latest",
     "qwen3:latest",
     "qwen3-coder:latest",
     "mistral:latest",

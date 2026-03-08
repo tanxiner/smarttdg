@@ -132,12 +132,15 @@ def is_markup_item(item: dict) -> bool:
     fname = (item.get("file") or item.get("fileName") or "").lower()
     if item.get("isAspx") is True:
         return True
-    return fname.endswith(".aspx") or fname.endswith(".ascx") or fname.endswith(".master")
+    # treat Razor views and Blazor components as markup too
+    return fname.endswith(".aspx") or fname.endswith(".ascx") or fname.endswith(".master") or fname.endswith(".cshtml") or fname.endswith(".razor")
 
 def is_codebehind_item(item: dict) -> bool:
     fname = (item.get("file") or item.get("fileName") or "").lower()
+    # include Razor page-model / Blazor partial class codebehind (.razor.cs)
     return fname.endswith(".aspx.vb") or fname.endswith(".ascx.vb") or fname.endswith(".master.vb") \
-        or fname.endswith(".aspx.cs") or fname.endswith(".ascx.cs") or fname.endswith(".master.cs")
+        or fname.endswith(".aspx.cs") or fname.endswith(".ascx.cs") or fname.endswith(".master.cs") \
+        #or fname.endswith(".cshtml.cs") or fname.endswith(".razor.cs")
 
 def find_codebehind_for_markup(markup_item: dict, all_items: list) -> dict | None:
     """Find a matching code-behind item for the given markup item (best-effort)."""

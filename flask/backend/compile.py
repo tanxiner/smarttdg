@@ -6,12 +6,15 @@ DOCS_FOLDER = 'Final_Documentation_Chapters'
 UTIL_FOLDER = 'Final_Utility_Chapters'
 SQL_FOLDER = 'Final_SQL_Docs'
 API_FOLDER = 'Final_API_Docs'
-OUTPUT_FILENAME = 'Complete_Documentation.md'
+OUTPUT_FILENAME = 'Technical_Documentation.md'
 
 # Base paths
 SCRIPT_DIR = os.path.abspath(os.path.dirname(__file__))  # flask/backend
 BACKEND_DIR = os.path.abspath(os.path.join(SCRIPT_DIR))  # flask/backend
 FINAL_OUTPUT_DIR = os.path.join(BACKEND_DIR, 'final_output')  # flask/backend/final_output
+
+# Track generated slugs across the whole run so anchors are globally unique
+_USED_SLUGS = set()
 
 
 def get_file_order(filename):
@@ -41,11 +44,36 @@ def clean_title(raw_title):
 def make_slug(section_name, base_name, idx, title):
     """
     Build a stable slug using section, filename base and index (to avoid collisions).
+    Keep result lowercase and limited to letters, numbers and hyphens.
     """
-    title_part = title.lower().replace(' ', '-').replace('.', '').replace('_', '-')
-    slug_base = f"{section_name}-{base_name}-{idx}-{title_part}"
+    title_part = (title or "").lower().replace(' ', '-').replace('.', '').replace('_', '-')
+    sec = re.sub(r'[^a-z0-9-]', '', section_name.lower().replace(' ', '-'))
+    base = re.sub(r'[^a-z0-9-]', '', base_name.lower().replace(' ', '-'))
+    slug_base = f"{sec}-{base}-{idx}-{title_part}"
     slug = re.sub(r'[^a-z0-9-]', '', slug_base)
+    # collapse multiple hyphens
+    slug = re.sub(r'-{2,}', '-', slug).strip('-')
+    if not slug:
+        slug = f"section-{base or 'item'}-{idx}"
     return slug
+
+
+def _ensure_unique_slug(slug: str) -> str:
+    """
+    Ensure the slug is unique across this process run by appending a numeric suffix
+    when a collision is detected. Records used slugs in _USED_SLUGS.
+    """
+    if slug not in _USED_SLUGS:
+        _USED_SLUGS.add(slug)
+        return slug
+    # append incremental suffix
+    i = 2
+    while True:
+        candidate = f"{slug}-{i}"
+        if candidate not in _USED_SLUGS:
+            _USED_SLUGS.add(candidate)
+            return candidate
+        i += 1
 
 
 def normalize_whitespace(text):
@@ -122,7 +150,8 @@ def process_folder(folder_path, section_name, toc_lines, body_content, is_module
         if not header_iter:
             # No H1 headers: treat entire file as one section
             title = base_name
-            slug = make_slug(kind_label, base_name, 1, title)
+            slug_raw = make_slug(kind_label, base_name, 1, title)
+            slug = _ensure_unique_slug(slug_raw)
             toc_lines.append(f"- [{title}](#{slug})")
             body_content.append(f"\n<a id='{slug}'></a>\n")
             body_content.append(normalize_whitespace(content.strip()))
@@ -140,9 +169,9 @@ def process_folder(folder_path, section_name, toc_lines, body_content, is_module
 
         # Emit each section with unique slug and TOC entry
         for idx, (header_text, section_text) in enumerate(sections, start=1):
-            cleaned_title = clean_title(header_text)
-            title = cleaned_title if cleaned_title else base_name
-            slug = make_slug(kind_label, base_name, idx, title)
+            title = base_name
+            slug_raw = make_slug(kind_label, base_name, idx, title)
+            slug = _ensure_unique_slug(slug_raw)
             toc_lines.append(f"- [{title}](#{slug})")
             body_content.append(f"\n<a id='{slug}'></a>\n")
             # If module, normalize header tokens like "Module:" in the output section body
@@ -189,8 +218,43 @@ def find_folder(folder_name):
     return None
 
 
+def _get_zip_basename():
+    """
+    Try to determine the originating zip filename (basename without extension).
+    Priority:
+     1) environment variables commonly used by the pipeline (ANALYZER_ZIP_FILENAME, ZIP_FILENAME, etc.)
+     2) most recent .zip in backend/uploads (best-effort fallback)
+     3) None
+    """
+    candidates = ["ANALYZER_ZIP_FILENAME", "ANALYZER_ZIP", "ZIP_FILENAME", "ZIPFILE", "ZIPNAME"]
+    for k in candidates:
+        v = os.environ.get(k)
+        if v:
+            return os.path.splitext(os.path.basename(v))[0]
+    # fallback: look in uploads folder for most recent .zip
+    try:
+        uploads = os.path.join(BACKEND_DIR, "uploads")
+        if os.path.isdir(uploads):
+            zips = [os.path.join(uploads, f) for f in os.listdir(uploads) if f.lower().endswith(".zip")]
+            if zips:
+                zips.sort(key=lambda p: os.path.getmtime(p), reverse=True)
+                return os.path.splitext(os.path.basename(zips[0]))[0]
+    except Exception:
+        pass
+    return None
+
+
 def main():
-    toc_lines = ["# Technical Documentation", "", "## Table of Contents"]
+    # Reset used slugs for each run
+    _USED_SLUGS.clear()
+
+    zip_base = _get_zip_basename()
+    if zip_base:
+        title_line = f"# {zip_base} - Technical Documentation"
+    else:
+        title_line = "# Technical Documentation"
+
+    toc_lines = [title_line, "", "## Table of Contents"]
     body_content = []
 
     # Attempt to locate the folders used by the analyzer scripts

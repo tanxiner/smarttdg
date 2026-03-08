@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, send_file
 import json
 import os
 from time import sleep
@@ -14,11 +14,16 @@ import platform
 import ctypes
 import subprocess
 import sys
+from docx import Document
+import re
 
 import services.analyzer.analyzer_runner as analyzer_runner
 run_analyzer = analyzer_runner.analyze_code
 
 from services.diagram_routes import register_diagram_routes
+import convert_doc
+markdown_to_word = convert_doc.markdown_to_word
+word_to_pdf = convert_doc.word_to_pdf
 
 BASE_DIR = os.path.dirname(__file__)
 app = Flask(
@@ -68,12 +73,14 @@ def _ensure_not_canceled(job_id: str | None) -> None:
     if _is_job_canceled(job_id):
         raise RuntimeError("canceled")
 
+
 def analyze_zip(zip_path: str, job_id: str | None = None) -> dict:
     _update_job(job_id, progress=5, step="") if job_id else None
 
     # --- Explicitly clear output folders and OLD MANIFESTS at start ---
     prompts_base = os.path.join(BASE_DIR, "prompts_output")
     analysis_base = os.path.join(BASE_DIR, "analysis_output")
+    output_base = os.path.join(BASE_DIR, "final_output")
     
     # 1. Clear prompt/analysis subfolders
     dirs_to_clean = [
@@ -84,7 +91,8 @@ def analyze_zip(zip_path: str, job_id: str | None = None) -> dict:
         os.path.join(analysis_base, "Final_Documentation_Chapters"),
         os.path.join(analysis_base, "Final_Utility_Chapters"),
         os.path.join(analysis_base, "Final_SQL_Docs"),
-        os.path.join(analysis_base, "Final_API_Docs")
+        os.path.join(analysis_base, "Final_API_Docs"),
+        output_base
     ]
 
     for d in dirs_to_clean:
@@ -158,7 +166,7 @@ def analyze_zip(zip_path: str, job_id: str | None = None) -> dict:
             ".cs", ".vb",          # code-behind / source files
             ".aspx", ".ascx", ".master",  # WebForms markup
             ".js", ".jsx",    # JavaScript / TypeScript / JSX / TSX
-            ".html"                  # static HTML
+            ".html", ".cshtml", ".cshtml.cs",".razor"                  # static HTML, Razor views and Blazor components
         }
 
         irrelevant_tokens = {
@@ -238,6 +246,7 @@ def analyze_zip(zip_path: str, job_id: str | None = None) -> dict:
                 "message": "No supported source or markup files found in archive.",
                 "filesDiscovered": 0,
                 "filesAnalyzed": 0,
+                "filesGenerated": 0,
                 "foldersVisited": len(dirs),
                 "results": []
             }
@@ -395,7 +404,11 @@ def analyze_zip(zip_path: str, job_id: str | None = None) -> dict:
                         derr = (proc.stderr or "").strip()
                         _update_job(job_id, diagram_stdout=dout[:2000], diagram_stderr=derr[:2000])
                 except Exception as e:
-                    print(f"[Pipeline] {_name} error: {e}, but continuing")
+                    msg = f"{_name} failed: {str(e)}"
+                    print(f"[PipelineError] {msg}")
+                    if job_id:
+                        _update_job(job_id, progress=100, step="error", error=msg)
+                    raise RuntimeError(msg)
             step_progress = 32
 
             # STEP 2: Run splitters
@@ -427,7 +440,11 @@ def analyze_zip(zip_path: str, job_id: str | None = None) -> dict:
                         err = (proc.stderr or "").strip()
                         _update_job(job_id, **{f"{_name}_stdout": out[:4000], f"{_name}_stderr": err[:4000]})
                 except Exception as e:
-                    print(f"[Pipeline] {_name} error: {e}, but continuing")
+                    msg = f"{_name} failed: {str(e)}"
+                    print(f"[PipelineError] {msg}")
+                    if job_id:
+                        _update_job(job_id, progress=100, step="error", error=msg)
+                    raise RuntimeError(msg)
                 step_progress += 6
             print("[Pipeline] STEP 2 COMPLETE: Splitters finished")
 
@@ -477,7 +494,11 @@ def analyze_zip(zip_path: str, job_id: str | None = None) -> dict:
                         err = (proc.stderr or "").strip()
                         _update_job(job_id, **{f"{_name}_stdout": out[:4000], f"{_name}_stderr": err[:4000]})
                 except Exception as e:
-                    print(f"[Pipeline] {_name} error: {e}, but continuing")
+                    msg = f"{_name} failed: {str(e)}"
+                    print(f"[PipelineError] {msg}")
+                    if job_id:
+                        _update_job(job_id, progress=100, step="error", error=msg)
+                    raise RuntimeError(msg)
                 step_progress += 6
             print("[Pipeline] STEP 3 COMPLETE: Analysis scripts finished")
 
@@ -508,7 +529,11 @@ def analyze_zip(zip_path: str, job_id: str | None = None) -> dict:
                         cerr = (proc.stderr or "").strip()
                         _update_job(job_id, **{f"{_name}_stdout": cout[:4000], f"{_name}_stderr": cerr[:4000]})
                 except Exception as e:
-                    print(f"[Pipeline] {_name} error: {e}, but continuing")
+                    msg = f"{_name} failed: {str(e)}"
+                    print(f"[PipelineError] {msg}")
+                    if job_id:
+                        _update_job(job_id, progress=100, step="error", error=msg)
+                    raise RuntimeError(msg)
 
             print("[Pipeline] ALL STEPS COMPLETE")
 
@@ -533,10 +558,31 @@ def analyze_zip(zip_path: str, job_id: str | None = None) -> dict:
             analysis_folders = ("Final_Documentation_Chapters", "Final_Utility_Chapters", "Final_SQL_Docs", "Final_API_Docs")
             analysis_base = os.path.join(BASE_DIR, "analysis_output")
             
-            # Simple final count
-            def _cnt(fld): 
+            # Count only non-empty .md files; log any empty files we find for debugging
+            def _cnt(fld):
                 p = os.path.join(analysis_base, fld)
-                return len([f for f in os.listdir(p) if f.endswith(".md")]) if os.path.exists(p) else 0
+                try:
+                    if not os.path.isdir(p):
+                        return 0
+                    all_md = [f for f in os.listdir(p) if f.endswith(".md")]
+                    non_empty = []
+                    empty = []
+                    for fname in all_md:
+                        fpath = os.path.join(p, fname)
+                        try:
+                            if os.path.getsize(fpath) > 0:
+                                non_empty.append(fname)
+                            else:
+                                empty.append(fname)
+                        except Exception:
+                            # if getsize fails, treat as empty to be safe
+                            empty.append(fname)
+                    if empty:
+                        print(f"[Debug] {fld} contains {len(empty)} empty .md files: {empty[:20]}")
+                    return len(non_empty)
+                except Exception as e:
+                    print(f"[Debug] error counting .md in {p}: {e}")
+                    return 0
 
             web_count = _cnt("Final_Documentation_Chapters")
             util_count = _cnt("Final_Utility_Chapters")
@@ -566,6 +612,7 @@ def analyze_zip(zip_path: str, job_id: str | None = None) -> dict:
                 )
         except Exception:
             computed_totals = {"webChapters": 0, "sqlChapters": 0, "utilityChapters": 0, "apiChapters": 0}
+            total_chapters = 0
 
         _update_job(job_id, progress=75, step="analyzer_finished", analysis=analysis_result) if job_id else None
 
@@ -585,6 +632,7 @@ def analyze_zip(zip_path: str, job_id: str | None = None) -> dict:
             "message": "Analysis complete",
             "filesDiscovered": len(rel_paths),
             "filesAnalyzed": len(results),
+            "filesGenerated": total_chapters,
             "foldersVisited": len(dirs),
             "foldersWithCsSample": folders_with_cs,
             "discoveredSample": discovered_sample,
@@ -664,7 +712,7 @@ def analyze():
 
         # attach documentation size (if complete documentation was generated)
         try:
-            final_md = os.path.join(BASE_DIR, "final_output", "Complete_Documentation.md")
+            final_md = os.path.join(BASE_DIR, "final_output", "Technical_Documentation.md")
             if os.path.exists(final_md):
                 sz = os.path.getsize(final_md)
                 # expose both raw bytes and MB for convenience
@@ -738,14 +786,99 @@ def analyze():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route("/download/complete_documentation", methods=["GET"])
+# helper to build a safe prefix from the provided zip filename
+def _zip_prefix_from_request() -> str:
+    """
+    Return a sanitized prefix derived from ?zipFilename=... request arg.
+    If no zipFilename provided or it's empty, return empty string.
+    Example: "my-project.zip" -> "my-project_"
+    """
+    try:
+        z = request.args.get("zipFilename") or request.args.get("zipfilename") or ""
+        if not z:
+            return ""
+        # take basename in case a path was provided, then strip extension
+        base = os.path.splitext(os.path.basename(z))[0]
+        # sanitize: allow letters, numbers, dot, dash, underscore; replace others with underscore
+        sanitized = re.sub(r"[^A-Za-z0-9._-]+", "_", base).strip("_")
+        if not sanitized:
+            return ""
+        return sanitized + "_"
+    except Exception:
+        return ""
+
+@app.route("/download/md_documentation", methods=["GET"])
 def download_complete_documentation():
+
     final_dir = os.path.join(BASE_DIR, "final_output")
-    filename = "Complete_Documentation.md"
-    file_full = os.path.join(final_dir, filename)
-    if os.path.exists(file_full):
-        return send_from_directory(final_dir, filename, as_attachment=True, mimetype="text/markdown")
-    return jsonify({"error": "Complete_Documentation.md not found"}), 404
+    filename = "Technical_Documentation.md"
+    md_path = os.path.join(final_dir, filename)
+
+    if not os.path.exists(md_path):
+        return jsonify({
+            "error": "Documentation not generated",
+            "reason": "No documentation chapters were produced.",
+            "suggestion": "The uploaded project may not contain supported files."
+        }), 404
+
+    prefix = _zip_prefix_from_request()
+    download_name = f"{prefix}Technical_Documentation.md" if prefix else filename
+
+    return send_from_directory(
+        final_dir,
+        filename,
+        as_attachment=True,
+        download_name=download_name,
+        mimetype="text/markdown"
+    )
+
+
+@app.route("/download/word_documentation")
+def download_word_documentation():
+
+    final_dir = os.path.join(BASE_DIR, "final_output")
+    docx_path = os.path.join(final_dir, "technical_documentation.docx")
+
+    if not os.path.exists(docx_path):
+        return jsonify({
+            "error": "Documentation not generated",
+            "reason": "No documentation chapters were produced.",
+            "suggestion": "The uploaded project may not contain supported files."
+        }), 404
+
+    prefix = _zip_prefix_from_request()
+    download_name = f"{prefix}Technical_Documentation.docx" if prefix else "Technical_Documentation.docx"
+
+    return send_file(
+        docx_path,
+        as_attachment=True,
+        download_name=download_name,
+        mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    )
+
+
+@app.route("/download/pdf_documentation")
+def download_pdf():
+
+    final_dir = os.path.join(BASE_DIR, "final_output")
+    pdf_path = os.path.join(final_dir, "technical_documentation.pdf")
+
+    if not os.path.exists(pdf_path):
+        return jsonify({
+            "error": "Documentation not generated",
+            "reason": "No documentation chapters were produced.",
+            "suggestion": "The uploaded project may not contain supported files."
+        }), 404
+
+    prefix = _zip_prefix_from_request()
+    download_name = f"{prefix}Technical_Documentation.pdf" if prefix else "Technical_Documentation.pdf"
+
+    return send_file(
+        pdf_path,
+        as_attachment=True,
+        download_name=download_name,
+        mimetype="application/pdf"
+    )
 
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
@@ -805,7 +938,7 @@ def analyze_async():
 
             # ✅ Attach documentation size (DownloadPage reads documentationSizeMB/Bytes)
             try:
-                final_md_async = os.path.join(BASE_DIR, "final_output", "Complete_Documentation.md")
+                final_md_async = os.path.join(BASE_DIR, "final_output", "Technical_Documentation.md")
                 if os.path.exists(final_md_async):
                     sz = os.path.getsize(final_md_async)
                     res["documentationSizeBytes"] = int(sz)

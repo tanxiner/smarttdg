@@ -1,6 +1,6 @@
 # SmartTDG
 
-SmartTDG is a local technical documentation generator for legacy ASP.NET systems. It analyzes an uploaded zip or folder of source code and produces a single compiled `Complete_Documentation.md` containing:
+SmartTDG is a local technical documentation generator for legacy ASP.NET systems. It analyzes an uploaded zip or folder of source code and produces a single compiled `Technical_Documentation.md` containing:
 
 - **Web Pages** – documentation for ASPX pages and their code-behind
 - **Modules/Others** – documentation for utility classes and modules
@@ -21,7 +21,7 @@ The pipeline automatically detects API endpoint candidates across all supported 
 
 For each detected endpoint the analyzer captures (best-effort): kind, controller/service name, operation name, source file, route, HTTP methods, parameters, return type, and detection evidence.
 
-The API Reference section is appended automatically to `flask/backend/final_output/Complete_Documentation.md`. If no endpoints are detected the section is omitted and the pipeline continues without error.
+The API Reference section is appended automatically to `flask/backend/final_output/Technical_Documentation.md`. If no endpoints are detected the section is omitted and the pipeline continues without error.
 
 ## Pipeline Definition
 
