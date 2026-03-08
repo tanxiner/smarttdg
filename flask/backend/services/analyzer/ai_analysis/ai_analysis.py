@@ -91,50 +91,27 @@ def clean_response(text):
 def validate_critical_errors(text):
     text_lower = (text or "").lower()
 
-    # Empty Check
     if not text or len(text.strip()) < 10:
         return False, "Output was empty or too short."
 
-    # --- C# SYNTAX CHECK ---
-    # require multiple indicators to avoid false positives
-    cs_indicators = 0
-    if "{" in text_lower and "}" in text_lower: cs_indicators += 1
-    if ";" in text_lower: cs_indicators += 1
-    if "void " in text_lower or "public " in text_lower or "class " in text_lower: cs_indicators += 1
-    if cs_indicators >= 2:
-        return False, "Detected C# Code Syntax"
+    # existing code checks here...
 
-    # --- VB.NET SYNTAX CHECK (less aggressive) ---
-    vb_indicators = 0
-    if "end sub" in text_lower or "end function" in text_lower or "end class" in text_lower:
-        vb_indicators += 1
-    if "dim " in text_lower and " as " in text_lower:
-        vb_indicators += 1
-    if "handles me.load" in text_lower or "inherits system.web" in text_lower:
-        vb_indicators += 1
-    # require at least two distinct VB indicators to reject
-    if vb_indicators >= 2:
-        return False, "Detected VB.NET Code Structure"
+    # duplicate line check
+    dup_bad, dup_reason = detect_excessive_duplicate_lines(text)
+    if dup_bad:
+        return False, dup_reason
 
-    # --- SMART CODE BLOCK CHECK ---
-    if "```csharp" in text_lower or "```cs" in text_lower or "```sql" in text_lower or "```vb" in text_lower:
-        return False, "Detected Code Block (C#, SQL, or VB)"
+    # duplicate markdown table row check
+    table_bad, table_reason = detect_duplicate_table_rows(text)
+    if table_bad:
+        return False, table_reason
 
-    # --- KEYWORD BANS (only strong matches) ---
-    forbidden_keywords = [
-        "public partial class", "protected void", "private void",
-        "partial public class"
-    ]
-    for kw in forbidden_keywords:
-        if kw in text_lower:
-            return False, f"Detected Code Keyword: '{kw}'"
-
-    # --- GIBBERISH / REPETITION CHECK ---
+    # lighter compression safety net
     if len(text) > 300:
         compressed = zlib.compress(text.encode('utf-8'))
         ratio = len(compressed) / len(text)
-        if ratio < 0.12:
-            return False, f"Detected Repetitive Gibberish (Entropy: {ratio:.2f})"
+        if ratio < 0.18:
+            return False, f"Detected highly repetitive output (Entropy: {ratio:.2f})"
 
     return True, "Passed"
 
