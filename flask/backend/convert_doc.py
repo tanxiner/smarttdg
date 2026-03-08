@@ -466,8 +466,8 @@ def main():
     final_dir = os.path.join(BASE_DIR, "final_output")
 
     md_path = os.path.join(final_dir, "Technical_Documentation.md")
-    docx_path = os.path.join(final_dir, "technical_documentation.docx")
-    pdf_path = os.path.join(final_dir, "technical_documentation.pdf")
+    docx_path = os.path.join(final_dir, "Technical_documentation.docx")
+    pdf_path = os.path.join(final_dir, "Technical_documentation.pdf")
 
     if not os.path.exists(md_path):
         raise FileNotFoundError(f"Markdown file not found: {md_path}")
