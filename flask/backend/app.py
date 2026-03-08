@@ -1,7 +1,6 @@
 from flask import Flask, request, jsonify, send_from_directory, send_file
 import json
 import os
-from time import sleep
 import tempfile
 import zipfile
 import shutil
@@ -14,7 +13,6 @@ import platform
 import ctypes
 import subprocess
 import sys
-from docx import Document
 import re
 
 import services.analyzer.analyzer_runner as analyzer_runner
@@ -36,15 +34,52 @@ UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 JOB_STATUS: Dict[str, Dict[str, Any]] = {}
+JOB_THREADS: Dict[str, threading.Thread] = {}
+JOB_LOCK = threading.Lock()
+
+TERMINAL_STEPS = {"done", "error", "canceled"}
+
+
+def _update_job(job_id: str | None, **kwargs):
+    if not job_id:
+        return
+    with JOB_LOCK:
+        st = JOB_STATUS.setdefault(job_id, {})
+        st.update(kwargs)
+
+
+def _get_job(job_id: str | None) -> Dict[str, Any]:
+    if not job_id:
+        return {}
+    with JOB_LOCK:
+        return dict(JOB_STATUS.get(job_id, {}))
+
+
+def _is_job_canceled(job_id: str | None) -> bool:
+    if not job_id:
+        return False
+    st = _get_job(job_id)
+    return bool(st.get("canceled")) or st.get("step") in ("cancel_requested", "canceled")
+
+
+def _ensure_not_canceled(job_id: str | None) -> None:
+    if _is_job_canceled(job_id):
+        raise RuntimeError("canceled")
+
+
+def _find_active_job_id() -> str | None:
+    with JOB_LOCK:
+        for jid, thread in list(JOB_THREADS.items()):
+            if thread and thread.is_alive():
+                return jid
+    return None
+
+
+def _has_active_job() -> bool:
+    return _find_active_job_id() is not None
 
 
 def _load_pipeline_steps() -> list:
-    """Load the canonical pipeline steps from pipeline.json (single source of truth).
-
-    Returns a list of step dicts, each with at minimum 'name', 'script', and 'phase' keys.
-    Falls back to an empty list and prints a warning if the file is missing or malformed.
-    See flask/backend/pipeline.json for the authoritative definition.
-    """
     pipeline_json = os.path.join(BASE_DIR, "pipeline.json")
     try:
         with open(pipeline_json, "r", encoding="utf-8") as f:
@@ -59,30 +94,66 @@ def _load_pipeline_steps() -> list:
         print(f"[Pipeline] WARNING: Could not load pipeline.json ({pipeline_json}): {e}. No downstream scripts will run.")
         return []
 
-def _update_job(job_id: str, **kwargs):
-    st = JOB_STATUS.setdefault(job_id, {})
-    st.update(kwargs)
 
-def _is_job_canceled(job_id: str | None) -> bool:
-    if not job_id:
-        return False
-    st = JOB_STATUS.get(job_id) or {}
-    return bool(st.get("canceled")) or st.get("step") in ("cancel_requested", "canceled")
+def _run_step_subprocess(
+    *,
+    job_id: str | None,
+    env_base: dict,
+    script_path: str,
+    cwd: str,
+    step_name: str,
+    timeout: int | None = None,
+    stdout_key: str | None = None,
+    stderr_key: str | None = None,
+) -> subprocess.CompletedProcess:
+    _ensure_not_canceled(job_id)
 
-def _ensure_not_canceled(job_id: str | None) -> None:
-    if _is_job_canceled(job_id):
-        raise RuntimeError("canceled")
+    proc = subprocess.run(
+        [sys.executable, script_path],
+        cwd=cwd,
+        env=env_base,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+        encoding='utf-8',
+        errors='replace'
+    )
+
+    _ensure_not_canceled(job_id)
+
+    if job_id:
+        out = (proc.stdout or "").strip()
+        err = (proc.stderr or "").strip()
+        payload = {}
+        if stdout_key:
+            payload[stdout_key] = out[:4000]
+        if stderr_key:
+            payload[stderr_key] = err[:4000]
+        if payload:
+            _update_job(job_id, **payload)
+
+    if proc.returncode != 0:
+        if _is_job_canceled(job_id):
+            raise RuntimeError("canceled")
+        raise RuntimeError(f"{step_name} failed with exit code {proc.returncode}")
+
+    return proc
 
 
-def analyze_zip(zip_path: str, job_id: str | None = None) -> dict:
-    _update_job(job_id, progress=5, step="") if job_id else None
+def analyze_zip(zip_path: str, job_id: str | None = None, model_choice: str | None = None) -> dict:
+    temp_dir = None
+    monitor_thread = None
+    stop_monitor = None
 
-    # --- Explicitly clear output folders and OLD MANIFESTS at start ---
+    _ensure_not_canceled(job_id)
+    _update_job(job_id, progress=5, step="starting") if job_id else None
+
+    _ensure_not_canceled(job_id)
+
     prompts_base = os.path.join(BASE_DIR, "prompts_output")
     analysis_base = os.path.join(BASE_DIR, "analysis_output")
     output_base = os.path.join(BASE_DIR, "final_output")
-    
-    # 1. Clear prompt/analysis subfolders
+
     dirs_to_clean = [
         os.path.join(prompts_base, "Page_Documentation_Prompts"),
         os.path.join(prompts_base, "Utility_Documentation_Prompts"),
@@ -99,11 +170,13 @@ def analyze_zip(zip_path: str, job_id: str | None = None) -> dict:
         if os.path.exists(d):
             try:
                 shutil.rmtree(d)
-                os.makedirs(d, exist_ok=True)
             except Exception:
                 pass
-    
-    # 2. Clear old manifest files in the prompts root
+        try:
+            os.makedirs(d, exist_ok=True)
+        except Exception:
+            pass
+
     if os.path.exists(prompts_base):
         try:
             for f in os.listdir(prompts_base):
@@ -114,14 +187,13 @@ def analyze_zip(zip_path: str, job_id: str | None = None) -> dict:
                         pass
         except Exception:
             pass
-    # ------------------------------------------------
 
-    # create a short temp base on the same drive as the system temp to avoid very long paths
     sys_tmp = Path(tempfile.gettempdir())
     short_base = os.path.join(sys_tmp.drive + os.sep, "sdtg_tmp")
     os.makedirs(short_base, exist_ok=True)
 
     temp_dir = tempfile.mkdtemp(prefix="smarttdg_", dir=short_base)
+
     try:
         _update_job(job_id, progress=5, step="extracting") if job_id else None
 
@@ -130,43 +202,36 @@ def analyze_zip(zip_path: str, job_id: str | None = None) -> dict:
             z.extractall(temp_dir)
             print("Extracted files:", list(Path(temp_dir).rglob("*")))
 
-        # --- Pass SQL input info to downstream analyzer scripts ---
-        # UPDATED: Collect ALL .sql files, not just the first one.
-        # Check specific scripts (sql_splitter.py) to ensure they handle multiple files or catch all.
-        # We will pass a semicolon-delimited string of paths.
+        _ensure_not_canceled(job_id)
+
+        env_base = os.environ.copy()
+        env_base["ANALYZER_TEMP_DIR"] = temp_dir
+        if job_id:
+            env_base["ANALYZER_JOB_ID"] = job_id
+        if model_choice:
+            env_base["ANALYSIS_MODEL"] = model_choice
+
         try:
-            os.environ["ANALYZER_TEMP_DIR"] = temp_dir
-            
-            sql_files = []
-            for p in Path(temp_dir).rglob("*.sql"):
-                sql_files.append(str(p))
-            
+            sql_files = [str(p) for p in Path(temp_dir).rglob("*.sql")]
             if sql_files:
-                # Join with ; or another delimiter. Ensure your sql_splitter can handle this.
-                # If sql_splitter only takes one file, this change implies you need to update sql_splitter 
-                # to split strings or iterate the list on the receiving end.
-                # For safety, let's assume the splitter can be updated or we pick the largest one?
-                # Actually, standard env var "ANALYZER_SQL_FILE" usually implies one file.
-                # Let's combine paths with a delimiter that valid windows paths won't contain: ';'
                 combined_sql_paths = ";".join(sql_files)
-                os.environ["ANALYZER_SQL_FILE"] = combined_sql_paths
-                
-                _update_job(job_id, analyzer_sql_file=combined_sql_paths) if job_id else None
+                env_base["ANALYZER_SQL_FILE"] = combined_sql_paths
+                if job_id:
+                    _update_job(job_id, analyzer_sql_file=combined_sql_paths)
                 print(f"[Debug] ANALYZER_SQL_FILE set to: {combined_sql_paths} ({len(sql_files)} files)")
             else:
-                os.environ.pop("ANALYZER_SQL_FILE", None)
-        except Exception as _:
+                env_base.pop("ANALYZER_SQL_FILE", None)
+        except Exception:
             pass
 
-        # Recursively collect files we want to analyze (code-behind and markup)
         all_paths = list(Path(temp_dir).rglob("*"))
         dirs = [p for p in all_paths if p.is_dir()]
 
         desired_suffixes = {
-            ".cs", ".vb",          # code-behind / source files
-            ".aspx", ".ascx", ".master",  # WebForms markup
-            ".js", ".jsx",    # JavaScript / TypeScript / JSX / TSX
-            ".html", ".cshtml", ".cshtml.cs",".razor"                  # static HTML, Razor views and Blazor components
+            ".cs", ".vb",
+            ".aspx", ".ascx", ".master",
+            ".js", ".jsx",
+            ".html", ".cshtml", ".cshtml.cs", ".razor"
         }
 
         irrelevant_tokens = {
@@ -202,8 +267,10 @@ def analyze_zip(zip_path: str, job_id: str | None = None) -> dict:
                 rel = path
             s = str(rel).replace("\\", "/").lower()
             name = path.name.lower()
+
             if "bootstrap" in name or "bootstrap" in s:
                 return True
+
             vendor_tokens = {
                 "microsoftajax", "jquery", "react", "react-dom", "reactdom", "angular",
                 "vue", "lodash", "underscore", "moment", "backbone", "require", "systemjs", "rxjs",
@@ -212,29 +279,34 @@ def analyze_zip(zip_path: str, job_id: str | None = None) -> dict:
                 "core-js", "babel-polyfill", "vue.runtime", "migrate", "zepto"
             }
             vendor_folders = ("/lib/", "/vendor/", "/scripts/vendor/", "/scripts/lib/", "/bower_components/", "/dist/", "/cdn/")
+
             if name.endswith(".min.js") or name.endswith(".min.css") or name.endswith(".map"):
                 return True
+
             simple_names = {
-                "microsoftajax.js", "microsoftajax.debug.js", "microsoftajax.min.js", "microsoft-ajax.js",
-                "sys.js"
+                "microsoftajax.js", "microsoftajax.debug.js", "microsoftajax.min.js",
+                "microsoft-ajax.js", "sys.js"
             }
             if name in simple_names:
                 return True
+
             for tok in vendor_tokens:
                 if tok in name:
                     return True
+
             for vf in vendor_folders:
                 if vf in s:
                     return True
+
             return False
 
         files_to_analyze = [
             p for p in all_paths
             if p.is_file()
-               and p.suffix.lower() in desired_suffixes
-               and not _is_in_irrelevant_dir(p)
-               and not _is_designer_file(p)
-               and not _is_thirdparty_js(p)
+            and p.suffix.lower() in desired_suffixes
+            and not _is_in_irrelevant_dir(p)
+            and not _is_designer_file(p)
+            and not _is_thirdparty_js(p)
         ]
         files_to_analyze.sort(key=lambda p: str(p.relative_to(temp_dir)).lower())
 
@@ -271,21 +343,23 @@ def analyze_zip(zip_path: str, job_id: str | None = None) -> dict:
 
         _update_job(job_id, progress=15, step="running_analyzer", files=len(rel_paths)) if job_id else None
 
-        # --- Monitor Process (Updated to NOT guess Expected until explicitly told) ---
-        monitor_thread = None
-        stop_monitor = None
         if job_id:
             stop_monitor = threading.Event()
+
             def _monitor():
-                analysis_base = os.path.join(BASE_DIR, "analysis_output")
-                analysis_folders = ("Final_Documentation_Chapters", "Final_Utility_Chapters", "Final_SQL_Docs", "Final_API_Docs")
+                local_analysis_base = os.path.join(BASE_DIR, "analysis_output")
+                analysis_folders = (
+                    "Final_Documentation_Chapters",
+                    "Final_Utility_Chapters",
+                    "Final_SQL_Docs",
+                    "Final_API_Docs"
+                )
 
                 while not stop_monitor.is_set():
                     try:
                         if _is_job_canceled(job_id):
                             return
 
-                        # Only count generated chapters here (MD files)
                         def _count_md_any(folder_root, af):
                             try:
                                 a = os.path.join(folder_root, af)
@@ -295,26 +369,20 @@ def analyze_zip(zip_path: str, job_id: str | None = None) -> dict:
                                 pass
                             return 0
 
-                        observed_generated = sum(_count_md_any(analysis_base, af) for af in analysis_folders)
-
-                        # We do NOT set expected_chapters here anymore. 
-                        # We only update chapters_generated.
-                        # The main thread will set expected_chapters once splitters finish.
-                        
+                        observed_generated = sum(_count_md_any(local_analysis_base, af) for af in analysis_folders)
                         _update_job(job_id, chapters_generated=observed_generated)
 
-                        # Update progress % based on the main thread's authoritative expected count
-                        current_status = JOB_STATUS.get(job_id, {})
+                        current_status = _get_job(job_id)
                         auth_expected = current_status.get("expected_chapters", 0)
-                        
+
                         if auth_expected > 0:
                             prog = int((observed_generated / auth_expected) * 100)
-                            # Cap at 99 until truly done
-                            prog = min(99, max(55, prog)) 
+                            prog = min(99, max(55, prog))
                             _update_job(job_id, progress=prog)
-                            
+
                     except Exception:
                         pass
+
                     stop_monitor.wait(1.0)
 
             monitor_thread = threading.Thread(target=_monitor, daemon=True)
@@ -322,33 +390,29 @@ def analyze_zip(zip_path: str, job_id: str | None = None) -> dict:
 
         analysis_result = None
         cwd_before = os.getcwd()
+
         try:
             os.chdir(temp_dir)
 
-            env_base = os.environ.copy()
-            env_base["ANALYZER_TEMP_DIR"] = temp_dir
-            if job_id:
-                env_base["ANALYZER_JOB_ID"] = job_id
+            _ensure_not_canceled(job_id)
 
-            # STEP 1: Static Analysis
             _update_job(job_id, progress=20, step="running_static_analyzer") if job_id else None
             print("[Pipeline] STEP 1: Running static analyzer (Roslyn)")
-            try:
-                # Define callback to increment progress during static analysis (range 42% -> 50%)
-                def _on_static_progress(current, total):
-                    if job_id and total > 0:
-                        # Ensure we don't exceed 100% relative to total
-                        safe_current = min(current, total)
-                        
-                        # Map current/total (0.0 to 1.0) to range 42 to 50
-                        # 42 is start, 8 is the width (50 - 42)
-                        ratio = safe_current / total
-                        prog = 20 + int(ratio * 8)
-                        
-                        # Only update if meaningful change
-                        _update_job(job_id, progress=prog, step=f"analyzing_file_{safe_current}_of_{total}")
 
-                analysis_result = run_analyzer(*unique_rel_paths, job_id=job_id, progress_callback=_on_static_progress)
+            def _on_static_progress(current, total):
+                if job_id and total > 0:
+                    safe_current = min(current, total)
+                    ratio = safe_current / total
+                    prog = 20 + int(ratio * 8)
+                    _update_job(job_id, progress=prog, step=f"analyzing_file_{safe_current}_of_{total}")
+
+            try:
+                analysis_result = run_analyzer(
+                    *unique_rel_paths,
+                    job_id=job_id,
+                    progress_callback=_on_static_progress
+                )
+                _ensure_not_canceled(job_id)
                 print("[Pipeline] STEP 1 COMPLETE: Static analysis finished")
             except Exception as e:
                 msg = f"Static analyzer failed: {str(e)}"
@@ -365,175 +429,139 @@ def analyze_zip(zip_path: str, job_id: str | None = None) -> dict:
                 if runner_stderr and job_id:
                     _update_job(job_id, analyzer_stderr=runner_stderr[:8000])
 
-            # STEPS 1.5-4: Run downstream scripts defined in the canonical pipeline.
-            # The ordered step list is loaded from pipeline.json (single source of truth).
-            # Both this web entrypoint and the Roslyn CLI entrypoint (Program.cs) read that file.
             pipeline_steps = _load_pipeline_steps()
             step_progress = 30
 
-            # Group steps by phase so we can preserve phase-level progress tracking and
-            # the post-splitter expected_chapters calculation.
-            _diagram_steps  = [s for s in pipeline_steps if s.get("phase") == "diagram"]
+            _diagram_steps = [s for s in pipeline_steps if s.get("phase") == "diagram"]
             _splitter_steps = [s for s in pipeline_steps if s.get("phase") == "splitter"]
             _analysis_steps = [s for s in pipeline_steps if s.get("phase") == "analysis"]
-            _compile_steps  = [s for s in pipeline_steps if s.get("phase") == "compile"]
+            _compile_steps = [s for s in pipeline_steps if s.get("phase") == "compile"]
 
-            # STEP 1.5: Diagrams
             print("[Pipeline] STEP 1.5: Generating diagrams from static analysis")
             if job_id:
                 _update_job(job_id, progress=step_progress, step="generating...")
+
             for _step in _diagram_steps:
-                _name   = _step["name"]
+                _ensure_not_canceled(job_id)
+                _name = _step["name"]
                 _script = os.path.join(BASE_DIR, _step["script"].replace("/", os.sep))
                 _timeout = _step.get("timeout_seconds") or None
                 if not os.path.isfile(_script):
                     print(f"[Pipeline] Script not found, skipping: {_script}")
                     continue
-                try:
-                    proc = subprocess.run(
-                        [sys.executable, _script],
-                        cwd=temp_dir,
-                        env=env_base,
-                        capture_output=True,
-                        text=True,
-                        timeout=_timeout,
-                        encoding='utf-8', errors='replace'
-                    )
-                    if job_id:
-                        dout = (proc.stdout or "").strip()
-                        derr = (proc.stderr or "").strip()
-                        _update_job(job_id, diagram_stdout=dout[:2000], diagram_stderr=derr[:2000])
-                except Exception as e:
-                    msg = f"{_name} failed: {str(e)}"
-                    print(f"[PipelineError] {msg}")
-                    if job_id:
-                        _update_job(job_id, progress=100, step="error", error=msg)
-                    raise RuntimeError(msg)
+
+                print(f"[Pipeline] Running {_name}")
+                _run_step_subprocess(
+                    job_id=job_id,
+                    env_base=env_base,
+                    script_path=_script,
+                    cwd=temp_dir,
+                    step_name=_name,
+                    timeout=_timeout,
+                    stdout_key="diagram_stdout",
+                    stderr_key="diagram_stderr",
+                )
+
             step_progress = 32
 
-            # STEP 2: Run splitters
-            # Progress increments by 6 per step (a small fixed slice of the 50-100 range
-            # shared across splitters and analyses). This value predates pipeline.json and
-            # is kept for UI compatibility; adjust if the overall progress budget changes.
             print("[Pipeline] STEP 2: Running splitters")
             for _step in _splitter_steps:
-                _name   = _step["name"]
+                _ensure_not_canceled(job_id)
+                _name = _step["name"]
                 _script = os.path.join(BASE_DIR, _step["script"].replace("/", os.sep))
                 if not os.path.isfile(_script):
                     print(f"[Pipeline] Script not found, skipping: {_script}")
                     step_progress += 6
                     continue
-                try:
-                    if job_id:
-                        _update_job(job_id, progress=step_progress, step=f"running_{_name}")
-                    print(f"[Pipeline] Running {_name}")
-                    proc = subprocess.run(
-                        [sys.executable, _script],
-                        cwd=temp_dir,
-                        env=env_base,
-                        capture_output=True,
-                        text=True,
-                        encoding='utf-8', errors='replace'
-                    )
-                    if job_id:
-                        out = (proc.stdout or "").strip()
-                        err = (proc.stderr or "").strip()
-                        _update_job(job_id, **{f"{_name}_stdout": out[:4000], f"{_name}_stderr": err[:4000]})
-                except Exception as e:
-                    msg = f"{_name} failed: {str(e)}"
-                    print(f"[PipelineError] {msg}")
-                    if job_id:
-                        _update_job(job_id, progress=100, step="error", error=msg)
-                    raise RuntimeError(msg)
+
+                if job_id:
+                    _update_job(job_id, progress=step_progress, step=f"running_{_name}")
+                print(f"[Pipeline] Running {_name}")
+
+                _run_step_subprocess(
+                    job_id=job_id,
+                    env_base=env_base,
+                    script_path=_script,
+                    cwd=temp_dir,
+                    step_name=_name,
+                    stdout_key=f"{_name}_stdout",
+                    stderr_key=f"{_name}_stderr",
+                )
                 step_progress += 6
+
             print("[Pipeline] STEP 2 COMPLETE: Splitters finished")
 
-            # --- CALCULATE EXPECTED CHAPTERS HERE (POST-SPLITTER) ---
-            # We now know exactly how many prompt files exist.
             if job_id:
                 try:
                     _pb = os.path.join(BASE_DIR, "prompts_output")
-                    _pf = ("Page_Documentation_Prompts", "Utility_Documentation_Prompts", "SQL_Documentation_Prompts", "API_Documentation_Prompts")
+                    _pf = (
+                        "Page_Documentation_Prompts",
+                        "Utility_Documentation_Prompts",
+                        "SQL_Documentation_Prompts",
+                        "API_Documentation_Prompts"
+                    )
                     total_prompts = 0
                     for fldr in _pf:
                         fp = os.path.join(_pb, fldr)
                         if os.path.exists(fp):
-                            # Count strictly valid prompt text files
                             total_prompts += len([n for n in os.listdir(fp) if n.lower().endswith('.txt')])
 
                     print(f"[Pipeline] Splitters done. Authoritative Expected Chapters = {total_prompts}")
-                    # Update status so frontend and monitor see the final count
                     _update_job(job_id, expected_chapters=total_prompts)
                 except Exception as e:
                     print(f"[Pipeline] Error counting prompts: {e}")
-            # --------------------------------------------------------
 
-            # STEP 3: Run analysis scripts
             print("[Pipeline] STEP 3: Running analysis scripts")
             for _step in _analysis_steps:
-                _name   = _step["name"]
+                _ensure_not_canceled(job_id)
+                _name = _step["name"]
                 _script = os.path.join(BASE_DIR, _step["script"].replace("/", os.sep))
                 if not os.path.isfile(_script):
                     print(f"[Pipeline] Script not found, skipping: {_script}")
                     step_progress += 6
                     continue
-                try:
-                    if job_id:
-                        _update_job(job_id, progress=step_progress, step=f"running_{_name}")
-                    print(f"[Pipeline] Running {_name}")
-                    proc = subprocess.run(
-                        [sys.executable, _script],
-                        cwd=temp_dir,
-                        env=env_base,
-                        capture_output=True,
-                        text=True,
-                        encoding='utf-8', errors='replace'
-                    )
-                    if job_id:
-                        out = (proc.stdout or "").strip()
-                        err = (proc.stderr or "").strip()
-                        _update_job(job_id, **{f"{_name}_stdout": out[:4000], f"{_name}_stderr": err[:4000]})
-                except Exception as e:
-                    msg = f"{_name} failed: {str(e)}"
-                    print(f"[PipelineError] {msg}")
-                    if job_id:
-                        _update_job(job_id, progress=100, step="error", error=msg)
-                    raise RuntimeError(msg)
+
+                if job_id:
+                    _update_job(job_id, progress=step_progress, step=f"running_{_name}")
+                print(f"[Pipeline] Running {_name}")
+
+                _run_step_subprocess(
+                    job_id=job_id,
+                    env_base=env_base,
+                    script_path=_script,
+                    cwd=temp_dir,
+                    step_name=_name,
+                    stdout_key=f"{_name}_stdout",
+                    stderr_key=f"{_name}_stderr",
+                )
                 step_progress += 6
+
             print("[Pipeline] STEP 3 COMPLETE: Analysis scripts finished")
 
-            # STEP 4: Run compiler
             print("[Pipeline] STEP 4: Running compiler")
             for _step in _compile_steps:
-                _name    = _step["name"]
-                _script  = os.path.join(BASE_DIR, _step["script"].replace("/", os.sep))
+                _ensure_not_canceled(job_id)
+                _name = _step["name"]
+                _script = os.path.join(BASE_DIR, _step["script"].replace("/", os.sep))
                 _timeout = _step.get("timeout_seconds") or None
                 if not os.path.isfile(_script):
                     print(f"[Pipeline] Script not found, skipping: {_script}")
                     continue
-                try:
-                    if job_id:
-                        _update_job(job_id, progress=step_progress, step=f"running_{_name}")
-                    print(f"[Pipeline] Running {_name}")
-                    proc = subprocess.run(
-                        [sys.executable, _script],
-                        cwd=BASE_DIR,
-                        env=env_base,
-                        capture_output=True,
-                        text=True,
-                        timeout=_timeout,
-                        encoding='utf-8', errors='replace'
-                    )
-                    if job_id:
-                        cout = (proc.stdout or "").strip()
-                        cerr = (proc.stderr or "").strip()
-                        _update_job(job_id, **{f"{_name}_stdout": cout[:4000], f"{_name}_stderr": cerr[:4000]})
-                except Exception as e:
-                    msg = f"{_name} failed: {str(e)}"
-                    print(f"[PipelineError] {msg}")
-                    if job_id:
-                        _update_job(job_id, progress=100, step="error", error=msg)
-                    raise RuntimeError(msg)
+
+                if job_id:
+                    _update_job(job_id, progress=step_progress, step=f"running_{_name}")
+                print(f"[Pipeline] Running {_name}")
+
+                _run_step_subprocess(
+                    job_id=job_id,
+                    env_base=env_base,
+                    script_path=_script,
+                    cwd=BASE_DIR,
+                    step_name=_name,
+                    timeout=_timeout,
+                    stdout_key=f"{_name}_stdout",
+                    stderr_key=f"{_name}_stderr",
+                )
 
             print("[Pipeline] ALL STEPS COMPLETE")
 
@@ -542,23 +570,28 @@ def analyze_zip(zip_path: str, job_id: str | None = None) -> dict:
                 os.chdir(cwd_before)
             except Exception:
                 pass
+
             if stop_monitor:
                 try:
                     stop_monitor.set()
                 except Exception:
                     pass
+
             if monitor_thread:
                 try:
                     monitor_thread.join(timeout=2.0)
                 except Exception:
                     pass
 
-        # --- Count final documentation chapters and totals ---
         try:
-            analysis_folders = ("Final_Documentation_Chapters", "Final_Utility_Chapters", "Final_SQL_Docs", "Final_API_Docs")
+            analysis_folders = (
+                "Final_Documentation_Chapters",
+                "Final_Utility_Chapters",
+                "Final_SQL_Docs",
+                "Final_API_Docs"
+            )
             analysis_base = os.path.join(BASE_DIR, "analysis_output")
-            
-            # Count only non-empty .md files; log any empty files we find for debugging
+
             def _cnt(fld):
                 p = os.path.join(analysis_base, fld)
                 try:
@@ -575,7 +608,6 @@ def analyze_zip(zip_path: str, job_id: str | None = None) -> dict:
                             else:
                                 empty.append(fname)
                         except Exception:
-                            # if getsize fails, treat as empty to be safe
                             empty.append(fname)
                     if empty:
                         print(f"[Debug] {fld} contains {len(empty)} empty .md files: {empty[:20]}")
@@ -588,19 +620,23 @@ def analyze_zip(zip_path: str, job_id: str | None = None) -> dict:
             util_count = _cnt("Final_Utility_Chapters")
             sql_count = _cnt("Final_SQL_Docs")
             api_count = _cnt("Final_API_Docs")
-            
+
             totals_payload = {"classes": web_count, "methods": sql_count, "others": util_count, "api": api_count}
             if isinstance(analysis_result, dict):
                 analysis_result.setdefault("totals", {}).update(totals_payload)
             elif isinstance(analysis_result, list):
                 analysis_result = {"analysis_list": analysis_result, "totals": totals_payload}
 
-            computed_totals = {"webChapters": web_count, "sqlChapters": sql_count, "utilityChapters": util_count, "apiChapters": api_count}
+            computed_totals = {
+                "webChapters": web_count,
+                "sqlChapters": sql_count,
+                "utilityChapters": util_count,
+                "apiChapters": api_count
+            }
             total_chapters = web_count + util_count + sql_count + api_count
 
             if job_id:
-                # Force final sync
-                expected_now = JOB_STATUS.get(job_id, {}).get("expected_chapters", total_chapters)
+                expected_now = _get_job(job_id).get("expected_chapters", total_chapters)
                 _update_job(
                     job_id,
                     webChapters=web_count,
@@ -611,7 +647,12 @@ def analyze_zip(zip_path: str, job_id: str | None = None) -> dict:
                     chapters_generated=total_chapters
                 )
         except Exception:
-            computed_totals = {"webChapters": 0, "sqlChapters": 0, "utilityChapters": 0, "apiChapters": 0}
+            computed_totals = {
+                "webChapters": 0,
+                "sqlChapters": 0,
+                "utilityChapters": 0,
+                "apiChapters": 0
+            }
             total_chapters = 0
 
         _update_job(job_id, progress=75, step="analyzer_finished", analysis=analysis_result) if job_id else None
@@ -641,39 +682,40 @@ def analyze_zip(zip_path: str, job_id: str | None = None) -> dict:
             "computedTotals": computed_totals
         }
 
-        # ✅ Make completion unambiguous for the frontend poller:
         if job_id:
             _update_job(job_id, progress=100, step="done", result=final)
 
         return final
+
     except Exception as ex:
-        # Treat explicit cancellation as canceled, not error
         if _is_job_canceled(job_id) or str(ex).lower() == "canceled":
             if job_id:
-                _update_job(job_id, progress=100, step="canceled")
+                _update_job(
+                    job_id,
+                    progress=100,
+                    step="canceled",
+                    result={"status": "canceled", "message": "Analysis canceled"}
+                )
             return {"status": "canceled", "message": "Analysis canceled", "results": []}
 
         _update_job(job_id, progress=100, step="error", error=str(ex)) if job_id else None
         return {"status": "error", "message": f"Analysis failed: {str(ex)}", "results": []}
+
     finally:
         try:
             os.remove(zip_path)
         except OSError:
             pass
-        shutil.rmtree(temp_dir, ignore_errors=True)
 
-        # IMPORTANT: don't mark done if canceled/error already
+        if temp_dir:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
         if job_id:
-            st = (JOB_STATUS.get(job_id) or {})
+            st = _get_job(job_id)
             final_step = st.get("step", "")
-
-            # Only auto-mark done if we actually have a result payload
             if final_step not in ("canceled", "cancel_requested", "error", "done"):
-                if "result" in st and st["result"] is not None:
+                if st.get("result") is not None:
                     _update_job(job_id, progress=100, step="done")
-                else:
-                    # keep the current step; don't lie to the frontend
-                    pass
 
 
 @app.route("/analyze", methods=["POST"])
@@ -689,9 +731,6 @@ def analyze():
     file.save(filepath)
 
     model_choice = request.form.get("model") or request.args.get("model")
-    if model_choice:
-        os.environ["ANALYSIS_MODEL"] = model_choice
-        print(f"[Debug] ANALYSIS_MODEL set to: {model_choice}")
 
     try:
         size_mb = round(os.path.getsize(filepath) / 1024 / 1024, 2)
@@ -700,49 +739,39 @@ def analyze():
 
     start = time.perf_counter()
     try:
-        result = analyze_zip(filepath)
-        # Propagate model choice into the response so frontend can display it.
+        result = analyze_zip(filepath, model_choice=model_choice)
+
+        if result is None:
+            result = {"status": "error", "message": "No result returned from analyzer."}
+        elif not isinstance(result, dict):
+            result = {"status": "ok", "data": result}
+
         if model_choice:
-            # top-level key for simple access
             result["analysisModel"] = model_choice
-            # legacy/backward-compatible keys the frontend might look for
             result["model"] = result.get("model", model_choice)
             analysis_dict = result.setdefault("analysis", {})
             analysis_dict.setdefault("model", model_choice)
 
-        # attach documentation size (if complete documentation was generated)
         try:
             final_md = os.path.join(BASE_DIR, "final_output", "Technical_Documentation.md")
             if os.path.exists(final_md):
                 sz = os.path.getsize(final_md)
-                # expose both raw bytes and MB for convenience
                 result["documentationSizeBytes"] = int(sz)
                 result["documentationSizeMB"] = round(sz / 1024 / 1024, 2)
-                # also put the values inside `analysis` so the frontend finds them
-                try:
-                    analysis_dict = result.setdefault("analysis", {})
-                    analysis_dict.setdefault("documentationSizeBytes", int(sz))
-                    analysis_dict.setdefault("documentationSizeMB", round(sz / 1024 / 1024, 2))
-                except Exception:
-                    pass
+
+                analysis_dict = result.setdefault("analysis", {})
+                analysis_dict.setdefault("documentationSizeBytes", int(sz))
+                analysis_dict.setdefault("documentationSizeMB", round(sz / 1024 / 1024, 2))
         except Exception:
             pass
 
-        # --- SHIM: make analyzer output available under predictable keys for frontend ---
-        # Many frontend components expect the analyzer JSON at `analysis` or `results`.
-        # If analyze_zip returned `analysisOutput`, expose it under both `analysis` and `results`.
-        if result is not None and "analysisOutput" in result and result["analysisOutput"] is not None:
+        if result.get("analysisOutput") is not None:
             result["analysis"] = result.get("analysisOutput")
-            # If analyzer produced a list of per-file objects, also expose as `results`
             if isinstance(result["analysisOutput"], list):
                 result["results"] = result["analysisOutput"]
 
-        # also expose the computed totals at top-level for easy consumption
-        if result is not None and "computedTotals" in result:
-            # backward-compatible mapping for existing frontend expectations:
-            # attach as analysis.totals.classes/methods/others and also top-level clearer keys
+        if "computedTotals" in result:
             ct = result["computedTotals"]
-            # ensure analysis dict exists
             analysis_dict = result.setdefault("analysis", {})
             totals = analysis_dict.setdefault("totals", {})
             totals.setdefault("classes", ct.get("webChapters", 0))
@@ -750,56 +779,34 @@ def analyze():
             totals.setdefault("others", ct.get("utilityChapters", 0))
             totals.setdefault("api", ct.get("apiChapters", 0))
 
-            # expose clearer keys too
-            result.setdefault("totals", {}).update(ct)
-
-            # --- Ensure legacy frontend shape: put totals inside analysis.results[] so accumulateTotals finds it ---
-            try:
-                totals_payload = {
-                    "classes": ct.get("webChapters", 0),
-                    "methods": ct.get("sqlChapters", 0),
-                    "others": ct.get("utilityChapters", 0),
-                    "api": ct.get("apiChapters", 0)
-                }
-
-                totals_entry = {"result": {"totals": totals_payload}}
-                existing_results = analysis_dict.get("results")
-                if not isinstance(existing_results, list) or len(existing_results) == 0:
-                    analysis_dict["results"] = [totals_entry]
-                else:
-                    first = existing_results[0]
-                    if isinstance(first, dict):
-                        first.setdefault("result", {}).setdefault("totals", totals_payload)
-                    else:
-                        analysis_dict["results"][0] = totals_entry
-            except Exception:
-                # non-fatal  we still have analysis_result["totals"] and computedTotals for other consumers
-                pass
+            result.setdefault("totals", {})
+            result["totals"].setdefault("webChapters", ct.get("webChapters", 0))
+            result["totals"].setdefault("sqlChapters", ct.get("sqlChapters", 0))
+            result["totals"].setdefault("utilityChapters", ct.get("utilityChapters", 0))
+            result["totals"].setdefault("apiChapters", ct.get("apiChapters", 0))
 
         duration_ms = int((time.perf_counter() - start) * 1000)
-        result.update({
-            "zipFilename": file.filename,
-            "sizeMB": size_mb,
-            "processingMs": duration_ms
-        })
-        return jsonify(result)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        result["zipFilename"] = os.path.basename(filepath)
+        result["sizeMB"] = size_mb
+        result["processingMs"] = duration_ms
 
-# helper to build a safe prefix from the provided zip filename
+        return jsonify(result)
+
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "message": str(e),
+            "zipFilename": os.path.basename(filepath),
+            "sizeMB": size_mb
+        }), 500
+
+
 def _zip_prefix_from_request() -> str:
-    """
-    Return a sanitized prefix derived from ?zipFilename=... request arg.
-    If no zipFilename provided or it's empty, return empty string.
-    Example: "my-project.zip" -> "my-project_"
-    """
     try:
         z = request.args.get("zipFilename") or request.args.get("zipfilename") or ""
         if not z:
             return ""
-        # take basename in case a path was provided, then strip extension
         base = os.path.splitext(os.path.basename(z))[0]
-        # sanitize: allow letters, numbers, dot, dash, underscore; replace others with underscore
         sanitized = re.sub(r"[^A-Za-z0-9._-]+", "_", base).strip("_")
         if not sanitized:
             return ""
@@ -807,9 +814,9 @@ def _zip_prefix_from_request() -> str:
     except Exception:
         return ""
 
+
 @app.route("/download/md_documentation", methods=["GET"])
 def download_complete_documentation():
-
     final_dir = os.path.join(BASE_DIR, "final_output")
     filename = "Technical_Documentation.md"
     md_path = os.path.join(final_dir, filename)
@@ -835,7 +842,6 @@ def download_complete_documentation():
 
 @app.route("/download/word_documentation")
 def download_word_documentation():
-
     final_dir = os.path.join(BASE_DIR, "final_output")
     docx_path = os.path.join(final_dir, "technical_documentation.docx")
 
@@ -859,7 +865,6 @@ def download_word_documentation():
 
 @app.route("/download/pdf_documentation")
 def download_pdf():
-
     final_dir = os.path.join(BASE_DIR, "final_output")
     pdf_path = os.path.join(final_dir, "technical_documentation.pdf")
 
@@ -880,6 +885,7 @@ def download_pdf():
         mimetype="application/pdf"
     )
 
+
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
 def serve_spa(path):
@@ -887,6 +893,7 @@ def serve_spa(path):
     if path and os.path.exists(file_path):
         return send_from_directory(app.static_folder, path)
     return send_from_directory(app.static_folder, 'index.html')
+
 
 @app.route("/analyze_async", methods=["POST"])
 def analyze_async():
@@ -897,23 +904,35 @@ def analyze_async():
     if not file.filename.lower().endswith(".zip"):
         return jsonify({"error": "Only .zip files are supported"}), 400
 
+    active_job_id = _find_active_job_id()
+    if active_job_id:
+        return jsonify({
+            "error": "Another analysis job is still running.",
+            "activeJobId": active_job_id
+        }), 409
+
     filepath = os.path.join(UPLOAD_FOLDER, file.filename)
     file.save(filepath)
 
     model_choice = request.form.get("model") or request.args.get("model")
-    if model_choice:
-        os.environ["ANALYSIS_MODEL"] = model_choice
-        print(f"[Debug] ANALYSIS_MODEL set to: {model_choice}")
 
     job_id = str(uuid.uuid4())
-    JOB_STATUS[job_id] = {"progress": 0, "step": "queued", "created": time.time(), "expected_chapters": 0, "chapters_generated": 0}
+    _update_job(
+        job_id,
+        progress=0,
+        step="queued",
+        created=time.time(),
+        expected_chapters=0,
+        chapters_generated=0,
+        canceled=False,
+        zipFilename=file.filename,
+        model=model_choice,
+    )
 
     def _run():
         try:
-            os.environ["ANALYZER_JOB_ID"] = job_id
             _update_job(job_id, progress=2, step="saved")
 
-            # Capture filename and size BEFORE analyze_zip removes the uploaded file
             try:
                 size_mb = round(os.path.getsize(filepath) / 1024 / 1024, 2)
             except OSError:
@@ -921,104 +940,122 @@ def analyze_async():
             filename = os.path.basename(filepath)
 
             start = time.perf_counter()
-            res = analyze_zip(filepath, job_id=job_id)
+            res = analyze_zip(filepath, job_id=job_id, model_choice=model_choice)
             duration_ms = int((time.perf_counter() - start) * 1000)
 
-            # Always force a dict result so the frontend poller can navigate
             if res is None:
                 res = {"status": "error", "message": "No result returned from analyzer."}
             elif not isinstance(res, dict):
                 res = {"status": "ok", "data": res}
 
-            # ✅ Propagate model choice into async result (DownloadPage reads analysisModel/model)
             if model_choice:
                 res["analysisModel"] = model_choice
                 res["model"] = res.get("model", model_choice)
                 res.setdefault("analysis", {}).setdefault("model", model_choice)
 
-            # ✅ Attach documentation size (DownloadPage reads documentationSizeMB/Bytes)
             try:
                 final_md_async = os.path.join(BASE_DIR, "final_output", "Technical_Documentation.md")
                 if os.path.exists(final_md_async):
                     sz = os.path.getsize(final_md_async)
                     res["documentationSizeBytes"] = int(sz)
                     res["documentationSizeMB"] = round(sz / 1024 / 1024, 2)
-                    # also nest for compatibility
                     res.setdefault("analysis", {}).setdefault("documentationSizeBytes", int(sz))
                     res.setdefault("analysis", {}).setdefault("documentationSizeMB", round(sz / 1024 / 1024, 2))
             except Exception:
                 pass
 
-            # attach async metadata (DownloadPage reads zipFilename/sizeMB/processingMs)
             res.update({
                 "zipFilename": filename,
                 "sizeMB": size_mb,
                 "processingMs": duration_ms
             })
 
-            _update_job(job_id, progress=100, step="done", result=res)
+            if res.get("status") == "canceled" or _is_job_canceled(job_id):
+                _update_job(job_id, progress=100, step="canceled", result=res)
+            else:
+                _update_job(job_id, progress=100, step="done", result=res)
+
         except Exception as e:
-            _update_job(
-                job_id,
-                progress=100,
-                step="error",
-                error=str(e),
-                result={"status": "error", "message": str(e)}
-            )
+            if _is_job_canceled(job_id) or str(e).lower() == "canceled":
+                _update_job(
+                    job_id,
+                    progress=100,
+                    step="canceled",
+                    result={"status": "canceled", "message": "Analysis canceled"}
+                )
+            else:
+                _update_job(
+                    job_id,
+                    progress=100,
+                    step="error",
+                    error=str(e),
+                    result={"status": "error", "message": str(e)}
+                )
+        finally:
+            with JOB_LOCK:
+                JOB_THREADS.pop(job_id, None)
 
     thread = threading.Thread(target=_run, daemon=True)
+    with JOB_LOCK:
+        JOB_THREADS[job_id] = thread
     thread.start()
 
     return jsonify({"jobId": job_id}), 202
 
+
 @app.route("/status/<job_id>", methods=["GET"])
 def job_status(job_id):
-    st = JOB_STATUS.get(job_id)
+    st = _get_job(job_id)
     if not st:
         return jsonify({"error": "job not found"}), 404
-    # Ensure the response always includes numeric chapter counters
+
     st.setdefault("expected_chapters", 0)
     st.setdefault("chapters_generated", 0)
     st.setdefault("progress", st.get("progress", 0))
     return jsonify(st)
 
+
 @app.route("/cancel/<job_id>", methods=["POST"])
 def cancel_job(job_id):
-    st = JOB_STATUS.get(job_id)
+    st = _get_job(job_id)
     if not st:
         return jsonify({"error": "job not found"}), 404
-    # Mark as cancellation requested so polling clients see it immediately
-    st["step"] = "cancel_requested"
-    st["canceled"] = True
-    st.setdefault("progress", 0)
+
+    _update_job(
+        job_id,
+        step="cancel_requested",
+        canceled=True
+    )
+
     try:
         canceled = analyzer_runner.cancel_analyzer(job_id)
+        _update_job(job_id, step="cancel_requested", canceled=True)
+
         if canceled:
-            st["step"] = "canceled"
-            st["progress"] = 0
             return jsonify({"status": "ok", "message": "cancel requested"}), 200
-        else:
-            # No running process found, but job marked canceled
-            return jsonify({"status": "ok", "message": "cancel requested (no running process found)"}), 200
+        return jsonify({"status": "ok", "message": "cancel requested (no running process found)"}), 200
+
     except Exception as e:
         return jsonify({"error": "cancel failed", "details": str(e)}), 500
 
-# --- Prevent system sleep (Windows only) ---
+
 ES_CONTINUOUS = 0x80000000
 ES_SYSTEM_REQUIRED = 0x00000001
-ES_AWAYMODE_REQUIRED = 0x00000040  # Vista+
+ES_AWAYMODE_REQUIRED = 0x00000040
+
 
 def _prevent_sleep() -> None:
-    """Request the OS keep the system awake (Windows). No-op on other OSes."""
     try:
         if platform.system() == "Windows":
-            ctypes.windll.kernel32.SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_AWAYMODE_REQUIRED)
+            ctypes.windll.kernel32.SetThreadExecutionState(
+                ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_AWAYMODE_REQUIRED
+            )
             print("[KeepAwake] SetThreadExecutionState: preventing sleep")
     except Exception as e:
         print(f"[KeepAwake] unable to prevent sleep: {e}")
 
+
 def _allow_sleep() -> None:
-    """Clear previous keep-awake request (Windows). No-op on other OSes."""
     try:
         if platform.system() == "Windows":
             ctypes.windll.kernel32.SetThreadExecutionState(ES_CONTINUOUS)
@@ -1026,9 +1063,8 @@ def _allow_sleep() -> None:
     except Exception as e:
         print(f"[KeepAwake] unable to restore sleep policy: {e}")
 
-# Add this line before the if __name__ == "__main__": block
+
 register_diagram_routes(app)
 
 if __name__ == "__main__":
-    # enable threaded so status polling works reliably during background jobs
     app.run(debug=True, threaded=True)

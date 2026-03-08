@@ -1467,9 +1467,14 @@ class DiagramGenerator:
 
 def main():
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    backend_dir = os.path.join(script_dir, "..", "..", "..")
+    backend_dir = os.path.abspath(os.path.join(script_dir, "..", "..", ".."))
 
-    analysis_file = os.path.join(backend_dir, "static_analysis_output", "all_analysis_results.json")
+    analyzer_temp_dir = os.environ.get("ANALYZER_TEMP_DIR")
+
+    if analyzer_temp_dir:
+        analysis_file = os.path.join(analyzer_temp_dir, "static_analysis_output", "all_analysis_results.json")
+    else:
+        analysis_file = os.path.join(backend_dir, "static_analysis_output", "all_analysis_results.json")
 
     if not os.path.exists(analysis_file):
         print(f"Static analysis file not found: {analysis_file}")

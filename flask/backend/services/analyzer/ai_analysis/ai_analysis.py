@@ -7,6 +7,7 @@ import subprocess
 import time
 import socket
 from langchain_community.llms import Ollama
+from collections import Counter
 
 # --- CONFIGURATION ---
 # Process both page prompts and utility/module prompts (if present)
@@ -87,26 +88,95 @@ def clean_response(text):
 
     return text.strip()
 
+def detect_excessive_duplicate_lines(text, min_line_len=25, duplicate_threshold=8, dominance_threshold=0.35):
+    lines = [ln.strip() for ln in (text or "").splitlines()]
+    lines = [ln for ln in lines if ln and len(ln) >= min_line_len]
+
+    if not lines:
+        return False, "No meaningful lines"
+
+    counts = Counter(lines)
+    most_common_line, most_common_count = counts.most_common(1)[0]
+
+    if most_common_count >= duplicate_threshold:
+        return True, f"Repeated line detected {most_common_count} times"
+
+    duplicated_total = sum(c for _, c in counts.items() if c > 1)
+    if duplicated_total / len(lines) > dominance_threshold:
+        return True, f"Too many duplicated lines ({duplicated_total}/{len(lines)})"
+
+    return False, "OK"
+
+
+def detect_duplicate_table_rows(text, threshold=6):
+    rows = re.findall(r'^\|.*\|$', text or "", flags=re.MULTILINE)
+    rows = [r.strip() for r in rows if ':---' not in r]
+
+    if not rows:
+        return False, "No table rows"
+
+    counts = Counter(rows)
+    worst_row, worst_count = counts.most_common(1)[0]
+
+    if worst_count >= threshold:
+        return True, f"Duplicate table row repeated {worst_count} times"
+
+    return False, "OK"
+
 # --- 2. VALIDATOR (Fatal Errors Only) ---
 def validate_critical_errors(text):
     text_lower = (text or "").lower()
 
+    # Empty Check
     if not text or len(text.strip()) < 10:
         return False, "Output was empty or too short."
 
-    # existing code checks here...
+    # --- C# SYNTAX CHECK ---
+    cs_indicators = 0
+    if "{" in text and "}" in text:
+        cs_indicators += 1
+    if ";" in text:
+        cs_indicators += 1
+    if "void " in text_lower or "public " in text_lower or "class " in text_lower:
+        cs_indicators += 1
+    if cs_indicators >= 2:
+        return False, "Detected C# Code Syntax"
 
-    # duplicate line check
+    # --- VB.NET SYNTAX CHECK ---
+    vb_indicators = 0
+    if "end sub" in text_lower or "end function" in text_lower or "end class" in text_lower:
+        vb_indicators += 1
+    if "dim " in text_lower and " as " in text_lower:
+        vb_indicators += 1
+    if "handles me.load" in text_lower or "inherits system.web" in text_lower:
+        vb_indicators += 1
+    if vb_indicators >= 2:
+        return False, "Detected VB.NET Code Structure"
+
+    # --- CODE BLOCK CHECK ---
+    if "```csharp" in text_lower or "```cs" in text_lower or "```sql" in text_lower or "```vb" in text_lower:
+        return False, "Detected Code Block (C#, SQL, or VB)"
+
+    # --- KEYWORD BANS ---
+    forbidden_keywords = [
+        "public partial class", "protected void", "private void",
+        "partial public class"
+    ]
+    for kw in forbidden_keywords:
+        if kw in text_lower:
+            return False, f"Detected Code Keyword: '{kw}'"
+
+    # --- DUPLICATE LINE CHECK ---
     dup_bad, dup_reason = detect_excessive_duplicate_lines(text)
     if dup_bad:
         return False, dup_reason
 
-    # duplicate markdown table row check
+    # --- DUPLICATE TABLE ROW CHECK ---
     table_bad, table_reason = detect_duplicate_table_rows(text)
     if table_bad:
         return False, table_reason
 
-    # lighter compression safety net
+    # --- COMPRESSION / REPETITION CHECK ---
     if len(text) > 300:
         compressed = zlib.compress(text.encode('utf-8'))
         ratio = len(compressed) / len(text)
