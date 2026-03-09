@@ -33,45 +33,55 @@ if sql_env:
 # --- TEMPLATE ---
 TEMPLATE = """
 ### SYSTEM ROLE
-You are a **Senior Database Architect**.
-You are NOT a Coder. You DO NOT write SQL code.
+You are a Senior Database Architect.
+You are NOT a Coder.
+You MUST NOT write SQL code.
 
-### OBJECTIVE
-Document the logic of the Stored Procedure provided below.
+### TASK
+Document the stored procedure below.
 
-### 🛑 STRICT CONSTRAINTS
-1. **NO SQL CODE BLOCKS.** Do not rewrite the procedure code.
-2. **NO** "Here is the documentation" filler.
-3. **NO** generic explanations.
-4. **DO NOT EXPAND ACRONYMS.**
-   (Treat these as proper nouns: [{ACRONYM_LIST}])
+### STRICT RULES
+1. Start your response with exactly:
+# Procedure: {ProcedureName}
 
-### ✅ REQUIRED OUTPUT FORMAT
-Output exactly this structure:
+2. Output ONLY the sections below, in the same order.
+3. Do NOT add any introduction.
+4. Do NOT add any conclusion.
+5. Do NOT ask follow-up questions.
+6. Do NOT say things like:
+   - "Here is the documentation"
+   - "Overall Purpose"
+   - "Do you want me to elaborate"
+   - "Would you like me to"
+7. Do NOT rewrite the SQL code.
+8. Do NOT expand acronyms.
+   Treat these as proper nouns: [{ACRONYM_LIST}]
 
+### REQUIRED OUTPUT
 # Procedure: {ProcedureName}
 
 ### Purpose
-{One clear sentence explaining what business task this performs.}
+One clear sentence explaining what business task this performs.
 
 ### Parameters
 | Name | Type | Purpose |
 | :--- | :--- | :--- |
-| @ParamName | DataType | {Inferred usage} |
+| @ParamName | DataType | Inferred usage |
 
 ### Logic Flow
-{Step-by-step plain English explanation.}
+Step-by-step plain English explanation.
 
 ### Data Interactions
-* **Reads:** {List tables explicitly selected from}
-* **Writes:** {List tables inserted/updated/deleted}
+* **Reads:** List tables explicitly selected from
+* **Writes:** List tables inserted/updated/deleted
 
----
-
-### ⬇️ RAW SQL INPUT ⬇️
+### RAW SQL INPUT
 {code_chunk}
-### ⬆️ END OF INPUT ⬆️
-**INSTRUCTION:** Document the logic above in English.
+
+### FINAL INSTRUCTION
+Return ONLY the required output format.
+Do not write anything before "# Procedure: {ProcedureName}".
+Do not write anything after the Data Interactions section.
 """
 
 # --- HELPERS ---

@@ -29,30 +29,75 @@ def clean_response(text):
     text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
     text = re.sub(r'^```[a-zA-Z]*\n', '', text)
     text = re.sub(r'\n```$', '', text)
-    patterns = [r'^(Okay|Sure|Here is|Let me|I have).*?(\n|:)', r'^.*?(generated|documentation).*?:']
-    for p in patterns:
-        text = re.sub(p, '', text, flags=re.IGNORECASE | re.MULTILINE)
-    return text.strip()
 
+    # remove common opening filler
+    text = re.sub(
+        r'^\s*(Okay|Sure|Here is|Let me|I have|Below is).*?\n',
+        '',
+        text,
+        flags=re.IGNORECASE
+    )
+
+    # remove trailing conversational prompts
+    text = re.sub(
+        r'\n*(Do you want me to .*|Would you like me to .*|Let me know if .*|I can also .*?)\s*$',
+        '',
+        text,
+        flags=re.IGNORECASE | re.DOTALL
+    )
+
+    return text.strip()
 # --- 2. SQL VALIDATOR ---
 def validate_output(text):
-    text_lower = (text or "").lower()
+    text = (text or "").strip()
+    text_lower = text.lower()
 
-    if not text or len(text) < 10:
+    if len(text) < 30:
         return False, "Output empty"
 
-    # CRITICAL: Did it rewrite the code?
-    if "create procedure" in text_lower or "create proc" in text_lower:
-        # Exception: It might be quoting the name. We check for a block.
-        if "as\nbegin" in text_lower or "set nocount on" in text_lower:
-            return False, "Detected Raw SQL Code (Do not rewrite the code!)"
+    required_headers = [
+        "# procedure:",
+        "### purpose",
+        "### parameters",
+        "### logic flow",
+        "### data interactions",
+    ]
 
-    # ENTROPY CHECK
+    for h in required_headers:
+        if h not in text_lower:
+            return False, f"Missing required section: {h}"
+
+    # must start with procedure heading
+    if not re.match(r'^\s*#\s*Procedure\s*:\s*\S+', text, flags=re.IGNORECASE):
+        return False, "Missing or invalid procedure title"
+
+    # parameters table header must exist
+    if "| Name | Type | Purpose |" not in text:
+        return False, "Missing parameters table"
+
+    # block conversational endings
+    banned_tail_patterns = [
+        r"do you want me to",
+        r"would you like me to",
+        r"let me know if",
+        r"i can also",
+    ]
+    tail = text_lower[-400:]
+    for p in banned_tail_patterns:
+        if p in tail:
+            return False, "Detected conversational ending"
+
+    # raw SQL leakage
+    if "create procedure" in text_lower or "create proc" in text_lower:
+        if "set nocount on" in text_lower or "as\nbegin" in text_lower or "alter procedure" in text_lower:
+            return False, "Detected raw SQL code"
+
+    # entropy / repetition
     if len(text) > 300:
-        compressed = zlib.compress(text.encode('utf-8'))
+        compressed = zlib.compress(text.encode("utf-8"))
         ratio = len(compressed) / len(text)
         if ratio < 0.15:
-            return False, f"Gibberish Detected (Ratio: {ratio:.2f})"
+            return False, f"Gibberish detected (ratio: {ratio:.2f})"
 
     return True, "Passed"
 
