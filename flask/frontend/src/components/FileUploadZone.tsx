@@ -11,6 +11,17 @@ interface FileUploadZoneProps {
     onProcessingChanged?: (isProcessing: boolean) => void;
 }
 
+type PersistedUploadMeta = {
+    name: string;
+    size: number;
+};
+
+const STORAGE_KEYS = {
+    jobId: "smarttdg_job_id",
+    fileMeta: "smarttdg_file_meta",
+    model: "smarttdg_model",
+};
+
 export function FileUploadZone({
     onDocumentationReady,
     selectedModel,
@@ -18,7 +29,7 @@ export function FileUploadZone({
 }: FileUploadZoneProps) {
     const [isCanceling, setIsCanceling] = useState(false);
     const [isDragOver, setIsDragOver] = useState(false);
-    const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+    const [uploadedFile, setUploadedFile] = useState<File | PersistedUploadMeta | null>(null);
     const [isProcessing, setIsProcessing] = useState(false);
     const [processingProgress, setProcessingProgress] = useState(0);
     const [processingStep, setProcessingStep] = useState("");
@@ -41,10 +52,44 @@ export function FileUploadZone({
         }
     }, []);
 
-    useEffect(() => {
+    const clearPersistedSession = useCallback(() => {
+        sessionStorage.removeItem(STORAGE_KEYS.jobId);
+        sessionStorage.removeItem(STORAGE_KEYS.fileMeta);
+        sessionStorage.removeItem(STORAGE_KEYS.model);
+    }, []);
+
+    const persistSession = useCallback(
+        (jobId: string, file: File | PersistedUploadMeta | null) => {
+            sessionStorage.setItem(STORAGE_KEYS.jobId, jobId);
+            sessionStorage.setItem(STORAGE_KEYS.model, modelToUse);
+
+            if (file) {
+                sessionStorage.setItem(
+                    STORAGE_KEYS.fileMeta,
+                    JSON.stringify({
+                        name: file.name,
+                        size: file.size,
+                    })
+                );
+            }
+        },
+        [modelToUse]
+    );
+
+    const resetUi = useCallback(() => {
+        setIsProcessing(false);
+        setIsCanceling(false);
+        setProcessingProgress(0);
+        setProcessingStep("");
+        setError(null);
+        setExpectedChapters(0);
+        setChaptersGenerated(0);
         setCurrentJobId(null);
         activeJobIdRef.current = null;
+        clearPersistedSession();
+    }, [clearPersistedSession]);
 
+    useEffect(() => {
         return () => {
             runTokenRef.current += 1;
             clearPollTimer();
@@ -96,18 +141,6 @@ export function FileUploadZone({
         fileInputRef.current?.click();
     };
 
-    const resetUi = useCallback(() => {
-        setIsProcessing(false);
-        setIsCanceling(false);
-        setProcessingProgress(0);
-        setProcessingStep("");
-        setError(null);
-        setExpectedChapters(0);
-        setChaptersGenerated(0);
-        setCurrentJobId(null);
-        activeJobIdRef.current = null;
-    }, []);
-
     const startPollingJob = useCallback(
         (jobId: string, myRunToken: number) => {
             clearPollTimer();
@@ -132,6 +165,7 @@ export function FileUploadZone({
                         setIsCanceling(false);
                         setCurrentJobId(null);
                         activeJobIdRef.current = null;
+                        clearPersistedSession();
                         return;
                     }
                     if (!sres.ok) throw new Error(`Status ${sres.status}`);
@@ -148,6 +182,7 @@ export function FileUploadZone({
                         setIsCanceling(false);
                         setCurrentJobId(null);
                         activeJobIdRef.current = null;
+                        clearPersistedSession();
                         return;
                     }
 
@@ -166,6 +201,7 @@ export function FileUploadZone({
                         setIsProcessing(false);
                         setCurrentJobId(null);
                         activeJobIdRef.current = null;
+                        clearPersistedSession();
                         return;
                     }
 
@@ -176,6 +212,7 @@ export function FileUploadZone({
                         setIsCanceling(false);
                         setCurrentJobId(null);
                         activeJobIdRef.current = null;
+                        clearPersistedSession();
                         return;
                     }
 
@@ -184,10 +221,11 @@ export function FileUploadZone({
                         setProcessingProgress(100);
                         setProcessingStep("Done — preparing results...");
                         setIsCanceling(false);
-                        onDocumentationReady?.(st.result);
+                        setIsProcessing(false);
                         setCurrentJobId(null);
                         activeJobIdRef.current = null;
-                        setIsProcessing(false);
+                        clearPersistedSession();
+                        onDocumentationReady?.(st.result);
                         return;
                     }
 
@@ -215,8 +253,36 @@ export function FileUploadZone({
                 }
             }, 1000);
         },
-        [clearPollTimer, onDocumentationReady]
+        [clearPollTimer, clearPersistedSession, onDocumentationReady]
     );
+
+    useEffect(() => {
+        const savedJobId = sessionStorage.getItem(STORAGE_KEYS.jobId);
+        const savedFileMeta = sessionStorage.getItem(STORAGE_KEYS.fileMeta);
+
+        if (!savedJobId) return;
+
+        let parsedMeta: PersistedUploadMeta | null = null;
+        try {
+            parsedMeta = savedFileMeta ? JSON.parse(savedFileMeta) : null;
+        } catch {
+            parsedMeta = null;
+        }
+
+        if (parsedMeta?.name && typeof parsedMeta?.size === "number") {
+            setUploadedFile(parsedMeta);
+        }
+
+        setCurrentJobId(savedJobId);
+        activeJobIdRef.current = savedJobId;
+        setIsProcessing(true);
+        setIsCanceling(false);
+        setProcessingStep("Restoring previous analysis...");
+
+        runTokenRef.current += 1;
+        const token = runTokenRef.current;
+        startPollingJob(savedJobId, token);
+    }, [startPollingJob]);
 
     const cancelJob = useCallback(async (jobId: string | null) => {
         if (!jobId) return;
@@ -260,7 +326,7 @@ export function FileUploadZone({
         setChaptersGenerated(0);
 
         const formData = new FormData();
-        formData.append("file", uploadedFile);
+        formData.append("file", uploadedFile as File);
         formData.append("model", modelToUse);
 
         const xhr = new XMLHttpRequest();
@@ -295,6 +361,7 @@ export function FileUploadZone({
                     if (jobId) {
                         setCurrentJobId(jobId);
                         activeJobIdRef.current = jobId;
+                        persistSession(jobId, uploadedFile);
                     }
                 } catch {
                     jobId = null;
@@ -341,6 +408,7 @@ export function FileUploadZone({
                     if (activeJobId) {
                         setCurrentJobId(activeJobId);
                         activeJobIdRef.current = activeJobId;
+                        persistSession(activeJobId, uploadedFile);
                         startPollingJob(activeJobId, myRunToken);
                     }
 
@@ -355,6 +423,9 @@ export function FileUploadZone({
 
         xhr.send(formData);
     };
+
+    const displayFileName = uploadedFile?.name ?? "";
+    const displayFileSizeMb = uploadedFile ? (uploadedFile.size / 1024 / 1024).toFixed(2) : "0";
 
     if (isProcessing) {
         return (
@@ -406,10 +477,16 @@ export function FileUploadZone({
 
                     <div className="flex items-center justify-center space-x-3 text-sm text-gray-500">
                         <FileArchive className="h-4 w-4" />
-                        <span>{uploadedFile?.name}</span>
+                        <span>{displayFileName}</span>
                         <span>•</span>
-                        <span>{uploadedFile ? (uploadedFile.size / 1024 / 1024).toFixed(2) : 0} MB</span>
+                        <span>{displayFileSizeMb} MB</span>
                     </div>
+
+                    {expectedChapters > 0 && (
+                        <p className="text-sm text-gray-500 mt-2">
+                            Chapters: {chaptersGenerated}/{expectedChapters}
+                        </p>
+                    )}
 
                     {error && <p className="text-sm text-red-600 mt-2">{error}</p>}
                 </Card>
@@ -456,10 +533,8 @@ export function FileUploadZone({
                         <div className="flex items-center space-x-3">
                             <FileArchive className="h-8 w-8 text-primary" />
                             <div>
-                                <h4 className="font-medium">{uploadedFile.name}</h4>
-                                <p className="text-sm text-gray-500">
-                                    {(uploadedFile.size / 1024 / 1024).toFixed(2)} MB
-                                </p>
+                                <h4 className="font-medium">{displayFileName}</h4>
+                                <p className="text-sm text-gray-500">{displayFileSizeMb} MB</p>
                             </div>
                         </div>
 
