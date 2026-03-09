@@ -6,6 +6,7 @@ import subprocess
 import time
 import socket
 from langchain_community.llms import Ollama
+from collections import Counter
 
 # --- CONFIGURATION ---
 SCRIPT_DIR = os.path.abspath(os.path.dirname(__file__))                         # flask/backend/services/analyzer/api_analysis
@@ -31,6 +32,7 @@ def clean_response(text):
     text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
     text = re.sub(r'^```[a-zA-Z]*\n', '', text)
     text = re.sub(r'\n```$', '', text)
+
     lines = text.splitlines()
     leading_patterns = [
         r'^(Based on|I have|This endpoint|The provided).*?(\.|:)\s*$',
@@ -48,20 +50,104 @@ def clean_response(text):
             break
     if remove_count > 0:
         lines = lines[remove_count:]
+
     text = "\n".join(lines)
-    text = re.sub(r'(I hope this helps|Let me know|Feel free to ask).*?$', '', text,
-                  flags=re.IGNORECASE | re.DOTALL)
+
+    text = re.sub(
+        r'\n*(I hope this helps|Let me know.*|Feel free to ask.*|Do you want me to.*|Would you like me to.*|I can also.*)\s*$',
+        '',
+        text,
+        flags=re.IGNORECASE | re.DOTALL
+    )
+
     return text.strip()
 
+def extract_expected_endpoint_title(prompt_text: str) -> str:
+    m = re.search(r'#\s*API Endpoint:\s*(.+)', prompt_text, flags=re.IGNORECASE)
+    if m:
+        return m.group(1).strip()
+    return "Unknown_Endpoint"
+
+def enforce_api_template(text: str, expected_title: str) -> str:
+    text = (text or "").strip()
+
+    if not re.search(r'^\s*#\s*API Endpoint\s*:', text, flags=re.IGNORECASE | re.MULTILINE):
+        text = f"# API Endpoint: {expected_title}\n\n" + text
+
+    return text
+
+def detect_excessive_duplicate_lines(text, min_line_len=25, duplicate_threshold=8, dominance_threshold=0.35):
+    lines = [ln.strip() for ln in (text or "").splitlines()]
+    lines = [ln for ln in lines if ln and len(ln) >= min_line_len]
+
+    if not lines:
+        return False, "No meaningful lines"
+
+    counts = Counter(lines)
+    _, most_common_count = counts.most_common(1)[0]
+
+    if most_common_count >= duplicate_threshold:
+        return True, f"Repeated line detected {most_common_count} times"
+
+    duplicated_total = sum(c for _, c in counts.items() if c > 1)
+    if duplicated_total / len(lines) > dominance_threshold:
+        return True, f"Too many duplicated lines ({duplicated_total}/{len(lines)})"
+
+    return False, "OK"
+
+
+def detect_duplicate_table_rows(text, threshold=6):
+    rows = re.findall(r'^\|.*\|$', text or "", flags=re.MULTILINE)
+    rows = [r.strip() for r in rows if ':---' not in r]
+
+    if not rows:
+        return False, "No table rows"
+
+    counts = Counter(rows)
+    _, worst_count = counts.most_common(1)[0]
+
+    if worst_count >= threshold:
+        return True, f"Duplicate table row repeated {worst_count} times"
+
+    return False, "OK"
 
 # --- VALIDATOR ---
 def validate_output(text):
-    text_lower = (text or "").lower()
-    if not text or len(text.strip()) < 10:
+    text = (text or "").strip()
+    text_lower = text.lower()
+
+    if len(text) < 30:
         return False, "Output was empty or too short."
 
-    # Code block checks
-    if "```csharp" in text_lower or "```cs" in text_lower or "```sql" in text_lower or "```vb" in text_lower:
+    required_headers = [
+        "# api endpoint:",
+        "**kind:**",
+        "**controller / service:**",
+        "**operation:**",
+        "**source file:**",
+        "**route:**",
+        "**http methods:**",
+        "### parameters",
+        "### return type",
+        "### purpose & behaviour",
+    ]
+
+    for h in required_headers:
+        if h not in text_lower:
+            return False, f"Missing required section: {h}"
+
+    if not re.match(r'^\s*#\s*API Endpoint\s*:\s*\S+', text, flags=re.IGNORECASE):
+        return False, "Missing or invalid API endpoint title"
+
+    if "| Name | Type |" not in text:
+        return False, "Missing parameters table"
+
+    # reject copied prompt instructions
+    if re.search(r'(instruction:|raw endpoint metadata|do not write anything before|do not write anything after)', text_lower):
+        return False, "Model copied prompt instructions into output"
+
+    # code block checks
+    if "```csharp" in text_lower or "```cs" in text_lower or "```sql" in text_lower or "```vb" in text_lower or "```json" in text_lower:
         return False, "Detected code block in output"
 
     forbidden = ["public partial class", "protected void", "private void"]
@@ -69,6 +155,29 @@ def validate_output(text):
         if kw in text_lower:
             return False, f"Detected code keyword: '{kw}'"
 
+    # conversational ending
+    banned_tail_patterns = [
+        "do you want me to",
+        "would you like me to",
+        "let me know if",
+        "i can also",
+    ]
+    tail = text_lower[-400:]
+    for p in banned_tail_patterns:
+        if p in tail:
+            return False, "Detected conversational ending"
+
+    # duplicate line check
+    dup_bad, dup_reason = detect_excessive_duplicate_lines(text)
+    if dup_bad:
+        return False, dup_reason
+
+    # duplicate table row check
+    table_bad, table_reason = detect_duplicate_table_rows(text)
+    if table_bad:
+        return False, table_reason
+
+    # entropy check
     if len(text) > MIN_ENTROPY_LENGTH:
         compressed = zlib.compress(text.encode("utf-8"))
         ratio = len(compressed) / len(text)
@@ -76,7 +185,6 @@ def validate_output(text):
             return False, f"Detected repetitive content (entropy: {ratio:.2f})"
 
     return True, "Passed"
-
 
 # --- Ollama helpers (mirrors sql_analysis.py) ---
 def _is_port_open(host: str, port: int) -> bool:
@@ -179,6 +287,7 @@ def main():
             original_prompt = f.read()
 
         current_prompt = original_prompt
+        expected_endpoint_title = extract_expected_endpoint_title(original_prompt)
         final_output = ""
         success = False
 
@@ -195,6 +304,7 @@ def main():
                 raw_buffer = ""
 
             cleaned = clean_response(raw_buffer)
+            cleaned = enforce_api_template(cleaned, expected_endpoint_title)
             is_valid, reason = validate_output(cleaned)
 
             if is_valid:
@@ -204,17 +314,68 @@ def main():
                 break
             else:
                 print(f"  ❌ FAIL: {reason}")
-                current_prompt = (
-                    f"### 🛑 CRITICAL INSTRUCTION\n"
-                    f"**Your previous output failed: {reason}**\n"
-                    f"1. Do NOT write code blocks.\n"
-                    f"2. Describe the API endpoint in English only.\n\n"
-                    f"{original_prompt}"
-                )
+
+                current_prompt = f"""
+### VALIDATION FAILURE
+Your previous output failed because: {reason}
+
+You must now return ONLY this exact structure:
+
+# API Endpoint: {expected_endpoint_title}
+
+**Kind:** value
+**Controller / Service:** value
+**Operation:** value
+**Source File:** value
+**Route:** value
+**HTTP Methods:** value
+
+### Parameters
+| Name | Type |
+| :--- | :--- |
+| parameter | type |
+
+### Return Type
+value
+
+### Purpose & Behaviour
+Describe what this endpoint does in plain English based only on the provided metadata.
+If unknown, write: Purpose unknown — insufficient metadata.
+
+Rules:
+- Do not write code
+- Do not write JSON
+- Do not add introductions
+- Do not add conclusions
+- Do not ask follow-up questions
+- Do not write anything after the Purpose & Behaviour section
+
+### SOURCE PROMPT
+{original_prompt}
+"""
 
         if not success:
             print(f"  ! ABORTING {filename}")
-            final_output = cleaned if cleaned else raw_buffer
+            final_output = f"""# API Endpoint: {expected_endpoint_title}
+
+**Kind:** Not specified
+**Controller / Service:** Not specified
+**Operation:** Not specified
+**Source File:** Not specified
+**Route:** Not specified
+**HTTP Methods:** Not specified
+
+### Parameters
+| Name | Type |
+| :--- | :--- |
+| (none) | |
+
+### Return Type
+Not specified
+
+### Purpose & Behaviour
+Generation failed validation after {MAX_RETRIES} attempts.
+"""
 
         with open(out_path, "w", encoding="utf-8") as f:
             f.write(final_output)

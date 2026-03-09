@@ -82,10 +82,15 @@ def clean_response(text):
 
     text = "\n".join(cleaned_lines)
 
-    # Remove conversational filler at the END (only a few trailing phrases)
-    text = re.sub(r'(I hope this helps|Let me know|Feel free to ask).*?$', '', text, flags=re.IGNORECASE | re.DOTALL)
-    text = remove_raw_input_block(text)
+    # Remove conversational filler at the END
+    text = re.sub(
+        r'\n*(I hope this helps|Let me know.*|Feel free to ask.*|Do you want me to.*|Would you like me to.*|I can also.*)\s*$',
+        '',
+        text,
+        flags=re.IGNORECASE | re.DOTALL
+    )
 
+    text = remove_raw_input_block(text)
     return text.strip()
 
 def detect_excessive_duplicate_lines(text, min_line_len=25, duplicate_threshold=8, dominance_threshold=0.35):
@@ -123,8 +128,105 @@ def detect_duplicate_table_rows(text, threshold=6):
 
     return False, "OK"
 
+
+def detect_prompt_type(prompt_text: str) -> str:
+    t = (prompt_text or "").lower()
+
+    if "output format (one document per page)" in t or "# page:" in t:
+        return "page"
+    if "output format (one document per module)" in t or "# module:" in t:
+        return "module"
+    return "unknown"
+
+def extract_expected_title(prompt_text: str, prompt_type: str) -> str:
+    if prompt_type == "page":
+        m = re.search(r'#\s*Page:\s*(.+)', prompt_text, flags=re.IGNORECASE)
+        if m:
+            return m.group(1).strip()
+
+    if prompt_type == "module":
+        m = re.search(r'#\s*Module:\s*(.+)', prompt_text, flags=re.IGNORECASE)
+        if m:
+            return m.group(1).strip()
+
+    return "Unknown"
+
+def enforce_output_template(text: str, prompt_type: str, expected_title: str) -> str:
+    text = (text or "").strip()
+
+    if prompt_type == "page":
+        if not re.search(r'^\s*#\s*Page\s*:', text, flags=re.IGNORECASE | re.MULTILINE):
+            text = f"# Page: {expected_title}\n\n" + text
+
+    elif prompt_type == "module":
+        if not re.search(r'^\s*#\s*Module\s*:', text, flags=re.IGNORECASE | re.MULTILINE):
+            text = f"# Module: {expected_title}\n\n" + text
+
+    return text
+
+def validate_required_structure(text: str, prompt_type: str):
+    text = (text or "").strip()
+    text_lower = text.lower()
+
+    if prompt_type == "page":
+        required_headers = [
+            "# page:",
+            "### 1. user purpose",
+            "### 2. key events & logic",
+            "### 3. data interactions",
+        ]
+        for h in required_headers:
+            if h not in text_lower:
+                return False, f"Missing required section: {h}"
+
+        if "| Event / Method | Business Logic Summary |" not in text:
+            return False, "Missing page events table"
+
+        banned_tail_patterns = [
+            "do you want me to",
+            "would you like me to",
+            "let me know if",
+            "i can also",
+        ]
+        tail = text_lower[-400:]
+        for p in banned_tail_patterns:
+            if p in tail:
+                return False, "Detected conversational ending"
+
+        return True, "Passed"
+
+    if prompt_type == "module":
+        required_headers = [
+            "# module:",
+            "### 1. purpose",
+            "### 2. key declarations",
+            "### 3. important behavior & side effects",
+            "### 4. data interactions",
+        ]
+        for h in required_headers:
+            if h not in text_lower:
+                return False, f"Missing required section: {h}"
+
+        if "| Symbol | Kind | Description |" not in text:
+            return False, "Missing module declarations table"
+
+        banned_tail_patterns = [
+            "do you want me to",
+            "would you like me to",
+            "let me know if",
+            "i can also",
+        ]
+        tail = text_lower[-400:]
+        for p in banned_tail_patterns:
+            if p in tail:
+                return False, "Detected conversational ending"
+
+        return True, "Passed"
+
+    return True, "Passed"
+
 # --- 2. VALIDATOR (Fatal Errors Only) ---
-def validate_critical_errors(text):
+def validate_critical_errors(text, prompt_type="unknown"):
     text_lower = (text or "").lower()
 
     # Empty Check
@@ -175,6 +277,11 @@ def validate_critical_errors(text):
     table_bad, table_reason = detect_duplicate_table_rows(text)
     if table_bad:
         return False, table_reason
+
+    # --- REQUIRED TEMPLATE STRUCTURE CHECK ---
+    ok_struct, struct_reason = validate_required_structure(text, prompt_type)
+    if not ok_struct:
+        return False, struct_reason
 
     # --- COMPRESSION / REPETITION CHECK ---
     if len(text) > 300:
@@ -358,6 +465,9 @@ def main():
             with open(os.path.join(abs_input, filename), "r", encoding="utf-8") as f:
                 original_prompt = f.read()
 
+            prompt_type = detect_prompt_type(original_prompt)
+            expected_title = extract_expected_title(original_prompt, prompt_type)
+
             current_prompt = original_prompt
             final_output = ""
             success = False
@@ -379,9 +489,10 @@ def main():
 
                 # --- PHASE 1: AUTO-FIX ---
                 cleaned_text = clean_response(raw_buffer)
+                cleaned_text = enforce_output_template(cleaned_text, prompt_type, expected_title)
 
                 # --- PHASE 2: CRITICAL VALIDATION ---
-                is_valid, reason = validate_critical_errors(cleaned_text)
+                is_valid, reason = validate_critical_errors(cleaned_text, prompt_type)
 
                 if is_valid:
                     print("    ✅ VALIDATION PASSED (Auto-Cleaned)")
@@ -393,14 +504,18 @@ def main():
 
                 # --- PHASE 3: SMART RETRY ---
                 current_prompt = textwrap.dedent(f"""
-                ### 🛑 CRITICAL INSTRUCTION - READ CAREFULLY
-                **Your previous output failed because: {reason}**
-                1. You MUST NOT write Code (C#, VB.NET, or SQL).
-                2. You MUST NOT repeat text.
-                3. Write ONLY English descriptions.
+### 🛑 CRITICAL INSTRUCTION - READ CAREFULLY
+Your previous output failed because: {reason}
 
-                {original_prompt}
-                """)
+You MUST follow the required output format exactly.
+You MUST NOT add introductions, conclusions, or follow-up questions.
+You MUST NOT write code.
+You MUST NOT write anything outside the required template.
+
+### SOURCE PROMPT
+{original_prompt}
+"""
+                )
 
             # If top-level attempt succeeded but produced fewer sections than items, do per-item fallback
             if success:
@@ -413,7 +528,8 @@ def main():
                     per_item_results = []
                     for b in blocks:
                         cleaned_single, raw_single = generate_single_item_output(llm, original_prompt, b)
-                        ok, _ = validate_critical_errors(cleaned_single)
+                        cleaned_single = enforce_output_template(cleaned_single, prompt_type, expected_title)
+                        ok, _ = validate_critical_errors(cleaned_single, prompt_type)
                         if ok:
                             per_item_results.append(cleaned_single)
                         else:
