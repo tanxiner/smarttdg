@@ -1471,13 +1471,26 @@ def main():
 
     analyzer_temp_dir = os.environ.get("ANALYZER_TEMP_DIR")
 
+    temp_analysis_file = None
     if analyzer_temp_dir:
-        analysis_file = os.path.join(analyzer_temp_dir, "static_analysis_output", "all_analysis_results.json")
-    else:
-        analysis_file = os.path.join(backend_dir, "static_analysis_output", "all_analysis_results.json")
+        temp_analysis_file = os.path.join(
+            analyzer_temp_dir, "static_analysis_output", "all_analysis_results.json"
+        )
 
-    if not os.path.exists(analysis_file):
-        print(f"Static analysis file not found: {analysis_file}")
+    backend_analysis_file = os.path.join(
+        backend_dir, "static_analysis_output", "all_analysis_results.json"
+    )
+
+    if temp_analysis_file and os.path.exists(temp_analysis_file):
+        analysis_file = temp_analysis_file
+    elif os.path.exists(backend_analysis_file):
+        analysis_file = backend_analysis_file
+    else:
+        print(
+            "Static analysis file not found in either location:\n"
+            f"  temp: {temp_analysis_file}\n"
+            f"  backend: {backend_analysis_file}"
+        )
         return {}
 
     try:

@@ -108,36 +108,107 @@ def _run_step_subprocess(
 ) -> subprocess.CompletedProcess:
     _ensure_not_canceled(job_id)
 
-    proc = subprocess.run(
-        [sys.executable, script_path],
-        cwd=cwd,
-        env=env_base,
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-        encoding='utf-8',
-        errors='replace'
-    )
+    stdout_tmp = tempfile.NamedTemporaryFile(mode="w+", encoding="utf-8", errors="replace", delete=False)
+    stderr_tmp = tempfile.NamedTemporaryFile(mode="w+", encoding="utf-8", errors="replace", delete=False)
 
-    _ensure_not_canceled(job_id)
+    try:
+        proc = subprocess.Popen(
+            [sys.executable, script_path],
+            cwd=cwd,
+            env=env_base,
+            stdout=stdout_tmp,
+            stderr=stderr_tmp,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
 
-    if job_id:
-        out = (proc.stdout or "").strip()
-        err = (proc.stderr or "").strip()
-        payload = {}
-        if stdout_key:
-            payload[stdout_key] = out[:4000]
-        if stderr_key:
-            payload[stderr_key] = err[:4000]
-        if payload:
-            _update_job(job_id, **payload)
+        start_time = time.time()
 
-    if proc.returncode != 0:
-        if _is_job_canceled(job_id):
-            raise RuntimeError("canceled")
-        raise RuntimeError(f"{step_name} failed with exit code {proc.returncode}")
+        while True:
+            if _is_job_canceled(job_id):
+                try:
+                    proc.terminate()
+                    proc.wait(timeout=5)
+                except Exception:
+                    try:
+                        proc.kill()
+                    except Exception:
+                        pass
+                raise RuntimeError("canceled")
 
-    return proc
+            if timeout is not None and (time.time() - start_time) > timeout:
+                try:
+                    proc.terminate()
+                    proc.wait(timeout=5)
+                except Exception:
+                    try:
+                        proc.kill()
+                    except Exception:
+                        pass
+                raise RuntimeError(f"{step_name} failed with timeout after {timeout} seconds")
+
+            rc = proc.poll()
+            if rc is not None:
+                break
+
+            time.sleep(0.5)
+
+        stdout_tmp.flush()
+        stderr_tmp.flush()
+        stdout_tmp.seek(0)
+        stderr_tmp.seek(0)
+
+        stdout = stdout_tmp.read()
+        stderr = stderr_tmp.read()
+
+        if job_id:
+            out = (stdout or "").strip()
+            err = (stderr or "").strip()
+            payload = {}
+            if stdout_key:
+                payload[stdout_key] = out[:4000]
+            if stderr_key:
+                payload[stderr_key] = err[:4000]
+            if payload:
+                _update_job(job_id, **payload)
+
+        if proc.returncode != 0:
+            if _is_job_canceled(job_id):
+                raise RuntimeError("canceled")
+            raise RuntimeError(f"{step_name} failed with exit code {proc.returncode}")
+
+        return subprocess.CompletedProcess(
+            args=[sys.executable, script_path],
+            returncode=proc.returncode,
+            stdout=stdout,
+            stderr=stderr,
+        )
+
+    finally:
+        try:
+            if 'proc' in locals() and proc.poll() is None:
+                proc.kill()
+        except Exception:
+            pass
+
+        try:
+            stdout_tmp.close()
+        except Exception:
+            pass
+        try:
+            stderr_tmp.close()
+        except Exception:
+            pass
+
+        try:
+            os.remove(stdout_tmp.name)
+        except Exception:
+            pass
+        try:
+            os.remove(stderr_tmp.name)
+        except Exception:
+            pass
 
 
 def analyze_zip(zip_path: str, job_id: str | None = None, model_choice: str | None = None) -> dict:
@@ -150,9 +221,18 @@ def analyze_zip(zip_path: str, job_id: str | None = None, model_choice: str | No
 
     _ensure_not_canceled(job_id)
 
+    static_analysis_base = os.path.join(BASE_DIR, "static_analysis_output")
+    if os.path.exists(static_analysis_base):
+        try:
+            shutil.rmtree(static_analysis_base)
+        except Exception:
+            pass
+    os.makedirs(static_analysis_base, exist_ok=True)
+
     prompts_base = os.path.join(BASE_DIR, "prompts_output")
     analysis_base = os.path.join(BASE_DIR, "analysis_output")
     output_base = os.path.join(BASE_DIR, "final_output")
+    static_analysis_base = os.path.join(BASE_DIR, "static_analysis_output")
 
     dirs_to_clean = [
         os.path.join(prompts_base, "Page_Documentation_Prompts"),
@@ -163,7 +243,9 @@ def analyze_zip(zip_path: str, job_id: str | None = None, model_choice: str | No
         os.path.join(analysis_base, "Final_Utility_Chapters"),
         os.path.join(analysis_base, "Final_SQL_Docs"),
         os.path.join(analysis_base, "Final_API_Docs"),
-        output_base
+        os.path.join(analysis_base, "Diagrams"),
+        output_base,
+        static_analysis_base
     ]
 
     for d in dirs_to_clean:
@@ -231,7 +313,8 @@ def analyze_zip(zip_path: str, job_id: str | None = None, model_choice: str | No
             ".cs", ".vb",
             ".aspx", ".ascx", ".master",
             ".js", ".jsx",
-            ".html", ".cshtml", ".cshtml.cs", ".razor"
+            ".html", ".cshtml", ".cshtml.cs", ".razor", 
+            ".sql"
         }
 
         irrelevant_tokens = {
@@ -727,6 +810,8 @@ def analyze():
     if not file.filename.lower().endswith(".zip"):
         return jsonify({"error": "Only .zip files are supported"}), 400
 
+  
+
     filepath = os.path.join(UPLOAD_FOLDER, file.filename)
     file.save(filepath)
 
@@ -894,6 +979,23 @@ def serve_spa(path):
         return send_from_directory(app.static_folder, path)
     return send_from_directory(app.static_folder, 'index.html')
 
+def clear_upload_folder():
+    try:
+        if not os.path.isdir(UPLOAD_FOLDER):
+            os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+            return
+
+        for name in os.listdir(UPLOAD_FOLDER):
+            path = os.path.join(UPLOAD_FOLDER, name)
+            try:
+                if os.path.isfile(path) or os.path.islink(path):
+                    os.remove(path)
+                elif os.path.isdir(path):
+                    shutil.rmtree(path, ignore_errors=True)
+            except Exception as e:
+                print(f"[Uploads] Failed to remove {path}: {e}")
+    except Exception as e:
+        print(f"[Uploads] Failed to clean upload folder: {e}")
 
 @app.route("/analyze_async", methods=["POST"])
 def analyze_async():
@@ -911,6 +1013,7 @@ def analyze_async():
             "activeJobId": active_job_id
         }), 409
 
+    clear_upload_folder()
     filepath = os.path.join(UPLOAD_FOLDER, file.filename)
     file.save(filepath)
 
