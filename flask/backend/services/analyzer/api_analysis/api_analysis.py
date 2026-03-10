@@ -244,7 +244,9 @@ def main():
         print(f"No API prompt folder found at '{INPUT_FOLDER}'. Skipping api_analysis.")
         return
 
-    files = sorted([f for f in os.listdir(INPUT_FOLDER) if f.endswith(".txt")])
+    files = [f for f in os.listdir(INPUT_FOLDER) if f.lower().endswith(".txt")]
+    files.sort(key=str.lower)
+
     if not files:
         print(f"No API prompt files found in '{INPUT_FOLDER}'. Skipping api_analysis.")
         return

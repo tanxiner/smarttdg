@@ -68,7 +68,8 @@ One clear sentence explaining what business task this performs.
 | @ParamName | DataType | Inferred usage |
 
 ### Logic Flow
-Step-by-step plain English explanation.
+Describe the main processing steps performed in this chunk.
+Avoid repeating the same step in different wording.
 
 ### Data Interactions
 * **Reads:** List tables explicitly selected from

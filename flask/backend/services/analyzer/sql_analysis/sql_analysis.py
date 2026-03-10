@@ -196,6 +196,7 @@ def contains_template_placeholders(text: str) -> bool:
         "list tables inserted/updated/deleted",
         "@paramname",
         "datatype",
+        "Step-by-step plain English explanation."
     ]
     return any(p in text_lower for p in placeholder_phrases)
 
@@ -344,6 +345,12 @@ def summarize_output_for_next_part(text: str, max_logic_steps: int = 4) -> str:
 
     return "\n".join(parts).strip()
 
+def sort_key(filename):
+    info = parse_part_info(filename)
+    if info:
+        base_key, part_num = info
+        return (base_key, part_num)
+    return (filename, 0)
 
 def inject_prior_summary(prompt_text: str, prior_summary: str) -> str:
     if not prior_summary:
@@ -447,7 +454,9 @@ def main():
         print(f"No SQL prompt folder found at '{INPUT_FOLDER}'. Skipping sql_analysis.")
         return
 
-    files = sorted([f for f in os.listdir(INPUT_FOLDER) if f.endswith(".txt")])
+    files = [f for f in os.listdir(INPUT_FOLDER) if f.endswith(".txt")]
+
+    files.sort(key=sort_key)
     if not files:
         print(f"No SQL prompt files found in '{INPUT_FOLDER}'. Skipping sql_analysis.")
         return

@@ -1,12 +1,14 @@
 {
   "_comment": "Canonical downstream-pipeline definition. This is the single source of truth for script ordering and execution. Both Roslyn/Program.cs (CLI/batch) and flask/backend/app.py (web UI) read this file. To add, remove, or reorder pipeline steps, edit only this file.",
-  "steps": [
+  "_comment_disabled_steps": [
     {
       "name": "diagram_generator",
       "script": "services/analyzer/diagram_generator.py",
       "phase": "diagram",
       "timeout_seconds": 60
-    },
+    }
+  ],
+  "steps": [
     {
       "name": "ai_splitter",
       "script": "services/analyzer/ai_analysis/ai_splitter.py",

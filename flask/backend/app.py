@@ -515,35 +515,35 @@ def analyze_zip(zip_path: str, job_id: str | None = None, model_choice: str | No
             pipeline_steps = _load_pipeline_steps()
             step_progress = 30
 
-            _diagram_steps = [s for s in pipeline_steps if s.get("phase") == "diagram"]
+            #_diagram_steps = [s for s in pipeline_steps if s.get("phase") == "diagram"]
             _splitter_steps = [s for s in pipeline_steps if s.get("phase") == "splitter"]
             _analysis_steps = [s for s in pipeline_steps if s.get("phase") == "analysis"]
             _compile_steps = [s for s in pipeline_steps if s.get("phase") == "compile"]
 
-            print("[Pipeline] STEP 1.5: Generating diagrams from static analysis")
+            #print("[Pipeline] STEP 1.5: Generating diagrams from static analysis")
             if job_id:
                 _update_job(job_id, progress=step_progress, step="generating...")
 
-            for _step in _diagram_steps:
-                _ensure_not_canceled(job_id)
-                _name = _step["name"]
-                _script = os.path.join(BASE_DIR, _step["script"].replace("/", os.sep))
-                _timeout = _step.get("timeout_seconds") or None
-                if not os.path.isfile(_script):
-                    print(f"[Pipeline] Script not found, skipping: {_script}")
-                    continue
+            # for _step in _diagram_steps:
+            #     _ensure_not_canceled(job_id)
+            #     _name = _step["name"]
+            #     _script = os.path.join(BASE_DIR, _step["script"].replace("/", os.sep))
+            #     _timeout = _step.get("timeout_seconds") or None
+            #     if not os.path.isfile(_script):
+            #         print(f"[Pipeline] Script not found, skipping: {_script}")
+            #         continue
 
-                print(f"[Pipeline] Running {_name}")
-                _run_step_subprocess(
-                    job_id=job_id,
-                    env_base=env_base,
-                    script_path=_script,
-                    cwd=temp_dir,
-                    step_name=_name,
-                    timeout=_timeout,
-                    stdout_key="diagram_stdout",
-                    stderr_key="diagram_stderr",
-                )
+            #     print(f"[Pipeline] Running {_name}")
+            #     _run_step_subprocess(
+            #         job_id=job_id,
+            #         env_base=env_base,
+            #         script_path=_script,
+            #         cwd=temp_dir,
+            #         step_name=_name,
+            #         timeout=_timeout,
+            #         stdout_key="diagram_stdout",
+            #         stderr_key="diagram_stderr",
+            #     )
 
             step_progress = 32
 

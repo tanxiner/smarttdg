@@ -28,6 +28,38 @@ def get_file_order(filename):
     return 0
 
 
+def parse_part_info(filename: str):
+    """
+    Extract base key + numeric part from names like:
+    001_MyProc_part1.md
+    001_MyProc_part2.txt
+    """
+    m = re.match(
+        r"^(?P<prefix>.+?)_part(?P<part>\d+)\.(md|txt)$",
+        filename,
+        flags=re.IGNORECASE
+    )
+    if not m:
+        return None
+    base_key = m.group("prefix")
+    part_num = int(m.group("part"))
+    return base_key, part_num
+
+
+def sort_key(filename):
+    """
+    Natural sort for files with _partN suffix.
+    Falls back to filename + trailing number sort.
+    """
+    info = parse_part_info(filename)
+    if info:
+        base_key, part_num = info
+        return (base_key.lower(), part_num)
+
+    stem = os.path.splitext(filename)[0]
+    return (re.sub(r'\d+', '', stem).lower(), get_file_order(stem), stem.lower())
+
+
 def clean_title(raw_title):
     """
     Extracts the core title from a header text.
@@ -51,7 +83,6 @@ def make_slug(section_name, base_name, idx, title):
     base = re.sub(r'[^a-z0-9-]', '', base_name.lower().replace(' ', '-'))
     slug_base = f"{sec}-{base}-{idx}-{title_part}"
     slug = re.sub(r'[^a-z0-9-]', '', slug_base)
-    # collapse multiple hyphens
     slug = re.sub(r'-{2,}', '-', slug).strip('-')
     if not slug:
         slug = f"section-{base or 'item'}-{idx}"
@@ -66,7 +97,7 @@ def _ensure_unique_slug(slug: str) -> str:
     if slug not in _USED_SLUGS:
         _USED_SLUGS.add(slug)
         return slug
-    # append incremental suffix
+
     i = 2
     while True:
         candidate = f"{slug}-{i}"
@@ -81,7 +112,7 @@ def normalize_whitespace(text):
     Normalize whitespace in markdown text to prevent extra blank lines in compiled output:
     - Strip trailing spaces from each line.
     - Convert whitespace-only lines into truly empty lines.
-    - Collapse 3 or more consecutive newlines into 2 (preserve paragraph breaks).
+    - Collapse 3 or more consecutive newlines into 2.
     """
     lines = text.split('\n')
     lines = [line.rstrip() for line in lines]
@@ -89,37 +120,54 @@ def normalize_whitespace(text):
     text = re.sub(r'\n{3,}', '\n\n', text)
     return text
 
+def sort_key(filename):
+    info = parse_part_info(filename)
+    if info:
+        base_key, part_num = info
+        return (base_key.lower(), part_num)
+
+    stem = os.path.splitext(filename)[0]
+    return (re.sub(r'\d+', '', stem).lower(), get_file_order(stem), stem.lower())
+
+
+def non_sql_sort_key(filename):
+    stem = os.path.splitext(filename)[0]
+
+    m = re.match(r'^(Page|Module)_Unknown_(\d+)_(.+)$', stem, flags=re.IGNORECASE)
+    if m:
+        kind = m.group(1).lower()
+        idx = int(m.group(2))
+        rest = m.group(3).lower()
+        return (kind, idx, rest)
+
+    return (stem.lower(),)
 
 def process_folder(folder_path, section_name, toc_lines, body_content, is_module=False):
     """
     Reads each .md/.txt file and creates a TOC entry and anchor for every H1 header
     inside the file.
-
-    If is_module is False (default) this emits sections under the normal documentation
-    heading (preserving 'Page:' and other conventions). If is_module is True, the
-    items are treated as Modules/Utilities (TOC header adjusted and H1 'Module:' prefix
-    normalized).
     """
     if not folder_path or not os.path.exists(folder_path):
         print(f"Warning: Folder '{folder_path}' not found. Skipping.")
         return
 
-    # 1. Get Files (look for .md AND .txt)
     try:
         files = [f for f in os.listdir(folder_path) if f.lower().endswith((".md", ".txt"))]
     except Exception as e:
         print(f"Error reading folder '{folder_path}': {e}")
         return
 
-    # Sort files
-    files.sort(key=lambda x: (re.sub(r'\d+', '', x).lower(), get_file_order(x)))
+    if "database reference (sql)" in section_name.lower():
+        files.sort(key=sort_key)
+    elif "api reference" in section_name.lower():
+        files.sort(key=str.lower)
+    else:
+        files.sort(key=non_sql_sort_key)
 
     if not files:
         print(f"No files found in '{folder_path}'.")
         return
 
-    # Build a human-friendly section header.
-    # If caller already provided a module-focused name (e.g., "Modules"), avoid duplication.
     if is_module:
         kind_label = section_name if "module" in section_name.lower() else section_name + " (Modules)"
     else:
@@ -127,7 +175,6 @@ def process_folder(folder_path, section_name, toc_lines, body_content, is_module
 
     print(f"Processing '{kind_label}' ({len(files)} files) from '{folder_path}'...")
 
-    # Add Section Header to TOC
     toc_lines.append(f"\n### {kind_label}")
 
     for filename in files:
@@ -145,10 +192,8 @@ def process_folder(folder_path, section_name, toc_lines, body_content, is_module
 
         base_name = os.path.splitext(filename)[0]
 
-        # Find all H1 headers and their positions
         header_iter = list(re.finditer(r'^\s*#\s+(.+)$', content, flags=re.MULTILINE))
         if not header_iter:
-            # No H1 headers: treat entire file as one section
             title = base_name
             slug_raw = make_slug(kind_label, base_name, 1, title)
             slug = _ensure_unique_slug(slug_raw)
@@ -158,40 +203,38 @@ def process_folder(folder_path, section_name, toc_lines, body_content, is_module
             body_content.append("\n\n---\n\n")
             continue
 
-        # Split content into sections based on header positions
         sections = []
         for i, m in enumerate(header_iter):
             start = m.start()
-            end = header_iter[i+1].start() if i+1 < len(header_iter) else len(content)
+            end = header_iter[i + 1].start() if i + 1 < len(header_iter) else len(content)
             header_text = m.group(1).strip()
             section_text = content[start:end].rstrip()
             sections.append((header_text, section_text))
 
-        # Emit each section with unique slug and TOC entry
         for idx, (header_text, section_text) in enumerate(sections, start=1):
             title = base_name
             slug_raw = make_slug(kind_label, base_name, idx, title)
             slug = _ensure_unique_slug(slug_raw)
             toc_lines.append(f"- [{title}](#{slug})")
             body_content.append(f"\n<a id='{slug}'></a>\n")
-            # If module, normalize header tokens like "Module:" in the output section body
+
             if is_module:
-                # replace leading "# Module:" with a clean H1 using cleaned_title
-                section_text = re.sub(r'^\s*#\s*Module\s*:\s*.*$', f"# {title}", section_text, flags=re.IGNORECASE | re.MULTILINE)
+                section_text = re.sub(
+                    r'^\s*#\s*Module\s*:\s*.*$',
+                    f"# {title}",
+                    section_text,
+                    flags=re.IGNORECASE | re.MULTILINE
+                )
+
             body_content.append(normalize_whitespace(section_text.strip()))
             body_content.append("\n\n---\n\n")
 
 
 def find_folder(folder_name):
     """
-    Locate folder_name in a set of reasonable places:
-      - relative to this script (flask/backend)
-      - prefer backend/analysis_output (where analyzers write final docs) then backend/prompts_output
-      - inside services/analyzer subfolders (ai_analysis, sql_analysis)
-      - fallback: walk the backend tree and return the first match
-    Returns absolute path or None.
+    Locate folder_name in a set of reasonable places.
     """
-    base = os.path.abspath(os.path.dirname(__file__))  # flask/backend
+    base = os.path.abspath(os.path.dirname(__file__))
     candidates = [
         os.path.join(base, folder_name),
         os.path.join(base, "analysis_output", folder_name),
@@ -207,7 +250,6 @@ def find_folder(folder_name):
             print(f"Found '{folder_name}' at: {c}")
             return c
 
-    # Fallback: walk the backend tree (limited depth)
     for root, dirs, files in os.walk(base):
         if folder_name in dirs:
             found = os.path.join(root, folder_name)
@@ -220,18 +262,14 @@ def find_folder(folder_name):
 
 def _get_zip_basename():
     """
-    Try to determine the originating zip filename (basename without extension).
-    Priority:
-     1) environment variables commonly used by the pipeline (ANALYZER_ZIP_FILENAME, ZIP_FILENAME, etc.)
-     2) most recent .zip in backend/uploads (best-effort fallback)
-     3) None
+    Try to determine the originating zip filename.
     """
     candidates = ["ANALYZER_ZIP_FILENAME", "ANALYZER_ZIP", "ZIP_FILENAME", "ZIPFILE", "ZIPNAME"]
     for k in candidates:
         v = os.environ.get(k)
         if v:
             return os.path.splitext(os.path.basename(v))[0]
-    # fallback: look in uploads folder for most recent .zip
+
     try:
         uploads = os.path.join(BACKEND_DIR, "uploads")
         if os.path.isdir(uploads):
@@ -241,11 +279,11 @@ def _get_zip_basename():
                 return os.path.splitext(os.path.basename(zips[0]))[0]
     except Exception:
         pass
+
     return None
 
 
 def main():
-    # Reset used slugs for each run
     _USED_SLUGS.clear()
 
     zip_base = _get_zip_basename()
@@ -257,37 +295,31 @@ def main():
     toc_lines = [title_line, "", "## Table of Contents"]
     body_content = []
 
-    # Attempt to locate the folders used by the analyzer scripts
     docs_path = find_folder(DOCS_FOLDER)
     util_path = find_folder(UTIL_FOLDER)
     sql_path = find_folder(SQL_FOLDER)
     api_path = find_folder(API_FOLDER)
 
-    # --- PROCESS FOLDER 1: Documentation Chapters (Web Pages) ---
     if docs_path:
         process_folder(docs_path, "Web Pages", toc_lines, body_content, is_module=False)
     else:
         print(f"No documentation chapters found (expected folder '{DOCS_FOLDER}').")
 
-    # --- PROCESS FOLDER 2: Utility / Module Chapters ---
     if util_path:
         process_folder(util_path, "Modules/Others", toc_lines, body_content, is_module=True)
     else:
         print(f"No utility/module chapters found (expected folder '{UTIL_FOLDER}').")
 
-    # --- PROCESS FOLDER 3: SQL Reference ---
     if sql_path:
         process_folder(sql_path, "Database Reference (SQL)", toc_lines, body_content, is_module=False)
     else:
         print(f"No SQL docs found (expected folder '{SQL_FOLDER}').")
 
-    # --- PROCESS FOLDER 4: API Reference ---
     if api_path:
         process_folder(api_path, "API Reference", toc_lines, body_content, is_module=False)
     else:
         print(f"No API docs found (expected folder '{API_FOLDER}').")
 
-    # --- WRITE MASTER FILE ---
     if not body_content:
         print("❌ No content found to write. Ensure analyzer scripts produced output in the analyzer folders.")
         return
