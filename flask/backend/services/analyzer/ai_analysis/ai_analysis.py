@@ -43,8 +43,7 @@ def clean_response(text):
     cleaned_lines = list(lines)
 
     leading_patterns = [
-        r'^(Based on|I have|This page|The provided).*?(\.|:)\s*$',
-        r'^(Okay|Sure|Here is|Let me|Below is|The following).*?(\:)?\s*$',
+        r'^(Based on|I have|This page|The provided|Okay|Sure|Here is|Let me|Below is|The following).*?(\.|:)?\s*$',
         r'^.*?(generated|documentation|analysis).*?:\s*$'
     ]
 
@@ -52,11 +51,7 @@ def clean_response(text):
     remove_count = 0
     for i in range(max_head_lines):
         line = lines[i].strip()
-        matched = False
-        for p in leading_patterns:
-            if re.match(p, line, flags=re.IGNORECASE):
-                matched = True
-                break
+        matched = any(re.match(p, line, flags=re.IGNORECASE) for p in leading_patterns)
         if matched:
             remove_count += 1
         else:
@@ -67,8 +62,29 @@ def clean_response(text):
 
     text = "\n".join(cleaned_lines)
 
+    # remove conversational endings
     text = re.sub(
         r'\n*(I hope this helps|Let me know.*|Feel free to ask.*|Do you want me to.*|Would you like me to.*|I can also.*)\s*$',
+        '',
+        text,
+        flags=re.IGNORECASE | re.DOTALL
+    )
+
+    # strip leaked retry wrapper if model copied it
+    text = re.sub(
+        r'###\s*\s*CRITICAL INSTRUCTION.*?$',
+        '',
+        text,
+        flags=re.IGNORECASE | re.DOTALL
+    )
+    text = re.sub(
+        r'###\s*SOURCE PROMPT.*?$',
+        '',
+        text,
+        flags=re.IGNORECASE | re.DOTALL
+    )
+    text = re.sub(
+        r'###\s*SOURCE MATERIAL.*?$',
         '',
         text,
         flags=re.IGNORECASE | re.DOTALL
@@ -142,11 +158,11 @@ def enforce_output_template(text: str, prompt_type: str, expected_title: str) ->
     text = (text or "").strip()
 
     if prompt_type == "page":
-        if not re.search(r'^\s*#\s*Page\s*:', text, flags=re.IGNORECASE | re.MULTILINE):
+        if not re.search(r'^\s*#+\s*Page\s*:', text, flags=re.IGNORECASE | re.MULTILINE):
             text = f"# Page: {expected_title}\n\n" + text
 
     elif prompt_type == "module":
-        if not re.search(r'^\s*#\s*Module\s*:', text, flags=re.IGNORECASE | re.MULTILINE):
+        if not re.search(r'^\s*#+\s*Module\s*:', text, flags=re.IGNORECASE | re.MULTILINE):
             text = f"# Module: {expected_title}\n\n" + text
 
     return text
@@ -157,15 +173,18 @@ def validate_required_structure(text: str, prompt_type: str):
     text_lower = text.lower()
 
     if prompt_type == "page":
-        required_headers = [
-            "# page:",
-            "### 1. user purpose",
-            "### 2. key events & logic",
-            "### 3. data interactions",
-        ]
-        for h in required_headers:
-            if h not in text_lower:
-                return False, f"Missing required section: {h}"
+        header_patterns = {
+            "page": r"^\s*#+\s*page\s*:",
+            "web page file": r"^\s*\**web\s*page\s*file:\**\s*.+$",
+            "code-behind file": r"^\s*\**code\s*-\s*behind\s*file:\**\s*.+$",
+            "user purpose": r"^\s*#+\s*1\.\s*user\s*purpose\b",
+            "key events & logic": r"^\s*#+\s*2\.\s*key\s*events\s*&?\s*logic\b",
+            "data interactions": r"^\s*#+\s*3\.\s*data\s*interactions\b",
+        }
+
+        for name, pattern in header_patterns.items():
+            if not re.search(pattern, text, flags=re.IGNORECASE | re.MULTILINE):
+                return False, f"Missing required section: {name}"
 
         if "| Event / Method | Business Logic Summary |" not in text:
             return False, "Missing page events table"
@@ -178,16 +197,18 @@ def validate_required_structure(text: str, prompt_type: str):
         return True, "Passed"
 
     if prompt_type == "module":
-        required_headers = [
-            "# module:",
-            "### 1. purpose",
-            "### 2. key declarations",
-            "### 3. important behavior & side effects",
-            "### 4. data interactions",
-        ]
-        for h in required_headers:
-            if h not in text_lower:
-                return False, f"Missing required section: {h}"
+        header_patterns = {
+            "module": r"^\s*#+\s*module\s*:",
+            "file": r"^\s*\*\*file:\*\*\s*.+$",
+            "purpose": r"^\s*#+\s*1\.\s*purpose\b",
+            "key declarations": r"^\s*#+\s*2\.\s*key\s*declarations\b",
+            "important behavior & side effects": r"^\s*#+\s*3\.\s*important\s*behavior\s*&?\s*side\s*effects\b",
+            "data interactions": r"^\s*#+\s*4\.\s*data\s*interactions\b",
+        }
+
+        for name, pattern in header_patterns.items():
+            if not re.search(pattern, text, flags=re.IGNORECASE | re.MULTILINE):
+                return False, f"Missing required section: {name}"
 
         if "| Symbol | Kind | Description |" not in text:
             return False, "Missing module declarations table"
@@ -203,35 +224,56 @@ def validate_required_structure(text: str, prompt_type: str):
 
 
 def validate_critical_errors(text, prompt_type="unknown"):
-    text_lower = (text or "").lower()
+    text = (text or "").strip()
+    text_lower = text.lower()
 
-    if not text or len(text.strip()) < 10:
+    if not text or len(text) < 10:
         return False, "Output was empty or too short."
 
-    cs_indicators = 0
-    if "{" in text and "}" in text:
-        cs_indicators += 1
-    if ";" in text:
-        cs_indicators += 1
-    if "void " in text_lower or "public " in text_lower or "class " in text_lower:
-        cs_indicators += 1
-    if cs_indicators >= 2:
-        return False, "Detected C# Code Syntax"
+    # Strong C# detection only — avoid false positives from prose/jQuery examples
+    csharp_patterns = [
+        r'^\s*(public|private|protected|internal)\s+(partial\s+)?class\b',
+        r'^\s*(public|private|protected|internal)\s+\w[\w<>\[\],\s]*\s+\w+\s*\([^)]*\)\s*\{?',
+        r'^\s*using\s+[A-Za-z0-9_.]+\s*;',
+        r'^\s*namespace\s+[A-Za-z0-9_.]+\s*\{?',
+        r'^\s*\[(HttpGet|HttpPost|HttpPut|HttpDelete|Route|Authorize)[^\]]*\]',
+        r'^\s*return\s+View\s*\(',
+        r'^\s*return\s+Json\s*\(',
+        r'^\s*model\s+[A-Za-z0-9_.<>]+\s*$',
+        r'^\s*@model\s+[A-Za-z0-9_.<>]+\s*$',
+    ]
+    for pattern in csharp_patterns:
+        if re.search(pattern, text, flags=re.IGNORECASE | re.MULTILINE):
+            return False, "Detected C# Code Syntax"
 
-    vb_indicators = 0
-    if "end sub" in text_lower or "end function" in text_lower or "end class" in text_lower:
-        vb_indicators += 1
-    if "dim " in text_lower and " as " in text_lower:
-        vb_indicators += 1
-    if "handles me.load" in text_lower or "inherits system.web" in text_lower:
-        vb_indicators += 1
-    if vb_indicators >= 2:
-        return False, "Detected VB.NET Code Structure"
+    # Strong VB.NET detection
+    vb_patterns = [
+        r'^\s*(Public|Private|Protected|Friend)\s+(Class|Module|Sub|Function)\b',
+        r'^\s*End\s+(Sub|Function|Class|Module)\b',
+        r'^\s*Dim\s+\w+\s+As\s+\w+',
+        r'^\s*Imports\s+[A-Za-z0-9_.]+',
+        r'^\s*Inherits\s+[A-Za-z0-9_.]+',
+        r'^\s*Handles\s+[A-Za-z0-9_.]+',
+    ]
+    for pattern in vb_patterns:
+        if re.search(pattern, text, flags=re.IGNORECASE | re.MULTILINE):
+            return False, "Detected VB.NET Code Structure"
 
-    if "```csharp" in text_lower or "```cs" in text_lower or "```sql" in text_lower or "```vb" in text_lower:
-        return False, "Detected Code Block (C#, SQL, or VB)"
+    # Explicit code fences
+    if re.search(r'```(csharp|cs|sql|vb|javascript|js|json|html)?', text_lower):
+        return False, "Detected Code Block"
 
-    for kw in ["public partial class", "protected void", "private void", "partial public class"]:
+    # Strong forbidden phrases
+    forbidden_keywords = [
+        "public partial class",
+        "protected void",
+        "private void",
+        "partial public class",
+        "end sub",
+        "end function",
+        "end class",
+    ]
+    for kw in forbidden_keywords:
         if kw in text_lower:
             return False, f"Detected Code Keyword: '{kw}'"
 
@@ -248,7 +290,7 @@ def validate_critical_errors(text, prompt_type="unknown"):
         return False, struct_reason
 
     if len(text) > 300:
-        compressed = zlib.compress(text.encode('utf-8'))
+        compressed = zlib.compress(text.encode("utf-8"))
         ratio = len(compressed) / len(text)
         if ratio < 0.18:
             return False, f"Detected highly repetitive output (Entropy: {ratio:.2f})"
@@ -257,7 +299,7 @@ def validate_critical_errors(text, prompt_type="unknown"):
 
 
 def extract_code_chunk(prompt_text):
-    m = re.search(r'### ⬇️ RAW (?:CODE BEHIND INPUT|MODULE INPUT) ⬇️\n(.*?)\n### ⬆️ END OF INPUT ⬆️', prompt_text, flags=re.DOTALL)
+    m = re.search(r'### RAW (?:CODE BEHIND INPUT|MODULE INPUT)\n(.*?)\n### END OF INPUT', prompt_text, flags=re.DOTALL)
     return m.group(1) if m else None
 
 
@@ -294,9 +336,13 @@ def count_sections_in_output(text):
         + len(re.findall(r'^\s*#\s*Utility', text, flags=re.MULTILINE))
     )
 
+def natural_sort_key(filename: str):
+    stem = os.path.splitext(filename)[0]
+    parts = re.split(r'(\d+)', stem.lower())
+    return [int(p) if p.isdigit() else p for p in parts]
 
 def generate_single_item_output(llm, prompt_text, single_block):
-    pattern = r'(### ⬇️ RAW (?:CODE BEHIND INPUT|MODULE INPUT) ⬇️\n)(.*?)(\n### ⬆️ END OF INPUT ⬆️)'
+    pattern = r'(### RAW (?:CODE BEHIND INPUT|MODULE INPUT)\n)(.*?)(\n### END OF INPUT)'
     replacement = r'\1' + single_block + r'\3'
     per_item_prompt = re.sub(pattern, replacement, prompt_text, flags=re.DOTALL)
 
@@ -371,7 +417,7 @@ def main():
         temperature=0.1,
         num_ctx=8192,
         num_predict=4096,
-        stop=["<|eot_id|>", "### SYSTEM ROLE", "### ⬇️ RAW"]
+        stop=["<|eot_id|>", "### SYSTEM ROLE", "### RAW"]
     )
 
     os.makedirs(ANALYSIS_OUTPUT_BASE, exist_ok=True)
@@ -398,7 +444,8 @@ def main():
         os.makedirs(abs_output, exist_ok=True)
 
         files = [f for f in os.listdir(abs_input) if f.lower().endswith(".txt")]
-        files.sort(key=str.lower)
+
+        files.sort(key=natural_sort_key)
 
         for filename in files:
             output_filename = filename.replace(".txt", ".md")
@@ -431,7 +478,7 @@ def main():
                         raw_buffer += chunk
                     print("\n")
                 except Exception as e:
-                    print(f"\n    💥 Generation Error: {e}")
+                    print(f"\n    💥 Error: {e}")
                     raw_buffer = ""
 
                 cleaned_text = clean_response(raw_buffer)
@@ -447,16 +494,77 @@ def main():
                 else:
                     print(f"    ❌ FATAL ERROR: {reason}")
 
-                current_prompt = textwrap.dedent(f"""
-### 🛑 CRITICAL INSTRUCTION - READ CAREFULLY
-Your previous output failed because: {reason}
+                if prompt_type == "page":
+                    current_prompt = textwrap.dedent(f"""
+Return ONLY the completed document below.
+Do not add any text before it.
+Do not add any text after it.
+Do not include instructions.
+Do not write code.
+If something cannot be determined, write: Not specified.
 
-You MUST follow the required output format exactly.
-You MUST NOT add introductions, conclusions, or follow-up questions.
-You MUST NOT write code.
-You MUST NOT write anything outside the required template.
+# Page: {expected_title}
+Web Page File: Not specified
+Code-Behind File: Not specified
 
-### SOURCE PROMPT
+### 1. User Purpose
+Not specified
+
+### 2. Key Events & Logic
+| Event / Method | Business Logic Summary |
+| :--- | :--- |
+| Not specified | Not specified |
+
+### 3. Data Interactions
+* **Reads:** Not specified
+* **Writes:** Not specified
+
+Use the source material below to replace the placeholder content above.
+
+### SOURCE MATERIAL
+{original_prompt}
+""")
+
+                elif prompt_type == "module":
+                    current_prompt = textwrap.dedent(f"""
+Return ONLY the completed document below.
+Do not add any text before it.
+Do not add any text after it.
+Do not include instructions.
+Do not write code.
+If something cannot be determined, write: Not specified.
+
+# Module: {expected_title}
+**File:** Not specified
+
+### 1. Purpose
+Not specified
+
+### 2. Key Declarations
+| Symbol | Kind | Description |
+| :--- | :--- | :--- |
+| Not specified | Not specified | Not specified |
+
+### 3. Important Behavior & Side Effects
+- Not specified
+
+### 4. Data Interactions
+* **Reads:** Not specified
+* **Writes:** Not specified
+
+Use the source material below to replace the placeholder content above.
+
+### SOURCE MATERIAL
+{original_prompt}
+""")
+
+                else:
+                    current_prompt = textwrap.dedent(f"""
+Return ONLY the completed document.
+Do not add any extra text.
+Use the source material below.
+
+### SOURCE MATERIAL
 {original_prompt}
 """)
 
@@ -478,9 +586,48 @@ You MUST NOT write anything outside the required template.
                             per_item_results.append(cleaned_single or raw_single)
                     final_output = "\n\n".join(per_item_results)
             else:
-                print(f"    ! ABORTING {filename} - Saving partial output.")
-                final_output = cleaned_text if cleaned_text else raw_buffer
+                print(f"    ! ABORTING {filename} - Using fallback template.")
 
+                if prompt_type == "page":
+                    final_output = f"""# Page: {expected_title}
+Web Page File: Not specified
+Code-Behind File: Not specified
+
+### 1. User Purpose
+Generation failed after {MAX_RETRIES} attempts.
+
+### 2. Key Events & Logic
+| Event / Method | Business Logic Summary |
+| :--- | :--- |
+| Unknown | Generation failed |
+
+### 3. Data Interactions
+* **Reads:** Not specified
+* **Writes:** Not specified
+"""
+
+                elif prompt_type == "module":
+                    final_output = f"""# Module: {expected_title}
+**File:** Not specified
+
+### 1. Purpose
+Generation failed after {MAX_RETRIES} attempts.
+
+### 2. Key Declarations
+| Symbol | Kind | Description |
+| :--- | :--- | :--- |
+| Unknown | Unknown | Generation failed |
+
+### 3. Important Behavior & Side Effects
+- Unable to determine behavior due to repeated validation failure.
+
+### 4. Data Interactions
+* **Reads:** Not specified
+* **Writes:** Not specified
+"""
+
+                else:
+                    final_output = cleaned_text if cleaned_text else raw_buffer
             with open(out_path, "w", encoding="utf-8") as f:
                 f.write(final_output)
             print(f"    Saved: {out_path}")

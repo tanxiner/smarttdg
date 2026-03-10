@@ -38,7 +38,7 @@ Code-Behind File: {codebehind_file}
 - If there is no explicit domain or entity name visible in the input, write the User Purpose exactly as:
   This page's user purpose is Unknown (no explicit domain information in the code).
 
-### 🛑 HARD NEGATIVE CONSTRAINTS
+### HARD NEGATIVE CONSTRAINTS
 1. NO code blocks (C#, VB.NET, SQL).
 2. NO installation / setup sections.
 3. NO low-level ASP.NET explanations — explain what *this specific page* does.
@@ -62,9 +62,9 @@ Code-Behind File: {codebehind_file}
 
 --- 
 
-### ⬇️ RAW INPUT (combined objects) ⬇️
+### RAW INPUT (combined objects)
 {code_chunk}
-### ⬆️ END OF INPUT ⬆️
+### END OF INPUT 
 
 Instruction: Document the page above. Focus on user actions, key events/methods and data flow.
 """
@@ -85,7 +85,6 @@ attributes), important side effects, and data interactions.
 3. If no runtime data access exists, explicitly state "None at runtime".
 
 ### OUTPUT FORMAT (one document per module)
-# Module: {module_name}
 **File:** {module_file}
 
 ### 1. Purpose
@@ -107,9 +106,9 @@ Kinds may include: Method, Function, Class, Attribute, Constant, Event, Table, V
 
 ---
 
-### ⬇️ RAW MODULE INPUT ⬇️
+### RAW INPUT 
 {code_chunk}
-### ⬆️ END OF INPUT ⬆️
+### END OF INPUT
 """
 
 def clean_data(item):

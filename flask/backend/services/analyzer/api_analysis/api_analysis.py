@@ -111,6 +111,11 @@ def detect_duplicate_table_rows(text, threshold=6):
 
     return False, "OK"
 
+def natural_sort_key(filename: str):
+    stem = os.path.splitext(filename)[0]
+    parts = re.split(r'(\d+)', stem.lower())
+    return [int(p) if p.isdigit() else p for p in parts]
+
 # --- VALIDATOR ---
 def validate_output(text):
     text = (text or "").strip()
@@ -245,7 +250,8 @@ def main():
         return
 
     files = [f for f in os.listdir(INPUT_FOLDER) if f.lower().endswith(".txt")]
-    files.sort(key=str.lower)
+
+    files.sort(key=natural_sort_key)
 
     if not files:
         print(f"No API prompt files found in '{INPUT_FOLDER}'. Skipping api_analysis.")

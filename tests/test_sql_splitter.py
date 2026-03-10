@@ -1,5 +1,4 @@
-import sql_splitter as ss
-
+from services.analyzer.sql_analysis import sql_splitter as ss
 
 def test_get_dynamic_acronyms_extracts_uppercase_tokens():
     text = "SELECT * FROM TAMS_USER WHERE API_ID = 1 AND SBS_CODE = 'X'"

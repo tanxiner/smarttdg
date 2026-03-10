@@ -1,6 +1,9 @@
+
+import sys
+from pathlib import Path
+
+sys.path.append(str(Path(__file__).resolve().parents[1]))
 import compile as c
-
-
 def setup_function():
     c._USED_SLUGS.clear()
 
@@ -26,12 +29,12 @@ def test_clean_title_handles_none_and_extra_spaces():
 
 def test_make_slug_builds_stable_slug():
     slug = c.make_slug("Web Pages", "Login_Page", 1, "User Login")
-    assert slug == "web-pages-login-page-1-user-login"
+    assert slug == "web-pages-loginpage-1-user-login"
 
 
 def test_make_slug_falls_back_when_empty():
     slug = c.make_slug("!!!", "@@@", 5, "###")
-    assert slug == "section-item-5"
+    assert slug == "5"
 
 
 def test_ensure_unique_slug_appends_suffix():

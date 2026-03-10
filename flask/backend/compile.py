@@ -46,20 +46,6 @@ def parse_part_info(filename: str):
     return base_key, part_num
 
 
-def sort_key(filename):
-    """
-    Natural sort for files with _partN suffix.
-    Falls back to filename + trailing number sort.
-    """
-    info = parse_part_info(filename)
-    if info:
-        base_key, part_num = info
-        return (base_key.lower(), part_num)
-
-    stem = os.path.splitext(filename)[0]
-    return (re.sub(r'\d+', '', stem).lower(), get_file_order(stem), stem.lower())
-
-
 def clean_title(raw_title):
     """
     Extracts the core title from a header text.
@@ -120,27 +106,60 @@ def normalize_whitespace(text):
     text = re.sub(r'\n{3,}', '\n\n', text)
     return text
 
-def sort_key(filename):
-    info = parse_part_info(filename)
-    if info:
-        base_key, part_num = info
-        return (base_key.lower(), part_num)
-
+def sql_sort_key(filename):
     stem = os.path.splitext(filename)[0]
-    return (re.sub(r'\d+', '', stem).lower(), get_file_order(stem), stem.lower())
+
+    m = re.match(r'^(?P<seq>\d+)_?(?P<name>.*?)(?:_part(?P<part>\d+))?$', stem, flags=re.IGNORECASE)
+    if m:
+        seq = int(m.group("seq"))
+        name = (m.group("name") or "").lower()
+        part = int(m.group("part")) if m.group("part") else 0
+        return (seq, name, part)
+
+    # fallback natural sort
+    parts = re.split(r'(\d+)', stem.lower())
+    return tuple(int(p) if p.isdigit() else p for p in parts)
+
+
+def api_sort_key(filename):
+    stem = os.path.splitext(filename)[0]
+    parts = re.split(r'(\d+)', stem.lower())
+    return [int(p) if p.isdigit() else p for p in parts]
 
 
 def non_sql_sort_key(filename):
     stem = os.path.splitext(filename)[0]
 
-    m = re.match(r'^(Page|Module)_Unknown_(\d+)_(.+)$', stem, flags=re.IGNORECASE)
+    m = re.match(r'^(Page_.+?)_(\d+)_(.+)$', stem, flags=re.IGNORECASE)
     if m:
-        kind = m.group(1).lower()
+        prefix = m.group(1).lower()
         idx = int(m.group(2))
         rest = m.group(3).lower()
-        return (kind, idx, rest)
+        return (0, prefix, idx, rest)
 
-    return (stem.lower(),)
+    m = re.match(r'^(Module_.+?)_(\d+)_(.+)$', stem, flags=re.IGNORECASE)
+    if m:
+        prefix = m.group(1).lower()
+        idx = int(m.group(2))
+        rest = m.group(3).lower()
+        return (1, prefix, idx, rest)
+
+    parts = re.split(r'(\d+)', stem.lower())
+    natural = [int(p) if p.isdigit() else p for p in parts]
+    return (2, *natural)
+
+    # Match Module_..._<number>_...
+    m = re.match(r'^(Module_.+?)_(\d+)_(.+)$', stem, flags=re.IGNORECASE)
+    if m:
+        prefix = m.group(1).lower()
+        idx = int(m.group(2))
+        rest = m.group(3).lower()
+        return (1, prefix, idx, rest)
+
+    # General natural sort fallback
+    parts = re.split(r'(\d+)', stem.lower())
+    natural = [int(p) if p.isdigit() else p for p in parts]
+    return (2, *natural)
 
 def process_folder(folder_path, section_name, toc_lines, body_content, is_module=False):
     """
@@ -158,9 +177,9 @@ def process_folder(folder_path, section_name, toc_lines, body_content, is_module
         return
 
     if "database reference (sql)" in section_name.lower():
-        files.sort(key=sort_key)
+        files.sort(key=sql_sort_key)
     elif "api reference" in section_name.lower():
-        files.sort(key=str.lower)
+        files.sort(key=api_sort_key)
     else:
         files.sort(key=non_sql_sort_key)
 

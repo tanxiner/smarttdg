@@ -1,6 +1,5 @@
 import convert_doc as cd
 
-
 def test_strip_md_heading_prefix_removes_hashes():
     assert cd.strip_md_heading_prefix("### My Title") == "My Title"
 
@@ -31,7 +30,7 @@ def test_md_bullet_text_supports_multiple_bullet_styles():
     assert cd.md_bullet_text("- Alpha") == "Alpha"
     assert cd.md_bullet_text("* Beta") == "Beta"
     assert cd.md_bullet_text("+ Gamma") == "Gamma"
-    assert cd.md_bullet_text("• Delta") == "Delta"
+    assert cd.md_bullet_text("\u2022 Delta") == "Delta"
     assert cd.md_bullet_text("Not a bullet") == ""
 
 

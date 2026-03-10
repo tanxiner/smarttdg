@@ -1,5 +1,4 @@
-from diagram_generator import DiagramGenerator
-
+from services.analyzer.diagram_generator import DiagramGenerator
 
 def make_gen():
     return DiagramGenerator([])

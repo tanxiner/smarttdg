@@ -53,9 +53,9 @@ If the purpose cannot be determined, write "Purpose unknown — insufficient met
 
 ---
 
-### ⬇️ RAW ENDPOINT METADATA ⬇️
+### RAW ENDPOINT METADATA 
 {metadata_chunk}
-### ⬆️ END OF METADATA ⬆️
+### END OF METADATA 
 
 Instruction: Document the API endpoint above. Focus on purpose, parameters, return value, and expected behaviour.
 """
