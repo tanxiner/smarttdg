@@ -9,12 +9,18 @@ namespace Roslyn.Analyzers
 {
     /// <summary>
     /// Discovery-based API endpoint detector for legacy ASP.NET target systems.
-    /// Detects WebAPI, MVC, ASMX, ASHX and WCF endpoint candidates from C# source.
+    /// Detects API-style endpoints only:
+    /// - WebAPI / ApiController / ControllerBase with strong API signals
+    /// - ASMX
+    /// - ASHX
+    /// - WCF
+    /// Excludes normal MVC view endpoints.
     /// </summary>
     public static class ApiEndpointAnalyzer
     {
         private const string ControllerSuffix = "Controller";
         private const string AttributeSuffix = "Attribute";
+
         public static List<ApiEndpoint> Analyze(CompilationUnitSyntax root, string filePath)
         {
             var endpoints = new List<ApiEndpoint>();
@@ -51,6 +57,9 @@ namespace Roslyn.Analyzers
                 var kind = DetectKind(baseTypes, classAttrs);
                 if (kind == null) continue;
 
+                // Exclude non-API MVC controllers
+                if (kind == "mvc") continue;
+
                 var routePrefix = GetRoutePrefix(classDecl, kind);
 
                 // ASHX code-behind (IHttpHandler / IHttpAsyncHandler)
@@ -79,6 +88,7 @@ namespace Roslyn.Analyzers
                         var methodAttrs = method.AttributeLists
                             .SelectMany(al => al.Attributes)
                             .Select(a => a.Name.ToString()).ToList();
+
                         if (!methodAttrs.Any(a => NormalizeAttr(a) == "OperationContract")) continue;
 
                         endpoints.Add(new ApiEndpoint
@@ -105,6 +115,7 @@ namespace Roslyn.Analyzers
                         var methodAttrs = method.AttributeLists
                             .SelectMany(al => al.Attributes)
                             .Select(a => a.Name.ToString()).ToList();
+
                         if (!methodAttrs.Any(a => NormalizeAttr(a) == "WebMethod")) continue;
 
                         endpoints.Add(new ApiEndpoint
@@ -123,23 +134,24 @@ namespace Roslyn.Analyzers
                     continue;
                 }
 
-                // WebAPI / MVC: walk public action methods
+                // WebAPI only: require strong API-style signals
                 foreach (var method in classDecl.Members.OfType<MethodDeclarationSyntax>())
                 {
                     var methodAttrs = method.AttributeLists
                         .SelectMany(al => al.Attributes)
                         .Select(a => a.Name.ToString()).ToList();
 
-                    var httpMethods = ExtractHttpMethods(methodAttrs);
-                    bool hasRouteAttr = methodAttrs.Any(a => NormalizeAttr(a) == "Route");
-                    bool returnsAction = IsActionResult(method.ReturnType?.ToString() ?? "");
+                    // Skip [NonAction]
+                    if (methodAttrs.Any(a => NormalizeAttr(a) == "NonAction")) continue;
 
-                    // Only include action-like methods
-                    if (!httpMethods.Any() && !hasRouteAttr && !returnsAction) continue;
-
-                    // Skip non-public methods
                     bool isPublic = method.Modifiers.Any(m => m.Text == "public");
                     if (!isPublic) continue;
+
+                    var httpMethods = ExtractHttpMethods(methodAttrs);
+                    bool hasRouteAttr = methodAttrs.Any(a => NormalizeAttr(a) == "Route");
+
+                    // Only include strong API signals
+                    if (!httpMethods.Any() && !hasRouteAttr) continue;
 
                     var methodRoute = ExtractMethodRoute(method, routePrefix, className, kind);
 
@@ -163,8 +175,6 @@ namespace Roslyn.Analyzers
             return endpoints;
         }
 
-        // ------------------------------------------------------------------ helpers
-
         private static string? DetectKind(List<string> baseTypes, List<string> classAttrs)
         {
             // ASHX code-behind
@@ -181,16 +191,16 @@ namespace Roslyn.Analyzers
             if (baseTypes.Any(b => b == "WebService" || b.EndsWith(".WebService")))
                 return "asmx";
 
-            // ASP.NET Core / WebAPI 2 attribute-annotated controller
+            // ASP.NET Core / WebAPI attribute-annotated controller
             if (classAttrs.Any(a => NormalizeAttr(a) == "ApiController"))
                 return "webapi";
 
-            // WebAPI 2 (inherits ApiController)
+            // WebAPI 2 / ASP.NET Core base types
             if (baseTypes.Any(b => b == "ApiController" || b.EndsWith(".ApiController")
                                 || b == "ControllerBase" || b.EndsWith(".ControllerBase")))
                 return "webapi";
 
-            // MVC
+            // MVC (non-API)
             if (baseTypes.Any(b => b == "Controller" || b.EndsWith(".Controller")))
                 return "mvc";
 
@@ -199,7 +209,6 @@ namespace Roslyn.Analyzers
 
         private static string NormalizeAttr(string attr)
         {
-            // Strip generic args, then strip trailing "Attribute" suffix
             var name = attr.Contains('<') ? attr.Substring(0, attr.IndexOf('<')) : attr;
             if (name.EndsWith(AttributeSuffix))
                 name = name.Substring(0, name.Length - AttributeSuffix.Length);
@@ -224,14 +233,15 @@ namespace Roslyn.Analyzers
                     }
                 }
             }
-            // Conventional fallback for MVC/WebAPI
-            if (kind == "mvc" || kind == "webapi")
+
+            if (kind == "webapi")
             {
                 var name = classDecl.Identifier.Text;
                 if (name.EndsWith(ControllerSuffix))
                     name = name.Substring(0, name.Length - ControllerSuffix.Length);
                 return "/api/" + name;
             }
+
             return null;
         }
 
@@ -242,13 +252,13 @@ namespace Roslyn.Analyzers
             {
                 switch (NormalizeAttr(a))
                 {
-                    case "HttpGet":     result.Add("GET");     break;
-                    case "HttpPost":    result.Add("POST");    break;
-                    case "HttpPut":     result.Add("PUT");     break;
-                    case "HttpDelete":  result.Add("DELETE");  break;
-                    case "HttpPatch":   result.Add("PATCH");   break;
+                    case "HttpGet": result.Add("GET"); break;
+                    case "HttpPost": result.Add("POST"); break;
+                    case "HttpPut": result.Add("PUT"); break;
+                    case "HttpDelete": result.Add("DELETE"); break;
+                    case "HttpPatch": result.Add("PATCH"); break;
                     case "HttpOptions": result.Add("OPTIONS"); break;
-                    case "HttpHead":    result.Add("HEAD");    break;
+                    case "HttpHead": result.Add("HEAD"); break;
                 }
             }
             return result.Distinct().ToList();
@@ -257,25 +267,12 @@ namespace Roslyn.Analyzers
         private static string[] InferHttpMethods(string methodName)
         {
             var lname = methodName.ToLowerInvariant();
-            if (lname.StartsWith("get"))                                          return new[] { "GET" };
-            if (lname.StartsWith("post") || lname.StartsWith("create")
-                                         || lname.StartsWith("add"))             return new[] { "POST" };
-            if (lname.StartsWith("put")  || lname.StartsWith("update"))         return new[] { "PUT" };
-            if (lname.StartsWith("delete") || lname.StartsWith("remove"))       return new[] { "DELETE" };
-            if (lname.StartsWith("patch"))                                        return new[] { "PATCH" };
+            if (lname.StartsWith("get")) return new[] { "GET" };
+            if (lname.StartsWith("post") || lname.StartsWith("create") || lname.StartsWith("add")) return new[] { "POST" };
+            if (lname.StartsWith("put") || lname.StartsWith("update")) return new[] { "PUT" };
+            if (lname.StartsWith("delete") || lname.StartsWith("remove")) return new[] { "DELETE" };
+            if (lname.StartsWith("patch")) return new[] { "PATCH" };
             return Array.Empty<string>();
-        }
-
-        private static bool IsActionResult(string returnType)
-        {
-            var t = returnType.TrimStart();
-            return t == "ActionResult"
-                || t.StartsWith("ActionResult<")
-                || t == "IActionResult"
-                || t == "IHttpActionResult"
-                || t.StartsWith("Task<ActionResult")
-                || t.StartsWith("Task<IActionResult")
-                || t.StartsWith("Task<IHttpActionResult");
         }
 
         private static string ExtractMethodRoute(
@@ -317,7 +314,7 @@ namespace Roslyn.Analyzers
             List<string> baseTypes, List<string> classAttrs, List<string> methodAttrs, string kind)
         {
             var parts = new List<string> { "kind=" + kind };
-            if (baseTypes.Any())  parts.Add("base types: " + string.Join(", ", baseTypes));
+            if (baseTypes.Any()) parts.Add("base types: " + string.Join(", ", baseTypes));
             if (classAttrs.Any()) parts.Add("class attrs: " + string.Join(", ", classAttrs));
             if (methodAttrs.Any()) parts.Add("method attrs: " + string.Join(", ", methodAttrs));
             return string.Join("; ", parts);
@@ -327,7 +324,12 @@ namespace Roslyn.Analyzers
 
         /// <summary>
         /// Discovery-based API endpoint detection for VB.NET source files.
-        /// Detects the same patterns as the C# overload: WebAPI, MVC, ASMX, ASHX, WCF.
+        /// Detects API-style endpoints only:
+        /// - WebAPI
+        /// - ASMX
+        /// - ASHX
+        /// - WCF
+        /// Excludes normal MVC view endpoints.
         /// </summary>
         public static List<ApiEndpoint> Analyze(VBS.CompilationUnitSyntax root, string filePath)
         {
@@ -338,13 +340,11 @@ namespace Roslyn.Analyzers
             {
                 var className = classBlock.ClassStatement.Identifier.Text;
 
-                // VB: base types come from Inherits clauses; implemented interfaces from Implements clauses
                 var baseTypes = classBlock.Inherits
                     .SelectMany(i => i.Types.Select(t => t.ToString()))
                     .Concat(classBlock.Implements.SelectMany(i => i.Types.Select(t => t.ToString())))
                     .ToList();
 
-                // VB: class-level attributes are on ClassStatement
                 var classAttrs = classBlock.ClassStatement.AttributeLists
                     .SelectMany(al => al.Attributes)
                     .Select(a => a.Name.ToString())
@@ -353,9 +353,11 @@ namespace Roslyn.Analyzers
                 var kind = DetectKind(baseTypes, classAttrs);
                 if (kind == null) continue;
 
+                // Exclude non-API MVC controllers
+                if (kind == "mvc") continue;
+
                 var routePrefix = GetVbRoutePrefix(classBlock, kind);
 
-                // ASHX code-behind
                 if (kind == "ashx")
                 {
                     endpoints.Add(new ApiEndpoint
@@ -373,7 +375,6 @@ namespace Roslyn.Analyzers
                     continue;
                 }
 
-                // Walk method blocks (Function/Sub with a body)
                 foreach (var methodBlock in classBlock.Members.OfType<VBS.MethodBlockSyntax>())
                 {
                     var methodStmt = methodBlock.SubOrFunctionStatement;
@@ -384,7 +385,9 @@ namespace Roslyn.Analyzers
                         .Select(a => a.Name.ToString())
                         .ToList();
 
-                    // WCF: only [OperationContract] methods
+                    // Skip [NonAction]
+                    if (methodAttrs.Any(a => NormalizeAttr(a) == "NonAction")) continue;
+
                     if (kind == "wcf")
                     {
                         if (!methodAttrs.Any(a => NormalizeAttr(a) == "OperationContract")) continue;
@@ -405,7 +408,6 @@ namespace Roslyn.Analyzers
                         continue;
                     }
 
-                    // ASMX: only [WebMethod] methods
                     if (kind == "asmx")
                     {
                         if (!methodAttrs.Any(a => NormalizeAttr(a) == "WebMethod")) continue;
@@ -426,19 +428,18 @@ namespace Roslyn.Analyzers
                         continue;
                     }
 
-                    // WebAPI / MVC: public action methods
                     bool isPublic = methodStmt.Modifiers.Any(m =>
                         string.Equals(m.Text, "Public", StringComparison.OrdinalIgnoreCase));
                     if (!isPublic) continue;
 
                     var httpMethods = ExtractHttpMethods(methodAttrs);
                     bool hasRouteAttr = methodAttrs.Any(a => NormalizeAttr(a) == "Route");
-                    var vbReturnType = (methodStmt.AsClause as VBS.SimpleAsClauseSyntax)?.Type?.ToString() ?? "Void";
-                    bool returnsAction = IsActionResult(vbReturnType);
 
-                    if (!httpMethods.Any() && !hasRouteAttr && !returnsAction) continue;
+                    // Only include strong API signals
+                    if (!httpMethods.Any() && !hasRouteAttr) continue;
 
                     var methodRoute = GetVbMethodRoute(methodStmt, routePrefix, methodName);
+                    var vbReturnType = (methodStmt.AsClause as VBS.SimpleAsClauseSyntax)?.Type?.ToString() ?? "Void";
 
                     endpoints.Add(new ApiEndpoint
                     {
@@ -460,8 +461,6 @@ namespace Roslyn.Analyzers
             return endpoints;
         }
 
-        // -- VB-specific private helpers --
-
         private static string? GetVbRoutePrefix(VBS.ClassBlockSyntax classBlock, string kind)
         {
             foreach (var attrList in classBlock.ClassStatement.AttributeLists)
@@ -481,13 +480,15 @@ namespace Roslyn.Analyzers
                     }
                 }
             }
-            if (kind == "mvc" || kind == "webapi")
+
+            if (kind == "webapi")
             {
                 var name = classBlock.ClassStatement.Identifier.Text;
                 if (name.EndsWith(ControllerSuffix))
                     name = name.Substring(0, name.Length - ControllerSuffix.Length);
                 return "/api/" + name;
             }
+
             return null;
         }
 

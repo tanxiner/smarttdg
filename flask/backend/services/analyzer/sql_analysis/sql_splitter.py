@@ -42,7 +42,7 @@ Document the stored procedure below.
 1. Start your response with exactly:
 # Procedure: {ProcedureName}{PartSuffix}
 
-2. Output ONLY the sections below, in the same order.
+2. You MUST output ALL sections exactly as shown, even if information is not present. If information is missing, write: None
 3. Do NOT add any introduction.
 4. Do NOT add any conclusion.
 5. Do NOT ask follow-up questions.
@@ -52,28 +52,34 @@ Document the stored procedure below.
    - "Do you want me to elaborate"
    - "Would you like me to"
 7. Do NOT rewrite the SQL code.
-8. Do NOT expand acronyms.
+8. Do NOT quote or copy SQL statements.
+9. Describe behavior in plain language only.
+10. Do NOT expand acronyms.
    Treat these as proper nouns: [{ACRONYM_LIST}]
-9. If prior context is provided, use it only to understand earlier setup. Document only the current chunk's contribution while keeping references consistent.
+11. If prior context is provided, use it only to understand earlier setup. Document only the current chunk's contribution while keeping references consistent. Do NOT repeat steps already described in earlier parts.
 
 ### REQUIRED OUTPUT
 # Procedure: {ProcedureName}{PartSuffix}
 
 ### Purpose
-One clear sentence explaining what business task this performs.
+One clear sentence explaining the business task.
 
 ### Parameters
-| Name | Type | Purpose |
-| :--- | :--- | :--- |
-| @ParamName | DataType | Inferred usage |
+ | Name | Type | Purpose |
+ | :--- | :--- | :--- |
+ | @ParamName | DataType | Inferred usage |
 
 ### Logic Flow
-Describe the main processing steps performed in this chunk.
-Avoid repeating the same step in different wording.
+1.
+2.
+3.
 
 ### Data Interactions
 * **Reads:** List tables explicitly selected from
 * **Writes:** List tables inserted/updated/deleted
+* **Joins:** Tables joined in SELECT queries
+
+### Error Handling
 
 ### GLOBAL CONTEXT
 {ContextBlock}

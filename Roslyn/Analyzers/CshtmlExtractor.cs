@@ -120,7 +120,7 @@ namespace Roslyn.Analyzers
                 {
                     text = m.Value.Trim(),
                     modelType = m.Groups[1].Value.Trim(),
-                    line = GetLineNumber(code, m.Index)
+                    //line = GetLineNumber(code, m.Index)
                 });
             }
 
@@ -194,8 +194,8 @@ namespace Roslyn.Analyzers
                             content = snippet.Length > 2
                                 ? snippet.Substring(2, Math.Max(0, snippet.Length - 3)).Trim()
                                 : string.Empty,
-                            startLine = GetLineNumber(code, i),
-                            endLine = GetLineNumber(code, end - 1)
+                            //startLine = GetLineNumber(code, i),
+                            //endLine = GetLineNumber(code, end - 1)
                         });
                         i = end - 1;
                         continue;
@@ -223,8 +223,8 @@ namespace Roslyn.Analyzers
                                 kind = "@" + ident,
                                 text = snippet,
                                 content = snippet.Substring(snippet.IndexOf('{') + 1).TrimEnd('}', ' ', '\r', '\n', '\t'),
-                                startLine = GetLineNumber(code, i),
-                                endLine = GetLineNumber(code, end - 1)
+                                //startLine = GetLineNumber(code, i),
+                                //endLine = GetLineNumber(code, end - 1)
                             });
                             i = end - 1;
                         }
@@ -261,7 +261,7 @@ namespace Roslyn.Analyzers
                     method,
                     id = formId,
                     role,
-                    line = GetLineNumber(code, m.Index)
+                    //line = GetLineNumber(code, m.Index)
                 });
             }
 
@@ -293,7 +293,7 @@ namespace Roslyn.Analyzers
                     text,
                     id = GetAttr(attrs, "id"),
                     cssClass = GetAttr(attrs, "class"),
-                    line = GetLineNumber(markup, m.Index)
+                    //line = GetLineNumber(markup, m.Index)
                 });
             }
 
@@ -320,7 +320,7 @@ namespace Roslyn.Analyzers
                     id = GetAttr(attrs, "id"),
                     role = GetAttr(attrs, "role"),
                     cssClass = GetAttr(attrs, "class"),
-                    line = GetLineNumber(markup, m.Index)
+                    //line = GetLineNumber(markup, m.Index)
                 });
             }
 
@@ -349,7 +349,7 @@ namespace Roslyn.Analyzers
                     value = GetAttr(attrs, "value"),
                     placeholder = GetAttr(attrs, "placeholder"),
                     cssClass = GetAttr(attrs, "class"),
-                    line = GetLineNumber(markup, m.Index)
+                    //line = GetLineNumber(markup, m.Index)
                 });
             }
 
@@ -378,7 +378,7 @@ namespace Roslyn.Analyzers
                     dataDismiss = GetAttr(attrs, "data-dismiss"),
                     dataToggle = GetAttr(attrs, "data-toggle"),
                     title = GetAttr(attrs, "title"),
-                    line = GetLineNumber(markup, m.Index)
+                    //line = GetLineNumber(markup, m.Index)
                 });
             }
 
@@ -396,7 +396,7 @@ namespace Roslyn.Analyzers
                     id = GetAttr(attrs, "id"),
                     text = GetAttr(attrs, "value"),
                     cssClass = GetAttr(attrs, "class"),
-                    line = GetLineNumber(markup, m.Index)
+                    //line = GetLineNumber(markup, m.Index)
                 });
             }
 
@@ -435,7 +435,7 @@ namespace Roslyn.Analyzers
                     title,
                     text,
                     cssClass,
-                    line = GetLineNumber(markup, m.Index)
+                    //line = GetLineNumber(markup, m.Index)
                 });
             }
 
@@ -470,7 +470,7 @@ namespace Roslyn.Analyzers
                     id = GetAttr(attrs, "id"),
                     cssClass = GetAttr(attrs, "class"),
                     headers,
-                    line = GetLineNumber(markup, m.Index)
+                    //line = GetLineNumber(markup, m.Index)
                 });
             }
 
@@ -494,7 +494,7 @@ namespace Roslyn.Analyzers
                     tag = "canvas",
                     id = GetAttr(attrs, "id"),
                     cssClass = GetAttr(attrs, "class"),
-                    line = GetLineNumber(markup, m.Index)
+                    //line = GetLineNumber(markup, m.Index)
                 });
             }
 
@@ -542,7 +542,7 @@ namespace Roslyn.Analyzers
                     tag,
                     id,
                     cssClass,
-                    line = GetLineNumber(markup, m.Index)
+                    //line = GetLineNumber(markup, m.Index)
                 });
             }
 
@@ -575,7 +575,7 @@ namespace Roslyn.Analyzers
                     id,
                     cssClass,
                     role,
-                    line = GetLineNumber(markup, m.Index)
+                    //line = GetLineNumber(markup, m.Index)
                 });
             }
 
@@ -632,7 +632,7 @@ namespace Roslyn.Analyzers
                     dataStop,
                     dataDir,
                     title,
-                    line = GetLineNumber(markup, m.Index)
+                    //line = GetLineNumber(markup, m.Index)
                 });
             }
 
@@ -658,7 +658,7 @@ namespace Roslyn.Analyzers
                     tag = "script",
                     attributes = (m.Groups[1].Value ?? "").Trim(),
                     content = (m.Groups[2].Value ?? "").Trim(),
-                    line = GetLineNumber(code, m.Index)
+                    //line = GetLineNumber(code, m.Index)
                 });
             }
 
@@ -675,7 +675,7 @@ namespace Roslyn.Analyzers
                 {
                     hintType = "window-assignment",
                     value = m.Value.Trim(),
-                    line = GetLineNumber(code, m.Index)
+                    //line = GetLineNumber(code, m.Index)
                 });
             }
 
@@ -685,7 +685,7 @@ namespace Roslyn.Analyzers
                 {
                     hintType = "url-action",
                     value = $"{m.Groups[1].Value}|{m.Groups[2].Value}",
-                    line = GetLineNumber(code, m.Index)
+                    //line = GetLineNumber(code, m.Index)
                 });
             }
 
@@ -695,7 +695,7 @@ namespace Roslyn.Analyzers
                 {
                     hintType = "event-binding",
                     value = $"{m.Groups[1].Value}:{m.Groups[2].Value}",
-                    line = GetLineNumber(code, m.Index)
+                    //line = GetLineNumber(code, m.Index)
                 });
             }
 
@@ -705,7 +705,7 @@ namespace Roslyn.Analyzers
                 {
                     hintType = "init-call",
                     value = "init(",
-                    line = GetLineNumber(code, m.Index)
+                    //line = GetLineNumber(code, m.Index)
                 });
             }
 
@@ -715,7 +715,7 @@ namespace Roslyn.Analyzers
                 {
                     hintType = "draw-call",
                     value = m.Value.Trim(),
-                    line = GetLineNumber(code, m.Index)
+                    //line = GetLineNumber(code, m.Index)
                 });
             }
 

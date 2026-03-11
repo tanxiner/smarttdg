@@ -4,14 +4,31 @@ from docx import Document
 from docx.shared import Pt
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
-from docx2pdf import convert
+import subprocess
+import sys
 
 ### --- FOR PDF --- ###
 def word_to_pdf(input_docx, output_pdf=None):
-    if output_pdf:
-        convert(input_docx, output_pdf)
-    else:
-        convert(input_docx)
+    try:
+        cmd = [
+            sys.executable,
+            "-c",
+            f"from docx2pdf import convert; convert(r'{input_docx}', r'{output_pdf}')"
+        ]
+
+        result = subprocess.run(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
+
+        # Ignore strange Windows exit codes but log them
+        if result.returncode != 0:
+            print("PDF conversion returned non-zero exit code but continuing...")
+            print(result.stderr.decode(errors="ignore"))
+
+    except Exception as e:
+        print(f"PDF conversion skipped due to error: {e}")
 
 ### --- FOR WORD --- ###
 ANCHOR_RE = re.compile(r"^\s*<a\s+id=['\"].*?['\"]\s*>\s*</a>\s*$", re.IGNORECASE)
@@ -111,16 +128,18 @@ def find_toc_range(lines):
 
     for i, raw in enumerate(lines):
         line = raw.strip()
-        if ANCHOR_RE.match(line) or BR_RE.match(line):
+
+        if ANCHOR_RE.match(line):
             continue
+
         if start is None and is_md_h2(line) and md_heading_text(line).lower() == "table of contents":
             start = i
             continue
+
         if start is not None:
-            if looks_like_chapter_title(line) or (
-                is_md_h1(line) and not is_document_title(line)
-            ):
-                end = i
+            # End TOC at the explicit separator before body content
+            if BR_RE.match(line):
+                end = i + 1
                 break
 
     if start is None:
@@ -165,12 +184,7 @@ def collect_toc_structure(md_text: str):
     return [(cat, buckets.get(cat, [])) for cat in order]
 
 def toc_item_to_chapter_title(item: str) -> str:
-    s = item.strip()
-    if s.lower().endswith(".aspx"):
-        return f"Page: {s}"
-    if s.lower().endswith(".vb") or s.lower().endswith(".cs") or s.lower().endswith(".sql"):
-        return s
-    return f"Procedure: {s}"
+    return clean_inline(strip_md_heading_prefix(item)).strip()
 
 def slug_bookmark(text: str) -> str:
     base = re.sub(r"[^A-Za-z0-9_]+", "_", text.strip())
@@ -258,10 +272,20 @@ def markdown_to_word(md_text: str, output_path: str):
     toc = collect_toc_structure(md_text)
 
     bookmark_map = {}
+    category_bookmark_map = {}
     chapter_to_category = {}
     used = set()
 
     for category, items in toc:
+        base = slug_bookmark(category)
+        name = base
+        k = 1
+        while name in used:
+            k += 1
+            name = f"{base}_{k}"
+        used.add(name)
+        category_bookmark_map[category] = name
+
         for item in items:
             chapter_title = toc_item_to_chapter_title(item)
             chapter_title = clean_inline(strip_md_heading_prefix(chapter_title)).strip()
@@ -287,7 +311,13 @@ def markdown_to_word(md_text: str, output_path: str):
 
     doc.add_heading("Table of Contents", level=2)
     for category, items in toc:
-        doc.add_heading(category, level=3)
+        p_cat = doc.add_heading("", level=3)
+        cat_bm = category_bookmark_map.get(category)
+        if cat_bm:
+            add_internal_hyperlink(p_cat, category, cat_bm)
+        else:
+            add_runs_with_bold(p_cat, category)
+
         for item in items:
             chapter_title = toc_item_to_chapter_title(item)
             chapter_title = clean_inline(strip_md_heading_prefix(chapter_title)).strip()
@@ -346,6 +376,19 @@ def markdown_to_word(md_text: str, output_path: str):
             i += 1
             continue
 
+        if is_md_h1(line) and not is_document_title(line):
+            p = doc.add_heading("", level=1)
+            add_runs_with_bold(p, content_line_clean)
+
+            bm = bookmark_map.get(content_line_clean)
+            if bm:
+                add_bookmark(p, bm, bookmark_id)
+                bookmark_id += 1
+
+            prev_blank = False
+            i += 1
+            continue
+
         if is_md_h3(line) and not looks_like_chapter_title(content_line_clean):
             p = doc.add_heading("", level=3)
             add_runs_with_bold(p, content_line_clean)
@@ -356,20 +399,18 @@ def markdown_to_word(md_text: str, output_path: str):
         if is_md_h2(line) and md_heading_text(line).lower() != "table of contents" and not looks_like_chapter_title(content_line_clean):
             p = doc.add_heading("", level=2)
             add_runs_with_bold(p, content_line_clean)
+
+            cat_bm = category_bookmark_map.get(content_line_clean)
+            if cat_bm:
+                add_bookmark(p, cat_bm, bookmark_id)
+                bookmark_id += 1
+
             prev_blank = False
             i += 1
             continue
 
         if looks_like_chapter_title(content_line_clean):
             title = content_line_clean
-
-            cat = chapter_to_category.get(title)
-            if cat and cat not in seen_categories_in_body:
-                if have_written_any_chapter:
-                    doc.add_paragraph("")
-                doc.add_heading(cat, level=2)
-                seen_categories_in_body.add(cat)
-                prev_blank = False
 
             if have_written_any_chapter:
                 doc.add_paragraph("")
@@ -388,18 +429,14 @@ def markdown_to_word(md_text: str, output_path: str):
             continue
 
         if re.match(r"^\d+\.\s+", content_line_clean):
-            # preserve original numeric prefix so numbering visually resets per chapter
             m = re.match(r"^(\d+)\.\s+(.*)", content_line_clean)
             if m:
                 num = m.group(1)
                 text = m.group(2)
-                # render as plain paragraph prefixed with the captured number (not Word automatic numbering)
                 p = doc.add_paragraph()
-                # keep the numeric prefix visible
                 p.add_run(f"{num}. ")
                 add_runs_with_bold(p, text)
             else:
-                # fallback to previous behaviour if regex unexpectedly doesn't match
                 text = re.sub(r"^\d+\.\s+", "", content_line_clean)
                 p = doc.add_paragraph()
                 add_runs_with_bold(p, text)
@@ -435,8 +472,6 @@ def markdown_to_word(md_text: str, output_path: str):
         bt = md_bullet_text(raw)
         if bt:
             indent_level = 0
-
-            # detect nested bullets based on leading whitespace
             if raw.startswith("    ") or raw.startswith("\t"):
                 indent_level = 1
 

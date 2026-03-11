@@ -85,7 +85,7 @@ namespace Roslyn.Analyzers
                         .Distinct()
                         .ToArray();
 
-                    // (Optional) Fields declared in THIS class only
+                    // Fields declared in THIS class only
                     var classFields = c.Members
                         .OfType<CSS.FieldDeclarationSyntax>()
                         .SelectMany(f =>
@@ -104,13 +104,16 @@ namespace Roslyn.Analyzers
                         baseType = c.BaseList?.Types.FirstOrDefault()?.Type.ToString(),
                         interfaces = c.BaseList?.Types.Skip(1).Select(t => t.Type.ToString()).ToArray() ?? Array.Empty<string>(),
 
-                        // ✅ These are what your Python Mermaid generator expects:
+                        // Used by Mermaid / higher-level summaries
                         Methods = classMethods,
                         Properties = classProperties,
                         Fields = classFields
                     };
                 })
                 .ToArray();
+
+            // Not currently used in output; keep commented unless needed later.
+            /*
             var interfaces = root.DescendantNodes().OfType<CSS.InterfaceDeclarationSyntax>()
                 .Select(i => new
                 {
@@ -134,6 +137,7 @@ namespace Roslyn.Analyzers
                     modifiers = GetModifiers(e.Modifiers)
                 })
                 .ToArray();
+            */
 
             var methods = root.DescendantNodes().OfType<CSS.MethodDeclarationSyntax>()
                 .Select(m =>
@@ -147,6 +151,8 @@ namespace Roslyn.Analyzers
                 .Distinct()
                 .ToArray();
 
+            // Not currently used in output; duplicates IR/type-level details.
+            /*
             var properties = root.DescendantNodes().OfType<CSS.PropertyDeclarationSyntax>()
                 .Select(p =>
                 {
@@ -167,6 +173,7 @@ namespace Roslyn.Analyzers
                 })
                 .Distinct()
                 .ToArray();
+            */
 
             var namespaces = root.DescendantNodes()
                 .OfType<CSS.BaseNamespaceDeclarationSyntax>()
@@ -181,11 +188,13 @@ namespace Roslyn.Analyzers
                 .Distinct()
                 .ToArray();
 
-            var dependencies = DependencyExtractor.Extract(filePath, "C#");
+            // Not currently returned; keep disabled unless dependency output is needed.
+            // var dependencies = DependencyExtractor.Extract(filePath, "C#");
 
             // === Collect SQL usages from both the general extractor and the DB-wrapper helper ===
             List<SqlCommandExtractor.SqlUsage> extractUsages = new List<SqlCommandExtractor.SqlUsage>();
             List<SqlCommandExtractor.SqlUsage> wrapperUsages = new List<SqlCommandExtractor.SqlUsage>();
+
             try
             {
                 extractUsages = SqlCommandExtractor.AnalyzeDocument(tree, model, filePath) ?? new List<SqlCommandExtractor.SqlUsage>();
@@ -194,6 +203,7 @@ namespace Roslyn.Analyzers
             {
                 // non-fatal - continue without these usages
             }
+
             try
             {
                 wrapperUsages = SqlCommandExtractor.AnalyzeDbWrapperCalls(root, model, filePath).ToList();
@@ -207,6 +217,7 @@ namespace Roslyn.Analyzers
             var merged = new List<SqlCommandExtractor.SqlUsage>();
             var seen = new HashSet<string>();
             IEnumerable<SqlCommandExtractor.SqlUsage> all = extractUsages.Concat(wrapperUsages);
+
             foreach (var u in all.OrderByDescending(u => !string.IsNullOrEmpty(u.SqlText)).ThenBy(u => u.Line))
             {
                 var key = $"{u.Kind}|{u.Line}|{(u.SqlText ?? "").Trim()}|{(u.RawSnippet ?? "").Trim()}";
@@ -237,14 +248,8 @@ namespace Roslyn.Analyzers
                 namespaces,
                 imports = usings,
                 classes = classDetails,
-                //interfaces,
-                //structs,
-                //enums,
                 methods,
-                //properties,
-                //fields,
-                //dependencies,
-                ir, // include IR here
+                ir,
                 api_endpoints = apiEndpoints.Count > 0
                     ? apiEndpoints.Select(e => new
                     {
@@ -259,24 +264,38 @@ namespace Roslyn.Analyzers
                         e.Evidence
                     }).ToArray()
                     : null,
-                sql_usages = merged.Select(s => new {
+                sql_usages = merged.Select(s => new
+                {
                     file = Path.GetFileName(s.FilePath),
                     s.Namespace,
                     s.ClassName,
                     s.MethodName,
                     s.MethodSignature,
-                    //s.Line,
+                    // s.Line, // keep commented out unless you want trace/debug detail
                     s.Kind,
                     s.SqlText,
                     s.CommandTypeIsStoredProcedure,
                     s.InferredStoredProcedures,
                     s.RawSnippet
                 }).ToArray()
+
+                // Optional outputs kept disabled to reduce noise:
+                // interfaces,
+                // structs,
+                // enums,
+                // properties,
+                // fields,
+                // dependencies
             };
         }
 
-        // It builds a simple, compact IR for the file's types/members and SQL usages.
-        private static object BuildIR(CSS.CompilationUnitSyntax root, SemanticModel model, Compilation compilation, List<SqlCommandExtractor.SqlUsage> sqlUsages, string filePath)
+        // Builds a compact IR for the file's types/members.
+        private static object BuildIR(
+            CSS.CompilationUnitSyntax root,
+            SemanticModel model,
+            Compilation compilation,
+            List<SqlCommandExtractor.SqlUsage> sqlUsages,
+            string filePath)
         {
             string Modifiers(SyntaxTokenList mods) => string.Join(" ", mods.Select(m => m.Text)).Trim();
 
@@ -299,7 +318,7 @@ namespace Roslyn.Analyzers
                         {
                             name = m.Identifier.Text,
                             modifiers = Modifiers(m.Modifiers),
-                            returnType = (m.ReturnType != null) ? m.ReturnType.ToString() : "void",
+                            returnType = m.ReturnType != null ? m.ReturnType.ToString() : "void",
                             parameters = FormatParams(m.ParameterList)
                         })
                         .ToArray();
@@ -328,13 +347,14 @@ namespace Roslyn.Analyzers
                             ? sd.BaseList.Types.Select(bt => bt.Type.ToString()).ToArray()
                             : Array.Empty<string>();
 
-                    // attach SQL usages for this type (by class name)
+                    // Optional SQL grouping by type; currently not returned to keep payload small.
+                    /*
                     var typeName = t.Identifier.Text;
                     var sqlForType = sqlUsages
                         .Where(s => string.Equals(s.ClassName, typeName, StringComparison.OrdinalIgnoreCase))
                         .Select(s => new
                         {
-                            //s.Line,
+                            // s.Line,
                             s.Kind,
                             sql = s.SqlText,
                             s.CommandTypeIsStoredProcedure,
@@ -342,28 +362,32 @@ namespace Roslyn.Analyzers
                             raw = s.RawSnippet
                         })
                         .ToArray();
+                    */
 
                     return new
                     {
-                        kind = t.Kind().ToString().Replace("DeclarationSyntax", ""), // "ClassDeclaration" -> "Class"
-                        name = typeName,
+                        kind = t.Kind().ToString(),
+                        name = t.Identifier.Text,
                         namespaceName = t.Ancestors().OfType<CSS.BaseNamespaceDeclarationSyntax>().FirstOrDefault()?.Name?.ToString() ?? "",
                         modifiers = Modifiers(t.Modifiers),
                         baseTypes,
                         methods,
                         properties,
-                        fields,
-                        //sql = sqlForType
+                        fields
+
+                        // sql = sqlForType
                     };
                 })
                 .ToArray();
 
+            // Optional file-level SQL; currently not returned to keep payload small.
+            /*
             var fileLevelSql = sqlUsages
                 .Where(s => string.IsNullOrEmpty(s.ClassName))
                 .Select(s => new
                 {
                     s.FilePath,
-                    //s.Line,
+                    // s.Line,
                     s.Kind,
                     sql = s.SqlText,
                     s.CommandTypeIsStoredProcedure,
@@ -371,16 +395,22 @@ namespace Roslyn.Analyzers
                     raw = s.RawSnippet
                 })
                 .ToArray();
+            */
 
             var ir = new
             {
                 file = Path.GetFileName(filePath),
                 path = filePath,
-                namespaces = root.DescendantNodes().OfType<CSS.BaseNamespaceDeclarationSyntax>()
-                                 .Select(n => n.Name?.ToString()).Where(s => !string.IsNullOrWhiteSpace(s)).Distinct().ToArray(),
-                //usings = root.Usings.Select(u => u.Name?.ToString()).Where(s => !string.IsNullOrWhiteSpace(s)).Distinct().ToArray(),
-                types,
-                //file_level_sql = fileLevelSql
+                namespaces = root.DescendantNodes()
+                    .OfType<CSS.BaseNamespaceDeclarationSyntax>()
+                    .Select(n => n.Name?.ToString())
+                    .Where(s => !string.IsNullOrWhiteSpace(s))
+                    .Distinct()
+                    .ToArray(),
+                types
+
+                // usings = ...
+                // file_level_sql = fileLevelSql
             };
 
             return ir;

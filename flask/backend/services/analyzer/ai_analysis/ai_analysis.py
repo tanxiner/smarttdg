@@ -13,6 +13,7 @@ from collections import Counter
 INPUT_OUTPUT_PAIRS = [
     ("Page_Documentation_Prompts", "Final_Documentation_Chapters"),
     ("Utility_Documentation_Prompts", "Final_Utility_Chapters"),
+    ("Utility_SQL_Documentation_Prompts", "Final_Utility_SQL_Chapters"),
 ]
 DEFAULT_MODEL = "gemma3:latest"
 MODEL_NAME = os.environ.get("ANALYSIS_MODEL", DEFAULT_MODEL)
@@ -299,7 +300,11 @@ def validate_critical_errors(text, prompt_type="unknown"):
 
 
 def extract_code_chunk(prompt_text):
-    m = re.search(r'### RAW (?:CODE BEHIND INPUT|MODULE INPUT)\n(.*?)\n### END OF INPUT', prompt_text, flags=re.DOTALL)
+    m = re.search(
+        r'### RAW (?:INPUT|CODE BEHIND INPUT|MODULE INPUT)(?:\s*\(.*?\))?\s*\n(.*?)\n### END OF INPUT',
+        prompt_text,
+        flags=re.DOTALL
+    )
     return m.group(1) if m else None
 
 
@@ -342,18 +347,9 @@ def natural_sort_key(filename: str):
     return [int(p) if p.isdigit() else p for p in parts]
 
 def generate_single_item_output(llm, prompt_text, single_block):
-    pattern = r'(### RAW (?:CODE BEHIND INPUT|MODULE INPUT)\n)(.*?)(\n### END OF INPUT)'
+    pattern = r'(### RAW (?:INPUT|CODE BEHIND INPUT|MODULE INPUT)(?:\s*\(.*?\))?\s*\n)(.*?)(\n### END OF INPUT)'
     replacement = r'\1' + single_block + r'\3'
     per_item_prompt = re.sub(pattern, replacement, prompt_text, flags=re.DOTALL)
-
-    raw = ""
-    try:
-        for chunk in llm.stream(per_item_prompt):
-            raw += chunk
-    except Exception:
-        raw = ""
-
-    return clean_response(raw), raw
 
 
 def _is_port_open(host: str, port: int) -> bool:

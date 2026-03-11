@@ -93,26 +93,31 @@ class Program
                         Console.WriteLine(JsonConvert.SerializeObject(new { debug = "Calling AnalyzeVisualBasic", filePath }));
                         result = VisualBasicAnalyzer.Analyze(code, filePath);
                     }
-                    else if (pathLower.EndsWith(".aspx") || pathLower.EndsWith(".ascx") || pathLower.EndsWith(".master"))
+                    else if (ext == ".aspx" || ext == ".ascx" || ext == ".master")
                     {
                         Console.WriteLine(JsonConvert.SerializeObject(new { debug = "Calling AnalyzeAspx", filePath }));
                         result = AspxAnalyzer.Analyze(code, filePath);
                     }
                     else if (ext == ".js" || ext == ".jsx")
                     {
-                        Console.WriteLine(JsonConvert.SerializeObject(new { debug = "Calling AnalyzeJs", filePath }));
                         result = JsAnalyzer.Analyze(code, filePath);
                     }
-                    else if (pathLower.EndsWith(".html"))
+                    else if (ext == ".html" || ext == ".htm")
                     {
                         Console.WriteLine(JsonConvert.SerializeObject(new { debug = "Calling AnalyzeHtml", filePath }));
                         result = HtmlAnalyzer.Analyze(code, filePath);
                     }
-                    // Razor markup (.cshtml) and Blazor components (.razor) -> use CshtmlExtractor
-                    else if (pathLower.EndsWith(".cshtml") || pathLower.EndsWith(".razor"))
+                    // Razor markup (.cshtml) 
+                    else if (ext == ".cshtml") 
                     {
                         Console.WriteLine(JsonConvert.SerializeObject(new { debug = "Calling CshtmlExtractor.Analyze (Razor/Blazor)", filePath }));
                         result = CshtmlExtractor.Analyze(code, filePath);
+                    }
+                    // Blazor components(.razor)
+                    else if (ext == ".razor")
+                    {
+                        Console.WriteLine(JsonConvert.SerializeObject(new { debug = "Calling RazorComponentExtractor.Analyze", filePath }));
+                        result = RazorComponentExtractor.Analyze(code, filePath);
                     }
                     else
                     {

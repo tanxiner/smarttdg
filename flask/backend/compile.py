@@ -4,6 +4,7 @@ import re
 # --- CONFIGURATION ---
 DOCS_FOLDER = 'Final_Documentation_Chapters'
 UTIL_FOLDER = 'Final_Utility_Chapters'
+UTIL_SQL_FOLDER = 'Final_Utility_SQL_Chapters'
 SQL_FOLDER = 'Final_SQL_Docs'
 API_FOLDER = 'Final_API_Docs'
 OUTPUT_FILENAME = 'Technical_Documentation.md'
@@ -148,19 +149,6 @@ def non_sql_sort_key(filename):
     natural = [int(p) if p.isdigit() else p for p in parts]
     return (2, *natural)
 
-    # Match Module_..._<number>_...
-    m = re.match(r'^(Module_.+?)_(\d+)_(.+)$', stem, flags=re.IGNORECASE)
-    if m:
-        prefix = m.group(1).lower()
-        idx = int(m.group(2))
-        rest = m.group(3).lower()
-        return (1, prefix, idx, rest)
-
-    # General natural sort fallback
-    parts = re.split(r'(\d+)', stem.lower())
-    natural = [int(p) if p.isdigit() else p for p in parts]
-    return (2, *natural)
-
 def process_folder(folder_path, section_name, toc_lines, body_content, is_module=False):
     """
     Reads each .md/.txt file and creates a TOC entry and anchor for every H1 header
@@ -195,6 +183,7 @@ def process_folder(folder_path, section_name, toc_lines, body_content, is_module
     print(f"Processing '{kind_label}' ({len(files)} files) from '{folder_path}'...")
 
     toc_lines.append(f"\n### {kind_label}")
+    body_content.append(f"\n## {kind_label}\n\n")
 
     for filename in files:
         filepath = os.path.join(folder_path, filename)
@@ -213,7 +202,7 @@ def process_folder(folder_path, section_name, toc_lines, body_content, is_module
 
         header_iter = list(re.finditer(r'^\s*#\s+(.+)$', content, flags=re.MULTILINE))
         if not header_iter:
-            title = base_name
+            title = clean_title(base_name) or base_name
             slug_raw = make_slug(kind_label, base_name, 1, title)
             slug = _ensure_unique_slug(slug_raw)
             toc_lines.append(f"- [{title}](#{slug})")
@@ -237,13 +226,13 @@ def process_folder(folder_path, section_name, toc_lines, body_content, is_module
             toc_lines.append(f"- [{title}](#{slug})")
             body_content.append(f"\n<a id='{slug}'></a>\n")
 
-            if is_module:
-                section_text = re.sub(
-                    r'^\s*#\s*Module\s*:\s*.*$',
-                    f"# {title}",
-                    section_text,
-                    flags=re.IGNORECASE | re.MULTILINE
-                )
+            section_text = re.sub(
+                r'^\s*#\s+.*$',
+                f"# {title}",
+                section_text,
+                count=1,
+                flags=re.MULTILINE
+            )
 
             body_content.append(normalize_whitespace(section_text.strip()))
             body_content.append("\n\n---\n\n")
@@ -316,6 +305,7 @@ def main():
 
     docs_path = find_folder(DOCS_FOLDER)
     util_path = find_folder(UTIL_FOLDER)
+    util_sql_path = find_folder(UTIL_SQL_FOLDER)
     sql_path = find_folder(SQL_FOLDER)
     api_path = find_folder(API_FOLDER)
 
@@ -328,6 +318,11 @@ def main():
         process_folder(util_path, "Modules/Others", toc_lines, body_content, is_module=True)
     else:
         print(f"No utility/module chapters found (expected folder '{UTIL_FOLDER}').")
+
+    if util_sql_path:
+        process_folder(util_sql_path, "Modules/Others (SQL-Aware)", toc_lines, body_content, is_module=True)
+    else:
+        print(f"No SQL-aware utility/module chapters found (expected folder '{UTIL_SQL_FOLDER}').")
 
     if sql_path:
         process_folder(sql_path, "Database Reference (SQL)", toc_lines, body_content, is_module=False)

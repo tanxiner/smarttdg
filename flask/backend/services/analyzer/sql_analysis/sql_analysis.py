@@ -542,15 +542,19 @@ Provide a markdown table with actual parameter meanings.
 
 ### Logic Flow
 Describe the main processing steps performed in this chunk.
-Avoid repeating the same step in different wording.
+Write them in order.
 
 ### Data Interactions
 List actual reads and writes found in this chunk.
+
+### Error Handling
+
 
 Rules:
 - Do not write SQL
 - Do not use SQL comments like --
 - Do not include a RAW SQL INPUT section
+- Describe behavior in plain language only.
 - Do not add introductions
 - Do not add conclusions
 - Do not ask follow-up questions
@@ -586,6 +590,10 @@ Could not reliably generate a compliant summary for this procedure.
 ### Data Interactions
 * **Reads:** Unknown
 * **Writes:** Unknown
+* **Joins:** Unknown
+
+### Error Handling
+Unknown
 """
 
         with open(out_path, "w", encoding="utf-8") as f:

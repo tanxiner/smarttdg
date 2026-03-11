@@ -32,12 +32,14 @@ Focus on what the endpoint does, its inputs, outputs, and any relevant behaviour
 ### OUTPUT FORMAT
 # API Endpoint: {endpoint_title}
 
-**Kind:** {kind}
-**Controller / Service:** {controller}
-**Operation:** {operation}
-**Source File:** {source_file}
-**Route:** {route}
-**HTTP Methods:** {http_methods}
+| Field | Value |
+|------|------|
+| Kind | {kind} |
+| Controller / Service | {controller} |
+| Operation | {operation} |
+| Source File | {source_file} |
+| Route | {route} |
+| HTTP Methods | {http_methods} |
 
 ### Parameters
 | Name | Type |
