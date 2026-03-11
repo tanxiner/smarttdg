@@ -241,6 +241,7 @@ def analyze_zip(zip_path: str, job_id: str | None = None, model_choice: str | No
         os.path.join(prompts_base, "API_Documentation_Prompts"),
         os.path.join(analysis_base, "Final_Documentation_Chapters"),
         os.path.join(analysis_base, "Final_Utility_Chapters"),
+        os.path.join(analysis_base, "Final_Utility_SQL_Chapters"),
         os.path.join(analysis_base, "Final_SQL_Docs"),
         os.path.join(analysis_base, "Final_API_Docs"),
         os.path.join(analysis_base, "Diagrams"),

@@ -155,7 +155,7 @@ namespace Roslyn.Analyzers
                         if (mSrc2.Success) rawSrc = mSrc2.Groups["val"].Value.TrimEnd('>', '"', '\'', ' ', '\t');
                     }
                 }
-
+                rawSrc = rawSrc?.Trim().Trim('\'', '"');
                 var srcFile = NormalizeSrcValue(rawSrc);
 
                 list.Add(new

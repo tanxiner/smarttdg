@@ -265,7 +265,7 @@ namespace Roslyn.Analyzers
                     s.ClassName,
                     s.MethodName,
                     s.MethodSignature,
-                    s.Line,
+                    //s.Line,
                     s.Kind,
                     s.SqlText,
                     s.CommandTypeIsStoredProcedure,
@@ -334,7 +334,7 @@ namespace Roslyn.Analyzers
                         .Where(s => string.Equals(s.ClassName, typeName, StringComparison.OrdinalIgnoreCase))
                         .Select(s => new
                         {
-                            s.Line,
+                            //s.Line,
                             s.Kind,
                             sql = s.SqlText,
                             s.CommandTypeIsStoredProcedure,
@@ -363,7 +363,7 @@ namespace Roslyn.Analyzers
                 .Select(s => new
                 {
                     s.FilePath,
-                    s.Line,
+                    //s.Line,
                     s.Kind,
                     sql = s.SqlText,
                     s.CommandTypeIsStoredProcedure,
