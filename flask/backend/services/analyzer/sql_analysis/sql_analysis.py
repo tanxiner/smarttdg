@@ -90,8 +90,7 @@ def strip_global_context_and_below(text: str) -> str:
 def clean_response(text: str) -> str:
     text = text or ""
     text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)
-    text = re.sub(r"^```[a-zA-Z]*\n", "", text)
-    text = re.sub(r"\n```$", "", text)
+    text = re.sub(r"```[a-zA-Z]*\n?", "", text)
     text = re.sub(
         r"^\s*(Okay|Sure|Here is|Let me|I have|Below is).*?\n",
         "",
@@ -207,8 +206,15 @@ def looks_like_raw_sql(text: str) -> bool:
     if "### raw sql input" in text_lower:
         return True
 
+    # Strong direct indicators
+    if re.search(r"\b(?:create|alter)\s+(?:or\s+alter\s+)?(?:proc|procedure)\b", text_lower, flags=re.IGNORECASE):
+        return True
+
+    if re.search(r"^\s*begin\s*$", text_lower, flags=re.IGNORECASE | re.MULTILINE) and \
+       re.search(r"^\s*end\s*$", text_lower, flags=re.IGNORECASE | re.MULTILINE):
+        return True
+
     sql_patterns = [
-        r"\b(?:create|alter)\s+(?:or\s+alter\s+)?(?:proc|procedure)\b",
         r"\binsert\s+into\s+[#@\[\]\w\.]+\b",
         r"\bupdate\s+[#@\[\]\w\.]+\s+set\b",
         r"\bdelete\s+from\s+[#@\[\]\w\.]+\b",

@@ -115,7 +115,7 @@ def detect_excessive_duplicate_lines(text, min_line_len=25, duplicate_threshold=
 
 
 def detect_duplicate_table_rows(text, threshold=6):
-    rows = re.findall(r'^\|.*\|$', text or "", flags=re.MULTILINE)
+    rows = re.findall(r'^\s*\|.*\|\s*$', text or "", flags=re.MULTILINE)
     rows = [r.strip() for r in rows if ':---' not in r]
 
     if not rows:
