@@ -33,6 +33,7 @@ You are NOT a Developer. You DO NOT write code.
 ### OBJECTIVE
 Analyze the combined Web Page and its Code-Behind to create a single Page Functionality Reference.
 
+# Page: {page_title}
 **Web Page File:** {page_file}
 **Web Page Path:** {page_path}
 **Code-Behind File:** {codebehind_file}
@@ -52,7 +53,9 @@ Analyze the combined Web Page and its Code-Behind to create a single Page Functi
 ### OUTPUT FORMAT (one document per page)
 # Page: {page_title}
 **Web Page File:** {page_file}
+**Web Page Path:** {page_path}
 **Code-Behind File:** {codebehind_file}
+**Code-Behind Path:** {codebehind_path}
 
 ### 1. User Purpose
 {One sentence describing user purpose — if unknown use exact text required.}
@@ -458,7 +461,9 @@ def _save_page_pair(out_dir: str, ns: str, idx: int, pair_obj: dict):
 
             content = PAGE_TEMPLATE
             content = content.replace("{page_file}", pair_obj.get("pageFile") or "")
+            content = content.replace("{page_path}", pair_obj.get("pagePath") or "")
             content = content.replace("{codebehind_file}", pair_obj.get("codeBehindFile") or "")
+            content = content.replace("{codebehind_path}", pair_obj.get("codeBehindPath") or "")
             content = content.replace(
                 "### RAW INPUT (combined objects)",
                 f"### PART INSTRUCTION\n{part_note}\n\n### RAW INPUT (combined objects)"
