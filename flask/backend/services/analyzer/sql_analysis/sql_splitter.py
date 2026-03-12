@@ -61,13 +61,21 @@ Document the stored procedure below.
 ### REQUIRED OUTPUT
 # Procedure: {ProcedureName}{PartSuffix}
 
+**File:** {SourceFilename}  
+**Path:** {SourcePath}  
+
 ### Purpose
 One clear sentence explaining the business task.
 
 ### Parameters
- | Name | Type | Purpose |
- | :--- | :--- | :--- |
- | @ParamName | DataType | Inferred usage |
+If the procedure has parameters, return a table:
+
+| Name | Type | Purpose |
+| :--- | :--- | :--- |
+| @Param | datatype | inferred usage |
+
+If there are no parameters, write exactly:
+None
 
 ### Logic Flow
 1.
@@ -78,8 +86,6 @@ One clear sentence explaining the business task.
 * **Reads:** List tables explicitly selected from
 * **Writes:** List tables inserted/updated/deleted
 * **Joins:** Tables joined in SELECT queries
-
-### Error Handling
 
 ### GLOBAL CONTEXT
 {ContextBlock}
@@ -331,8 +337,23 @@ def main():
     print(f"Processing {len(INPUT_SQL_FILES)} SQL file(s)...")
     for sql_path in INPUT_SQL_FILES:
         file_procs = read_procedures(sql_path)
-        print(f"  > Found {len(file_procs)} procedures in {os.path.basename(sql_path)}")
-        all_procs.extend(file_procs)
+        source_filename = os.path.basename(sql_path)
+        analyzer_root = os.environ.get("ANALYZER_TEMP_DIR") or os.environ.get("ANALYZER_WORK_DIR")
+
+        if analyzer_root and sql_path.startswith(analyzer_root):
+            source_path = os.path.relpath(sql_path, analyzer_root)
+        else:
+            source_path = os.path.basename(sql_path)
+
+        source_path = source_path.replace("\\", "/")
+
+        print(f"  > Found {len(file_procs)} procedures in {source_filename}")
+        for proc in file_procs:
+            all_procs.append({
+                "proc_code": proc,
+                "source_filename": source_filename,
+                "source_path": source_path,
+            })
 
     print(f"Total found: {len(all_procs)} stored procedures.")
 
@@ -345,7 +366,10 @@ def main():
     created_files = []
     total_created = 0
 
-    for i, proc_code in enumerate(all_procs, start=1):
+    for i, proc_item in enumerate(all_procs, start=1):
+        proc_code = proc_item["proc_code"]
+        source_filename = proc_item["source_filename"]
+        source_path = proc_item["source_path"]
         proc_name = extract_proc_name(proc_code)
         if proc_name == "Unknown_Proc":
             proc_name = f"Unknown_Proc_{i}"
@@ -361,6 +385,8 @@ def main():
                 TEMPLATE.replace("{ProcedureName}", proc_name)
                 .replace("{PartSuffix}", "")
                 .replace("{PartInstruction}", "")
+                .replace("{SourceFilename}", source_filename)
+                .replace("{SourcePath}", source_path)
                 .replace("{ACRONYM_LIST}", acronyms)
                 .replace("{ContextBlock}", context_block)
                 .replace("{code_chunk}", parts[0])
@@ -384,6 +410,8 @@ def main():
                     TEMPLATE.replace("{ProcedureName}", proc_name)
                     .replace("{PartSuffix}", part_suffix)
                     .replace("{PartInstruction}", part_instruction)
+                    .replace("{SourceFilename}", source_filename)
+                    .replace("{SourcePath}", source_path)
                     .replace("{ACRONYM_LIST}", acronyms)
                     .replace("{ContextBlock}", context_block)
                     .replace("{code_chunk}", part_sql)

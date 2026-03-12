@@ -33,8 +33,10 @@ You are NOT a Developer. You DO NOT write code.
 ### OBJECTIVE
 Analyze the combined Web Page and its Code-Behind to create a single Page Functionality Reference.
 
-Web Page File: {page_file}
-Code-Behind File: {codebehind_file}
+**Web Page File:** {page_file}
+**Web Page Path:** {page_path}
+**Code-Behind File:** {codebehind_file}
+**Code-Behind Path:** {codebehind_path}
 
 ### IMPORTANT: DO NOT INFER DOMAIN
 - Do NOT infer business domain, product names, or concrete entities from filenames, base types, or project names.
@@ -91,6 +93,7 @@ attributes), important side effects, and data interactions.
 ### OUTPUT FORMAT (one document per module)
 # Module: {module_file}
 **File:** {module_file}
+**Path:** {module_path}
 
 ### 1. Purpose
 {One sentence describing user purpose — if unknown use exact text required.}
@@ -146,6 +149,7 @@ This module includes SQL/database access metadata. You MUST describe the databas
 ### OUTPUT FORMAT (one document per module)
 # Module: {module_file}
 **File:** {module_file}
+**Path:** {module_path}
 
 ### 1. Purpose
 {One sentence describing user purpose — if unknown use exact text required.}
@@ -376,6 +380,7 @@ def _save_module(out_dir: str, ns: str, idx: int, module_obj: dict, template: st
     os.makedirs(out_dir, exist_ok=True)
     primary = (module_obj.get("file") or module_obj.get("fileName") or "module")
     safe = _safe_filename(primary)
+    module_path = module_obj.get("path") or (module_obj.get("ir") or {}).get("path") or ""
 
     code_chunk = json.dumps(module_obj, indent=2)
     parts = split_text_if_too_long(code_chunk)
@@ -384,6 +389,7 @@ def _save_module(out_dir: str, ns: str, idx: int, module_obj: dict, template: st
         filename = f"Module_{ns.replace('.', '_')}_{idx}_{safe}.txt"
         content = template
         content = content.replace("{module_file}", primary)
+        content = content.replace("{module_path}", module_path)
         content = content.replace("{code_chunk}", parts[0])
 
         out_path = os.path.join(out_dir, filename)
@@ -403,6 +409,7 @@ def _save_module(out_dir: str, ns: str, idx: int, module_obj: dict, template: st
 
             content = template
             content = content.replace("{module_file}", primary)
+            content = content.replace("{module_path}", module_path)
             content = content.replace(
                 "### RAW INPUT",
                 f"### PART INSTRUCTION\n{part_note}\n\n### RAW INPUT"
@@ -428,7 +435,9 @@ def _save_page_pair(out_dir: str, ns: str, idx: int, pair_obj: dict):
 
         content = PAGE_TEMPLATE
         content = content.replace("{page_file}", pair_obj.get("pageFile") or "")
+        content = content.replace("{page_path}", pair_obj.get("pagePath") or "")
         content = content.replace("{codebehind_file}", pair_obj.get("codeBehindFile") or "")
+        content = content.replace("{codebehind_path}", pair_obj.get("codeBehindPath") or "")
         content = content.replace("{code_chunk}", parts[0])
         content = content.replace("{page_title}", pair_obj.get("pageFile") or pair_obj.get("codeBehindFile") or safe)
 

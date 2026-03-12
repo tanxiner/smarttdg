@@ -237,6 +237,7 @@ def analyze_zip(zip_path: str, job_id: str | None = None, model_choice: str | No
     dirs_to_clean = [
         os.path.join(prompts_base, "Page_Documentation_Prompts"),
         os.path.join(prompts_base, "Utility_Documentation_Prompts"),
+        os.path.join(prompts_base, "Utility_SQL_Documentation_Prompts"),
         os.path.join(prompts_base, "SQL_Documentation_Prompts"),
         os.path.join(prompts_base, "API_Documentation_Prompts"),
         os.path.join(analysis_base, "Final_Documentation_Chapters"),

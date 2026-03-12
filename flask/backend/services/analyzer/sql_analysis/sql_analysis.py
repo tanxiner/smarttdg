@@ -41,7 +41,7 @@ def standardize_sql_headings(text: str) -> str:
         "purpose": "### Purpose",
         "parameters": "### Parameters",
         "logic flow": "### Logic Flow",
-        "data interactions": "### Data Interactions",
+        "data interactions": "### Data Interactions"
     }
 
     for key, replacement in replacements.items():
@@ -60,13 +60,18 @@ def standardize_sql_headings(text: str) -> str:
         flags=re.IGNORECASE,
     )
 
-    # Ensure procedure title is followed by a blank line
+    # Ensure proper spacing after procedure title, file, and path
     text = re.sub(
-        r'^(#\s*Procedure:.*)\n+(###\s+Purpose\b)',
-        r'\1\n\n\2',
-        text,
-        flags=re.IGNORECASE | re.MULTILINE,
-    )
+    r'^(#\s*Procedure:.*)\n*(\*\*File:\*\*.*)?\n*(\*\*Path:\*\*.*)?\n*(###\s+Purpose\b)',
+    lambda m: (
+        f"{m.group(1)}\n\n"
+        f"{m.group(2) + chr(10) if m.group(2) else ''}"
+        f"{m.group(3) + chr(10) if m.group(3) else ''}"
+        f"\n{m.group(4)}"
+    ),
+    text,
+    flags=re.IGNORECASE | re.MULTILINE,
+)
 
     # Collapse excessive blank lines
     text = re.sub(r'\n{3,}', '\n\n', text)
@@ -112,13 +117,211 @@ def extract_expected_procedure_name(prompt_text: str) -> str:
         return m.group(1).strip()
     return "Unknown_Procedure"
 
+def extract_source_file(prompt_text: str) -> str:
+    m = re.search(r"\*\*File:\*\*\s*(.+)", prompt_text, flags=re.IGNORECASE)
+    return m.group(1).strip() if m else "Unknown"
 
-def enforce_sql_template(text: str, expected_proc_name: str) -> str:
+def extract_source_path(prompt_text: str) -> str:
+    m = re.search(r"\*\*Path:\*\*\s*(.+)", prompt_text, flags=re.IGNORECASE)
+    return m.group(1).strip() if m else "Unknown"
+
+def enforce_sql_template(text: str, expected_proc_name: str, expected_source_file: str, expected_source_path: str) -> str:
     text = (text or "").strip()
+
     if not re.search(r"^\s*#\s*Procedure\s*:", text, flags=re.IGNORECASE | re.MULTILINE):
-        text = f"# Procedure: {expected_proc_name}\n\n" + text
+        text = (
+            f"# Procedure: {expected_proc_name}\n\n"
+            f"**File:** {expected_source_file}\n"
+            f"**Path:** {expected_source_path}\n\n"
+            f"{text}"
+        )
+
+    if not re.search(r"^\s*\*\*File:\*\*", text, flags=re.IGNORECASE | re.MULTILINE):
+        text = re.sub(
+            r"(^\s*#\s*Procedure:.*$)",
+            rf"\1\n\n**File:** {expected_source_file}\n**Path:** {expected_source_path}",
+            text,
+            count=1,
+            flags=re.IGNORECASE | re.MULTILINE,
+        )
+    elif not re.search(r"^\s*\*\*Path:\*\*", text, flags=re.IGNORECASE | re.MULTILINE):
+        text = re.sub(
+            r"(^\s*\*\*File:\*\*.*$)",
+            rf"\1\n**Path:** {expected_source_path}",
+            text,
+            count=1,
+            flags=re.IGNORECASE | re.MULTILINE,
+        )
+
     return text
 
+
+def salvage_sql_output(text: str, expected_proc_name: str, expected_source_file: str, expected_source_path: str) -> str:
+    text = (text or "").replace("\r\n", "\n").replace("\r", "\n").strip()
+
+    # Remove fenced code markers if present
+    text = re.sub(r"^```[a-zA-Z]*\n?", "", text)
+    text = re.sub(r"\n```$", "", text)
+
+    # Ensure title exists
+    if not re.search(r"^\s*#\s*Procedure\s*:", text, flags=re.IGNORECASE | re.MULTILINE):
+        text = f"# Procedure: {expected_proc_name}\n\n{text}"
+
+    # Ensure File / Path exist
+    if not re.search(r"^\s*\*\*File:\*\*", text, flags=re.IGNORECASE | re.MULTILINE):
+        text = re.sub(
+            r"(^\s*#\s*Procedure:.*$)",
+            rf"\1\n\n**File:** {expected_source_file}\n**Path:** {expected_source_path}",
+            text,
+            count=1,
+            flags=re.IGNORECASE | re.MULTILINE,
+        )
+    elif not re.search(r"^\s*\*\*Path:\*\*", text, flags=re.IGNORECASE | re.MULTILINE):
+        text = re.sub(
+            r"(^\s*\*\*File:\*\*.*$)",
+            rf"\1\n**Path:** {expected_source_path}",
+            text,
+            count=1,
+            flags=re.IGNORECASE | re.MULTILINE,
+        )
+
+    # Force known inline bold labels onto their own lines first
+    text = re.sub(
+        r"\s*(\*\*(?:Purpose|Parameters|Logic Flow|Data Interactions|Error Handling|Key Declarations and Temp Objects):\*\*)\s*",
+        r"\n\n\1\n",
+        text,
+        flags=re.IGNORECASE,
+    )
+
+    # Convert bold pseudo-headings into proper headings
+    text = re.sub(
+        r"^\s*\*\*Purpose:\*\*\s*(.+?)\s*$",
+        r"### Purpose\n\1",
+        text,
+        flags=re.IGNORECASE | re.MULTILINE,
+    )
+
+    text = re.sub(
+        r"^\s*\*\*Parameters:\*\*\s*$",
+        r"### Parameters",
+        text,
+        flags=re.IGNORECASE | re.MULTILINE,
+    )
+
+    text = re.sub(
+        r"^\s*\*\*Parameters:\*\*\s*(.+?)\s*$",
+        r"### Parameters\n\1",
+        text,
+        flags=re.IGNORECASE | re.MULTILINE,
+    )
+
+    text = re.sub(
+        r"^\s*\*\*Logic Flow:\*\*\s*$",
+        r"### Logic Flow",
+        text,
+        flags=re.IGNORECASE | re.MULTILINE,
+    )
+
+    text = re.sub(
+        r"^\s*\*\*Logic Flow:\*\*\s*(.+?)\s*$",
+        r"### Logic Flow\n\1",
+        text,
+        flags=re.IGNORECASE | re.MULTILINE,
+    )
+
+    text = re.sub(
+        r"^\s*\*\*Data Interactions:\*\*\s*$",
+        r"### Data Interactions",
+        text,
+        flags=re.IGNORECASE | re.MULTILINE,
+    )
+
+    text = re.sub(
+        r"^\s*\*\*Data Interactions:\*\*\s*(.+?)\s*$",
+        r"### Data Interactions\n\1",
+        text,
+        flags=re.IGNORECASE | re.MULTILINE,
+    )
+
+    text = re.sub(
+    r"^\s*\*\*Key Declarations and Temp Objects:\*\*\s*$",
+    r"### Key Declarations and Temp Objects",
+    text,
+    flags=re.IGNORECASE | re.MULTILINE,
+    )
+
+    text = re.sub(
+        r"^\s*\*\*Key Declarations and Temp Objects:\*\*\s*(.+?)\s*$",
+        r"### Key Declarations and Temp Objects\n\1",
+        text,
+        flags=re.IGNORECASE | re.MULTILINE,
+    )
+
+    # Convert prior-summary labels into real headings
+    text = re.sub(
+        r"^\s*Purpose\s+so\s+far:\s*$",
+        "### Purpose",
+        text,
+        flags=re.IGNORECASE | re.MULTILINE,
+    )
+
+    text = re.sub(
+        r"^\s*Parameter\s+understanding\s+so\s+far:\s*$",
+        "### Parameters",
+        text,
+        flags=re.IGNORECASE | re.MULTILINE,
+    )
+
+    text = re.sub(
+        r"^\s*Known\s+data\s+interactions\s+so\s+far:\s*$",
+        "### Data Interactions",
+        text,
+        flags=re.IGNORECASE | re.MULTILINE,
+    )
+
+    text = re.sub(
+        r"^\s*Key\s+logic\s+already\s+established:\s*$",
+        "### Logic Flow",
+        text,
+        flags=re.IGNORECASE | re.MULTILINE,
+    )
+
+    # # If sections are missing, insert them with None
+    # required_sections = ["Purpose", "Parameters", "Logic Flow", "Data Interactions"]
+    # for section in required_sections:
+    #     if not re.search(rf"^\s*###\s*{re.escape(section)}\b", text, flags=re.IGNORECASE | re.MULTILINE):
+    #         insert_after = {
+    #             "Purpose": r"(^\s*\*\*Path:\*\*.*$)",
+    #             "Parameters": r"(^\s*###\s*Purpose\b.*(?:\n(?!### ).*)*)",
+    #             "Logic Flow": r"(^\s*###\s*Parameters\b.*(?:\n(?!### ).*)*)",
+    #             "Data Interactions": r"(^\s*###\s*Logic\s*Flow\b.*(?:\n(?!### ).*)*)",
+    #         }[section]
+
+    #         block = f"\n\n### {section}\nNone"
+    #         text = re.sub(insert_after, rf"\1{block}", text, count=1, flags=re.IGNORECASE | re.MULTILINE)
+
+    # Normalize spacing before headings
+    text = re.sub(
+        r"\n{0,1}(###\s+(?:Purpose|Parameters|Logic Flow|Data Interactions|Error Handling)\b)",
+        r"\n\n\1",
+        text,
+        flags=re.IGNORECASE,
+    )
+
+    # Ensure Parameters has content
+    params_match = re.search(
+        r"^\s*###\s*Parameters\b(.*?)(?=^\s*###\s*Logic\s*Flow\b)",
+        text,
+        flags=re.IGNORECASE | re.MULTILINE | re.DOTALL,
+    )
+    if params_match:
+        params_body = params_match.group(1).strip()
+        if not params_body:
+            text = text.replace(params_match.group(0), "### Parameters\nNone")
+
+    # Collapse excessive blank lines
+    text = re.sub(r"\n{3,}", "\n\n", text).strip()
+    return text
 
 def detect_excessive_duplicate_lines(text, min_line_len=25, duplicate_threshold=6, dominance_threshold=0.35):
     raw_lines = [ln.strip() for ln in (text or "").splitlines()]
@@ -185,19 +388,25 @@ def detect_duplicate_table_rows(text, threshold=6):
     return False, "OK"
 
 
-def contains_template_placeholders(text: str) -> bool:
+def contains_template_placeholders(text: str):
     text_lower = (text or "").lower()
+
     placeholder_phrases = [
-        "one clear sentence explaining what business task this performs.",
-        "Describe the sequence of operations performed in this part of the procedure.",
+        "one clear sentence explaining the business task.",
+        "describe the sequence of operations performed in this part of the procedure.",
         "inferred usage",
         "list tables explicitly selected from",
         "list tables inserted/updated/deleted",
         "@paramname",
         "datatype",
-        "Step-by-step plain English explanation."
+        "step-by-step plain english explanation."
     ]
-    return any(p in text_lower for p in placeholder_phrases)
+
+    for phrase in placeholder_phrases:
+        if phrase in text_lower:
+            return phrase
+
+    return None
 
 
 def looks_like_raw_sql(text: str) -> bool:
@@ -243,11 +452,13 @@ def validate_output(text: str):
         return False, "Output empty"
 
     header_patterns = {
-    "procedure": r"^\s*#+\s*procedure\s*:",
-    "purpose": r"^\s*#+\s*purpose\b",
-    "parameters": r"^\s*#+\s*parameters\b",
-    "logic flow": r"^\s*#+\s*logic\s*flow\b",
-    "data interactions": r"^\s*#+\s*data\s*interactions\b",
+        "procedure": r"^\s*#+\s*procedure\s*:",
+        "file": r"^\s*\*\*file:\*\*",
+        "path": r"^\s*\*\*path:\*\*",
+        "purpose": r"^\s*#+\s*purpose\b",
+        "parameters": r"^\s*#+\s*parameters\b",
+        "logic flow": r"^\s*#+\s*logic\s*flow\b",
+        "data interactions": r"^\s*#+\s*data\s*interactions\b"
     }
 
     for name, pattern in header_patterns.items():
@@ -257,11 +468,18 @@ def validate_output(text: str):
     if not re.match(r"^\s*#\s*Procedure\s*:\s*\S+", text, flags=re.IGNORECASE):
         return False, "Missing or invalid procedure title"
 
-    if "| Name | Type | Purpose |" not in text:
-        return False, "Missing parameters table"
+    parameters_ok = (
+        "| Name | Type | Purpose |" in text
+        or re.search(r"^\s*###\s*Parameters\s*\n+\s*None\s*$", text, flags=re.IGNORECASE | re.MULTILINE)
+    )
 
-    if contains_template_placeholders(text):
-        return False, "Output still contains template placeholder text"
+    if not parameters_ok:
+        return False, "Parameters section must contain a table or 'None'"
+
+    placeholder = contains_template_placeholders(text)
+
+    if placeholder:
+        return False, f"Output still contains template placeholder text: '{placeholder}'"
 
     tail = text_lower[-400:]
     for p in ["do you want me to", "would you like me to", "let me know if", "i can also"]:
@@ -482,6 +700,8 @@ def main():
             original_prompt = f.read()
 
         expected_proc_name = extract_expected_procedure_name(original_prompt)
+        expected_source_file = extract_source_file(original_prompt)
+        expected_source_path = extract_source_path(original_prompt)
         part_info = parse_part_info(filename)
         current_prompt = original_prompt
 
@@ -509,11 +729,20 @@ def main():
                 raw_buffer = ""
             
             cleaned = clean_response(raw_buffer)
-            #print(raw_buffer)
-            #print(cleaned)
             cleaned = strip_global_context_and_below(cleaned)
-            cleaned = enforce_sql_template(cleaned, expected_proc_name)
+            cleaned = enforce_sql_template(
+                cleaned,
+                expected_proc_name,
+                expected_source_file,
+                expected_source_path,
+            )
             cleaned = standardize_sql_headings(cleaned)
+            cleaned = salvage_sql_output(
+                cleaned,
+                expected_proc_name,
+                expected_source_file,
+                expected_source_path,
+            )
             is_valid, reason = validate_output(cleaned)
 
             if is_valid:
@@ -534,11 +763,17 @@ Do NOT repeat instruction text under any heading.
 Required headings:
 # Procedure: {expected_proc_name}
 
+**File:** {expected_source_file}
+**Path:** {expected_source_path}
+
 ### Purpose
 Write one sentence describing what this chunk contributes to the procedure.
 
 ### Parameters
-Provide a markdown table with actual parameter meanings.
+If parameters exist, provide a markdown table.
+
+If there are no parameters, write exactly:
+None
 
 ### Logic Flow
 Describe the main processing steps performed in this chunk.
@@ -546,8 +781,6 @@ Write them in order.
 
 ### Data Interactions
 List actual reads and writes found in this chunk.
-
-### Error Handling
 
 
 Rules:
@@ -575,14 +808,22 @@ Rules:
 
         if not success:
             print(f"  ! ABORTING {filename}")
+            source_file_match = re.search(r"\*\*File:\*\*\s*(.+)", original_prompt)
+            source_path_match = re.search(r"\*\*Path:\*\*\s*(.+)", original_prompt)
+
+            source_file = extract_source_file(original_prompt)
+            source_path = extract_source_path(original_prompt)
+
             final_output = f"""# Procedure: {expected_proc_name}
 
+**File:** {source_file}
+**Path:** {source_path}
+
 ### Purpose
-Generation failed validation after {MAX_RETRIES} attempts.
+Generation failed after {MAX_RETRIES} attempts.
 
 ### Parameters
-| Name | Type | Purpose |
-| :--- | :--- | :--- |
+None
 
 ### Logic Flow
 Could not reliably generate a compliant summary for this procedure.
@@ -592,7 +833,6 @@ Could not reliably generate a compliant summary for this procedure.
 * **Writes:** Unknown
 * **Joins:** Unknown
 
-### Error Handling
 Unknown
 """
 

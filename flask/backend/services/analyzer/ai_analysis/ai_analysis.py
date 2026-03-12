@@ -26,9 +26,9 @@ ANALYSIS_OUTPUT_BASE = os.path.join(BACKEND_DIR, "analysis_output")
 
 
 def remove_raw_input_block(text: str) -> str:
-    marker = re.search(r'RAW INPUT', text, flags=re.IGNORECASE)
+    marker = re.search(r"RAW INPUT", text, flags=re.IGNORECASE)
     if marker:
-        return text[:marker.start()].rstrip()
+        return text[: marker.start()].rstrip()
     return text
 
 
@@ -36,16 +36,16 @@ def clean_response(text):
     if not text:
         return text
 
-    text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
-    text = re.sub(r'^```[a-zA-Z]*\n', '', text)
-    text = re.sub(r'\n```$', '', text)
+    text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)
+    text = re.sub(r"^```[a-zA-Z]*\n", "", text)
+    text = re.sub(r"\n```$", "", text)
 
     lines = text.splitlines()
     cleaned_lines = list(lines)
 
     leading_patterns = [
-        r'^(Based on|I have|This page|The provided|Okay|Sure|Here is|Let me|Below is|The following).*?(\.|:)?\s*$',
-        r'^.*?(generated|documentation|analysis).*?:\s*$'
+        r"^(Based on|I have|This page|The provided|Okay|Sure|Here is|Let me|Below is|The following).*?(\.|:)?\s*$",
+        r"^.*?(generated|documentation|analysis).*?:\s*$",
     ]
 
     max_head_lines = min(8, len(lines))
@@ -63,32 +63,30 @@ def clean_response(text):
 
     text = "\n".join(cleaned_lines)
 
-    # remove conversational endings
     text = re.sub(
-        r'\n*(I hope this helps|Let me know.*|Feel free to ask.*|Do you want me to.*|Would you like me to.*|I can also.*)\s*$',
-        '',
+        r"\n*(I hope this helps|Let me know.*|Feel free to ask.*|Do you want me to.*|Would you like me to.*|I can also.*)\s*$",
+        "",
         text,
-        flags=re.IGNORECASE | re.DOTALL
+        flags=re.IGNORECASE | re.DOTALL,
     )
 
-    # strip leaked retry wrapper if model copied it
     text = re.sub(
-        r'###\s*\s*CRITICAL INSTRUCTION.*?$',
-        '',
+        r"###\s*\s*CRITICAL INSTRUCTION.*?$",
+        "",
         text,
-        flags=re.IGNORECASE | re.DOTALL
+        flags=re.IGNORECASE | re.DOTALL,
     )
     text = re.sub(
-        r'###\s*SOURCE PROMPT.*?$',
-        '',
+        r"###\s*SOURCE PROMPT.*?$",
+        "",
         text,
-        flags=re.IGNORECASE | re.DOTALL
+        flags=re.IGNORECASE | re.DOTALL,
     )
     text = re.sub(
-        r'###\s*SOURCE MATERIAL.*?$',
-        '',
+        r"###\s*SOURCE MATERIAL.*?$",
+        "",
         text,
-        flags=re.IGNORECASE | re.DOTALL
+        flags=re.IGNORECASE | re.DOTALL,
     )
 
     text = remove_raw_input_block(text)
@@ -116,8 +114,8 @@ def detect_excessive_duplicate_lines(text, min_line_len=25, duplicate_threshold=
 
 
 def detect_duplicate_table_rows(text, threshold=6):
-    rows = re.findall(r'^\s*\|.*\|\s*$', text or "", flags=re.MULTILINE)
-    rows = [r.strip() for r in rows if ':---' not in r]
+    rows = re.findall(r"^\s*\|.*\|\s*$", text or "", flags=re.MULTILINE)
+    rows = [r.strip() for r in rows if ":---" not in r]
 
     if not rows:
         return False, "No table rows"
@@ -143,27 +141,35 @@ def detect_prompt_type(prompt_text: str) -> str:
 
 def extract_expected_title(prompt_text: str, prompt_type: str) -> str:
     if prompt_type == "page":
-        m = re.search(r'#\s*Page:\s*(.+)', prompt_text, flags=re.IGNORECASE)
+        m = re.search(r"#\s*Page:\s*(.+)", prompt_text, flags=re.IGNORECASE)
         if m:
             return m.group(1).strip()
 
     if prompt_type == "module":
-        m = re.search(r'#\s*Module:\s*(.+)', prompt_text, flags=re.IGNORECASE)
+        m = re.search(r"#\s*Module:\s*(.+)", prompt_text, flags=re.IGNORECASE)
         if m:
             return m.group(1).strip()
 
     return "Unknown"
 
 
+def extract_expected_field(prompt_text: str, label: str) -> str:
+    pattern = rf"^\s*\**{re.escape(label)}\**\s*:\s*(.+?)\s*$"
+    m = re.search(pattern, prompt_text, flags=re.IGNORECASE | re.MULTILINE)
+    if m:
+        return m.group(1).strip()
+    return "Not specified"
+
+
 def enforce_output_template(text: str, prompt_type: str, expected_title: str) -> str:
     text = (text or "").strip()
 
     if prompt_type == "page":
-        if not re.search(r'^\s*#+\s*Page\s*:', text, flags=re.IGNORECASE | re.MULTILINE):
+        if not re.search(r"^\s*#+\s*Page\s*:", text, flags=re.IGNORECASE | re.MULTILINE):
             text = f"# Page: {expected_title}\n\n" + text
 
     elif prompt_type == "module":
-        if not re.search(r'^\s*#+\s*Module\s*:', text, flags=re.IGNORECASE | re.MULTILINE):
+        if not re.search(r"^\s*#+\s*Module\s*:", text, flags=re.IGNORECASE | re.MULTILINE):
             text = f"# Module: {expected_title}\n\n" + text
 
     return text
@@ -176,8 +182,10 @@ def validate_required_structure(text: str, prompt_type: str):
     if prompt_type == "page":
         header_patterns = {
             "page": r"^\s*#+\s*page\s*:",
-            "web page file": r"^\s*\**web\s*page\s*file:\**\s*.+$",
-            "code-behind file": r"^\s*\**code\s*-\s*behind\s*file:\**\s*.+$",
+            "web page file": r"^\s*\**web\s*page\s*file\**\s*:\s*.+$",
+            "web page path": r"^\s*\**web\s*page\s*path\**\s*:\s*.+$",
+            "code-behind file": r"^\s*\**code\s*-\s*behind\s*file\**\s*:\s*.+$",
+            "code-behind path": r"^\s*\**code\s*-\s*behind\s*path\**\s*:\s*.+$",
             "user purpose": r"^\s*#+\s*1\.\s*user\s*purpose\b",
             "key events & logic": r"^\s*#+\s*2\.\s*key\s*events\s*&?\s*logic\b",
             "data interactions": r"^\s*#+\s*3\.\s*data\s*interactions\b",
@@ -200,7 +208,8 @@ def validate_required_structure(text: str, prompt_type: str):
     if prompt_type == "module":
         header_patterns = {
             "module": r"^\s*#+\s*module\s*:",
-            "file": r"^\s*\*\*file:\*\*\s*.+$",
+            "file": r"^\s*\**file\**\s*:\s*.+$",
+            "path": r"^\s*\**path\**\s*:\s*.+$",
             "purpose": r"^\s*#+\s*1\.\s*purpose\b",
             "key declarations": r"^\s*#+\s*2\.\s*key\s*declarations\b",
             "important behavior & side effects": r"^\s*#+\s*3\.\s*important\s*behavior\s*&?\s*side\s*effects\b",
@@ -231,40 +240,36 @@ def validate_critical_errors(text, prompt_type="unknown"):
     if not text or len(text) < 10:
         return False, "Output was empty or too short."
 
-    # Strong C# detection only — avoid false positives from prose/jQuery examples
     csharp_patterns = [
-        r'^\s*(public|private|protected|internal)\s+(partial\s+)?class\b',
-        r'^\s*(public|private|protected|internal)\s+\w[\w<>\[\],\s]*\s+\w+\s*\([^)]*\)\s*\{?',
-        r'^\s*using\s+[A-Za-z0-9_.]+\s*;',
-        r'^\s*namespace\s+[A-Za-z0-9_.]+\s*\{?',
-        r'^\s*\[(HttpGet|HttpPost|HttpPut|HttpDelete|Route|Authorize)[^\]]*\]',
-        r'^\s*return\s+View\s*\(',
-        r'^\s*return\s+Json\s*\(',
-        r'^\s*model\s+[A-Za-z0-9_.<>]+\s*$',
-        r'^\s*@model\s+[A-Za-z0-9_.<>]+\s*$',
+        r"^\s*(public|private|protected|internal)\s+(partial\s+)?class\b",
+        r"^\s*(public|private|protected|internal)\s+\w[\w<>\[\],\s]*\s+\w+\s*\([^)]*\)\s*\{?",
+        r"^\s*using\s+[A-Za-z0-9_.]+\s*;",
+        r"^\s*namespace\s+[A-Za-z0-9_.]+\s*\{?",
+        r"^\s*\[(HttpGet|HttpPost|HttpPut|HttpDelete|Route|Authorize)[^\]]*\]",
+        r"^\s*return\s+View\s*\(",
+        r"^\s*return\s+Json\s*\(",
+        r"^\s*model\s+[A-Za-z0-9_.<>]+\s*$",
+        r"^\s*@model\s+[A-Za-z0-9_.<>]+\s*$",
     ]
     for pattern in csharp_patterns:
         if re.search(pattern, text, flags=re.IGNORECASE | re.MULTILINE):
             return False, "Detected C# Code Syntax"
 
-    # Strong VB.NET detection
     vb_patterns = [
-        r'^\s*(Public|Private|Protected|Friend)\s+(Class|Module|Sub|Function)\b',
-        r'^\s*End\s+(Sub|Function|Class|Module)\b',
-        r'^\s*Dim\s+\w+\s+As\s+\w+',
-        r'^\s*Imports\s+[A-Za-z0-9_.]+',
-        r'^\s*Inherits\s+[A-Za-z0-9_.]+',
-        r'^\s*Handles\s+[A-Za-z0-9_.]+',
+        r"^\s*(Public|Private|Protected|Friend)\s+(Class|Module|Sub|Function)\b",
+        r"^\s*End\s+(Sub|Function|Class|Module)\b",
+        r"^\s*Dim\s+\w+\s+As\s+\w+",
+        r"^\s*Imports\s+[A-Za-z0-9_.]+",
+        r"^\s*Inherits\s+[A-Za-z0-9_.]+",
+        r"^\s*Handles\s+[A-Za-z0-9_.]+",
     ]
     for pattern in vb_patterns:
         if re.search(pattern, text, flags=re.IGNORECASE | re.MULTILINE):
             return False, "Detected VB.NET Code Structure"
 
-    # Explicit code fences
-    if re.search(r'```(csharp|cs|sql|vb|javascript|js|json|html)?', text_lower):
+    if re.search(r"```(csharp|cs|sql|vb|javascript|js|json|html)?", text_lower):
         return False, "Detected Code Block"
 
-    # Strong forbidden phrases
     forbidden_keywords = [
         "public partial class",
         "protected void",
@@ -301,9 +306,9 @@ def validate_critical_errors(text, prompt_type="unknown"):
 
 def extract_code_chunk(prompt_text):
     m = re.search(
-        r'### RAW (?:INPUT|CODE BEHIND INPUT|MODULE INPUT)(?:\s*\(.*?\))?\s*\n(.*?)\n### END OF INPUT',
+        r"### RAW (?:INPUT|CODE BEHIND INPUT|MODULE INPUT)(?:\s*\(.*?\))?\s*\n(.*?)\n### END OF INPUT",
         prompt_text,
-        flags=re.DOTALL
+        flags=re.DOTALL,
     )
     return m.group(1) if m else None
 
@@ -311,16 +316,16 @@ def extract_code_chunk(prompt_text):
 def split_json_blocks(code_chunk):
     if not code_chunk:
         return []
-    parts = re.split(r'\n}\s*\n{', code_chunk)
+    parts = re.split(r"\n}\s*\n{", code_chunk)
     blocks = []
     for i, p in enumerate(parts):
         if i == 0:
-            if not p.strip().startswith('{'):
-                p = '{' + p
+            if not p.strip().startswith("{"):
+                p = "{" + p
         else:
-            p = '{' + p
-        if not p.strip().endswith('}'):
-            p = p + '}'
+            p = "{" + p
+        if not p.strip().endswith("}"):
+            p = p + "}"
         blocks.append(p)
     return blocks
 
@@ -336,20 +341,32 @@ def count_sections_in_output(text):
     if not text:
         return 0
     return (
-        len(re.findall(r'^\s*#\s*Page\s*:', text, flags=re.MULTILINE))
-        + len(re.findall(r'^\s*#\s*Module\s*:', text, flags=re.MULTILINE))
-        + len(re.findall(r'^\s*#\s*Utility', text, flags=re.MULTILINE))
+        len(re.findall(r"^\s*#\s*Page\s*:", text, flags=re.MULTILINE))
+        + len(re.findall(r"^\s*#\s*Module\s*:", text, flags=re.MULTILINE))
+        + len(re.findall(r"^\s*#\s*Utility", text, flags=re.MULTILINE))
     )
+
 
 def natural_sort_key(filename: str):
     stem = os.path.splitext(filename)[0]
-    parts = re.split(r'(\d+)', stem.lower())
+    parts = re.split(r"(\d+)", stem.lower())
     return [int(p) if p.isdigit() else p for p in parts]
 
+
 def generate_single_item_output(llm, prompt_text, single_block):
-    pattern = r'(### RAW (?:INPUT|CODE BEHIND INPUT|MODULE INPUT)(?:\s*\(.*?\))?\s*\n)(.*?)(\n### END OF INPUT)'
-    replacement = r'\1' + single_block + r'\3'
+    pattern = r"(### RAW (?:INPUT|CODE BEHIND INPUT|MODULE INPUT)(?:\s*\(.*?\))?\s*\n)(.*?)(\n### END OF INPUT)"
+    replacement = r"\1" + single_block + r"\3"
     per_item_prompt = re.sub(pattern, replacement, prompt_text, flags=re.DOTALL)
+
+    raw_buffer = ""
+    try:
+        for chunk in llm.stream(per_item_prompt):
+            raw_buffer += chunk
+    except Exception:
+        raw_buffer = ""
+
+    cleaned_single = clean_response(raw_buffer)
+    return cleaned_single, raw_buffer
 
 
 def _is_port_open(host: str, port: int) -> bool:
@@ -413,7 +430,7 @@ def main():
         temperature=0.1,
         num_ctx=8192,
         num_predict=4096,
-        stop=["<|eot_id|>", "### SYSTEM ROLE", "### RAW"]
+        stop=["<|eot_id|>", "### SYSTEM ROLE", "### RAW"],
     )
 
     os.makedirs(ANALYSIS_OUTPUT_BASE, exist_ok=True)
@@ -440,7 +457,6 @@ def main():
         os.makedirs(abs_output, exist_ok=True)
 
         files = [f for f in os.listdir(abs_input) if f.lower().endswith(".txt")]
-
         files.sort(key=natural_sort_key)
 
         for filename in files:
@@ -456,6 +472,13 @@ def main():
 
             prompt_type = detect_prompt_type(original_prompt)
             expected_title = extract_expected_title(original_prompt, prompt_type)
+
+            expected_page_file = extract_expected_field(original_prompt, "Web Page File")
+            expected_page_path = extract_expected_field(original_prompt, "Web Page Path")
+            expected_codebehind_file = extract_expected_field(original_prompt, "Code-Behind File")
+            expected_codebehind_path = extract_expected_field(original_prompt, "Code-Behind Path")
+            expected_module_file = extract_expected_field(original_prompt, "File")
+            expected_module_path = extract_expected_field(original_prompt, "Path")
 
             current_prompt = original_prompt
             final_output = ""
@@ -500,8 +523,10 @@ Do not write code.
 If something cannot be determined, write: Not specified.
 
 # Page: {expected_title}
-Web Page File: Not specified
-Code-Behind File: Not specified
+**Web Page File:** {expected_page_file}
+**Web Page Path:** {expected_page_path}
+**Code-Behind File:** {expected_codebehind_file}
+**Code-Behind Path:** {expected_codebehind_path}
 
 ### 1. User Purpose
 Not specified
@@ -531,7 +556,8 @@ Do not write code.
 If something cannot be determined, write: Not specified.
 
 # Module: {expected_title}
-**File:** Not specified
+**File:** {expected_module_file}
+**Path:** {expected_module_path}
 
 ### 1. Purpose
 Not specified
@@ -586,8 +612,10 @@ Use the source material below.
 
                 if prompt_type == "page":
                     final_output = f"""# Page: {expected_title}
-Web Page File: Not specified
-Code-Behind File: Not specified
+**Web Page File:** {expected_page_file}
+**Web Page Path:** {expected_page_path}
+**Code-Behind File:** {expected_codebehind_file}
+**Code-Behind Path:** {expected_codebehind_path}
 
 ### 1. User Purpose
 Generation failed after {MAX_RETRIES} attempts.
@@ -604,7 +632,8 @@ Generation failed after {MAX_RETRIES} attempts.
 
                 elif prompt_type == "module":
                     final_output = f"""# Module: {expected_title}
-**File:** Not specified
+**File:** {expected_module_file}
+**Path:** {expected_module_path}
 
 ### 1. Purpose
 Generation failed after {MAX_RETRIES} attempts.
@@ -624,6 +653,7 @@ Generation failed after {MAX_RETRIES} attempts.
 
                 else:
                     final_output = cleaned_text if cleaned_text else raw_buffer
+
             with open(out_path, "w", encoding="utf-8") as f:
                 f.write(final_output)
             print(f"    Saved: {out_path}")
