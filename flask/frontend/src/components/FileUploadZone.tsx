@@ -482,11 +482,11 @@ export function FileUploadZone({
                         <span>{displayFileSizeMb} MB</span>
                     </div>
 
-                    {expectedChapters > 0 && (
-                        <p className="text-sm text-gray-500 mt-2">
-                            Chapters: {chaptersGenerated}/{expectedChapters}
-                        </p>
-                    )}
+                    {/*{expectedChapters > 0 && (*/}
+                    {/*    <p className="text-sm text-gray-500 mt-2">*/}
+                    {/*        Chapters: {chaptersGenerated}/{expectedChapters}*/}
+                    {/*    </p>*/}
+                    {/*)}*/}
 
                     {error && <p className="text-sm text-red-600 mt-2">{error}</p>}
                 </Card>

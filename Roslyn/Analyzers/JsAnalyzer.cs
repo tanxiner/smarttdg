@@ -228,7 +228,13 @@ namespace Roslyn.Analyzers
 
                                 if (string.Equals(propName, "addEventListener", StringComparison.OrdinalIgnoreCase))
                                 {
-                                    var ev = LiteralValue(GetAtOrDefault(ce.Arguments, 0)) ?? "";
+                                    var evNode = GetAtOrDefault(ce.Arguments, 0);
+                                    var ev = LiteralValue(evNode);
+
+                                    if (string.IsNullOrWhiteSpace(ev))
+                                    {
+                                        ev = evNode?.ToString() ?? "";
+                                    }
                                     var handlerNode = GetAtOrDefault(ce.Arguments, 1);
                                     var handler = handlerNode?.ToString() ?? "";
                                     eventBindings.Add(("addEventListener", ev, handler));
@@ -240,7 +246,13 @@ namespace Roslyn.Analyzers
                                 {
                                     if (string.Equals(propName, "on", StringComparison.OrdinalIgnoreCase))
                                     {
-                                        var ev = LiteralValue(GetAtOrDefault(ce.Arguments, 0)) ?? "";
+                                        var evNode = GetAtOrDefault(ce.Arguments, 0);
+                                        var ev = LiteralValue(evNode);
+                                        if (string.IsNullOrWhiteSpace(ev))
+                                        {
+                                            ev = evNode?.ToString() ?? "";
+                                        }
+
                                         var handlerNode = GetAtOrDefault(ce.Arguments, 1);
                                         var handler = handlerNode?.ToString() ?? "";
                                         eventBindings.Add(("jquery.on", ev, handler));
@@ -349,9 +361,15 @@ namespace Roslyn.Analyzers
                 var exportsArr = exports.Take(50).ToArray();
 
                 var distinctFuncs = funcs
-                    .Select(f => (kind: f.kind ?? "", name: (f.name ?? "<anonymous>").Trim(), parameters: f.parameters))
+                    .Select(f => new
+                    {
+                        kind = (f.kind ?? "").Trim(),
+                        name = (f.name ?? "<anonymous>").Trim(),
+                        parameters = (f.parameters ?? Array.Empty<string>()).Select(p => p?.Trim() ?? "").ToArray()
+                    })
                     .Where(f => !string.IsNullOrEmpty(f.name))
-                    .Distinct()
+                    .GroupBy(f => $"{f.kind}|{f.name}|{string.Join(",", f.parameters)}", StringComparer.OrdinalIgnoreCase)
+                    .Select(g => g.First())
                     .ToList();
 
                 var funcsSummary = new
@@ -366,11 +384,27 @@ namespace Roslyn.Analyzers
                     sample = apiCalls.Take(20).Select(a => new { a.kind, a.method, a.url }).ToArray()
                 };
 
+                var distinctEventBindings = eventBindings
+                    .Select(e => (
+                        kind: (e.kind ?? "").Trim(),
+                        eventName: (e.eventName ?? "").Trim(),
+                        handler: (e.handler ?? "").Trim()
+                    ))
+                    .Where(e =>
+                        !string.IsNullOrWhiteSpace(e.eventName) &&
+                        !e.eventName.Contains("Esprima.Ast", StringComparison.OrdinalIgnoreCase)
+                    )
+                    .Distinct()
+                    .ToList();
+
                 var eventBindingsSummary = new
                 {
-                    count = eventBindings.Count,
-                    sample = eventBindings.Take(20).Select(e => new { e.kind, e.eventName }).ToArray()
-                };
+                    count = distinctEventBindings.Count,
+                    sample = distinctEventBindings
+                        .Take(20)
+                        .Select(e => new { e.kind, e.eventName, e.handler })
+                        .ToArray()
+                                };
 
                 var selectorsArr = selectors.Take(50).ToArray();
 

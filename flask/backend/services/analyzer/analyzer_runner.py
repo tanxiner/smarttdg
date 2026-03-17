@@ -154,16 +154,27 @@ def analyze_code(*file_paths: str, job_id: Optional[str] = None, progress_callba
         args = list(file_paths)
 
     # Use dotnet directly  avoid requiring a .env file via `dotenv run`
+    # cmd = [
+    #     "dotnet", "run",
+    #     "--project", analyzer_project_dir,
+    #     "--",
+    # ] + args
+
     cmd = [
-        "dotnet", "run",
-        "--project", analyzer_project_dir,
-        "--",
-    ] + args
+    "dotnet", "run",
+    "--project", analyzer_project_dir,
+    "-p:RunAnalyzers=false",
+    "-p:BuildProjectReferences=false",
+    "--",
+] + args
 
     env = os.environ.copy()
     final_output = os.path.abspath(os.path.join(this_dir, "..", "..", "static_analysis_output"))
     os.makedirs(final_output, exist_ok=True)
     env["ANALYZER_OUTPUT_DIR"] = final_output
+    env["DOTNET_SKIP_FIRST_TIME_EXPERIENCE"] = "1"
+    env["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1"
+    env["DOTNET_NOLOGO"] = "1"
 
     flask_root = os.path.abspath(os.path.join(this_dir, "..", "..", ".."))
     if os.path.isdir(flask_root):

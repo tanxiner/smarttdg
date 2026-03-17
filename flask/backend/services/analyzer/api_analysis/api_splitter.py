@@ -22,45 +22,42 @@ You are NOT a Developer. You DO NOT write code.
 
 ### OBJECTIVE
 Produce a concise API Reference entry for the endpoint described below.
-Focus on what the endpoint does, its inputs, outputs, and any relevant behaviour.
+Focus only on the endpoint purpose and behaviour in plain English.
 
-### HARD CONSTRAINTS
-1. NO code blocks (C#, VB.NET, SQL, JSON).
-2. NO speculative assertions beyond what is explicitly provided.
-3. If a field is unknown or empty, write "Not specified" rather than guessing.
+### SOURCE METADATA
+**EndpointTitle:** {endpoint_title}
+**Kind:** {kind}
+**Controller / Service:** {controller}
+**Operation:** {operation}
+**Source File:** {source_file}
+**Route:** {route}
+**HTTP Methods:** {http_methods}
+**Return Type:** {return_type}
 
-### OUTPUT FORMAT
-# API Endpoint: {endpoint_title}
-
-| Field | Value |
-|------|------|
-| Kind | {kind} |
-| Controller / Service | {controller} |
-| Operation | {operation} |
-| Source File | {source_file} |
-| Route | {route} |
-| HTTP Methods | {http_methods} |
-
-### Parameters
+### PARAMETERS TABLE
 | Name | Type |
 | :--- | :--- |
 {parameters_table}
 
-### Return Type
-{return_type}
+### HARD CONSTRAINTS
+1. NO code blocks (C#, VB.NET, SQL, JSON).
+2. NO speculative assertions beyond what is explicitly provided.
+3. If purpose cannot be determined, write exactly:
+Purpose unknown — insufficient metadata.
+4. Do NOT output endpoint title, metadata table, parameters table, or return type. They are generated automatically.
 
+### OUTPUT FORMAT
 ### Purpose & Behaviour
-{Describe what this endpoint does in plain English based on the metadata below.
-If the purpose cannot be determined, write "Purpose unknown — insufficient metadata."}
+One short paragraph explaining what the endpoint appears to do based only on the provided metadata.
 
 ---
 
-### RAW ENDPOINT METADATA 
+### RAW INPUT
 {metadata_chunk}
-### END OF METADATA 
+### END OF INPUT
 
-Instruction: Document the API endpoint above. Focus on purpose, parameters, return value, and expected behaviour.
-"""
+Instruction: Document only the purpose and behaviour of the API endpoint above.
+""".strip()
 
 
 def _safe_filename(s: str) -> str:

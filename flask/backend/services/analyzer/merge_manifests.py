@@ -7,8 +7,10 @@ BACKEND_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, "..", ".."))  # flask/bac
 PROMPTS_OUTPUT_BASE = os.path.join(BACKEND_DIR, "prompts_output")
 PAGE_DIR = os.path.join(PROMPTS_OUTPUT_BASE, "Page_Documentation_Prompts")
 UTIL_DIR = os.path.join(PROMPTS_OUTPUT_BASE, "Utility_Documentation_Prompts")
+UTIL_SQL_DIR = os.path.join(PROMPTS_OUTPUT_BASE, "Utility_SQL_Documentation_Prompts")
 SQL_DIR = os.path.join(PROMPTS_OUTPUT_BASE, "SQL_Documentation_Prompts")
 API_DIR = os.path.join(PROMPTS_OUTPUT_BASE, "API_Documentation_Prompts")
+HTML_DIR = os.path.join(PROMPTS_OUTPUT_BASE, "HTML_Documentation_Prompts")
 
 def read_manifest(path):
     try:
@@ -19,7 +21,7 @@ def read_manifest(path):
 
 def collect_txt_files():
     files = []
-    for d in (PAGE_DIR, UTIL_DIR, SQL_DIR, API_DIR):
+    for d in (PAGE_DIR, UTIL_DIR, SQL_DIR, API_DIR, UTIL_SQL_DIR, HTML_DIR):
         if os.path.isdir(d):
             for f in sorted(os.listdir(d)):
                 if f.endswith(".txt"):
@@ -32,6 +34,7 @@ def main():
     sql_manifest_path = os.path.join(PROMPTS_OUTPUT_BASE, f"manifest_sql_{job_id}.json")
     api_manifest_path = os.path.join(PROMPTS_OUTPUT_BASE, f"manifest_api_{job_id}.json")
     final_manifest_path = os.path.join(PROMPTS_OUTPUT_BASE, f"manifest_{job_id}.json")
+
 
     files_set = set()
 

@@ -16,6 +16,7 @@ export function HomePage({ onDocumentationReady }: HomePageProps) {
 
     const MODELS = [
         "gemma3:latest",
+        "smarttdg-gemma:latest",
         "llama3.2:latest",
         "qwen3:latest",
         "qwen3-coder:latest",

@@ -22,29 +22,43 @@ if sql_env:
             INPUT_SQL_FILES.append(c)
 
 # Split only oversized procedures.
-MAX_SQL_CHARS_PER_PROMPT = 15000
+MAX_SQL_CHARS_PER_PROMPT = 10000
 MAX_SQL_LINES_PER_PROMPT = 400
 CHUNK_OVERLAP_LINES = 0
-MAX_CONTEXT_DECL_LINES = 80
-MAX_CONTEXT_CHARS = 12000
+MAX_CONTEXT_DECL_LINES = 60
+MAX_CONTEXT_CHARS = 2000
 
 TEMPLATE = """
 ### SYSTEM ROLE
-You are a Senior Database Architect.
-You are NOT a Coder.
-You MUST NOT write SQL code.
+You are a Senior Database Architect. You are NOT a Coder. You MUST NOT write SQL code.
 
 ### TASK
 Document the stored procedure below.
 {PartInstruction}
 
+### SOURCE METADATA
+# ProcedureName: {ProcedureName}
+**PartNumber:** {PartNumber}
+**TotalParts:** {TotalParts}
+**File:** {SourceFilename}
+**Path:** {SourcePath}
+
+### REQUIRED OUTPUT
+### Purpose
+(DO NOT LEAVE PURPOSE OUT.)
+
+### Logic Flow
+1.
+2.
+3.
+
 ### STRICT RULES
 1. Start your response with exactly:
 # Procedure: {ProcedureName}{PartSuffix}
 
-2. You MUST output ALL sections exactly as shown, even if information is not present. If information is missing, write: None
-3. Do NOT add any introduction.
-4. Do NOT add any conclusion.
+2. Make sure to fill in the purpose.
+3. You MUST output ALL sections exactly as shown, even if information is not present. If information is missing, write: None
+4. Do NOT add any introduction or conclusion.
 5. Do NOT ask follow-up questions.
 6. Do NOT say things like:
    - "Here is the documentation"
@@ -56,57 +70,29 @@ Document the stored procedure below.
 9. Describe behavior in plain language only.
 10. Do NOT expand acronyms.
    Treat these as proper nouns: [{ACRONYM_LIST}]
-11. If prior context is provided, use it only to understand earlier setup. Document only the current chunk's contribution while keeping references consistent. Do NOT repeat steps already described in earlier parts.
+11. Do NOT output a Parameters section.
+12. Do NOT output schema tables, column lists, or field-by-field breakdowns.
 
-### REQUIRED OUTPUT
-# Procedure: {ProcedureName}{PartSuffix}
-
-**File:** {SourceFilename}  
-**Path:** {SourcePath}  
-
-### Purpose
-One clear sentence explaining the business task.
-
-### Parameters
-If the procedure has parameters, return a table:
-
-| Name | Type | Purpose |
-| :--- | :--- | :--- |
-| @Param | datatype | inferred usage |
-
-If there are no parameters, write exactly:
-None
-
-### Logic Flow
-1.
-2.
-3.
-
-### Data Interactions
-* **Reads:** List tables explicitly selected from
-* **Writes:** List tables inserted/updated/deleted
-* **Joins:** Tables joined in SELECT queries
-
-### GLOBAL CONTEXT
-{ContextBlock}
+{GlobalContextSection}
 
 ### RAW SQL INPUT
 {code_chunk}
 
 ### FINAL INSTRUCTION
 Return ONLY the required output format.
+Do not miss out on ### Purpose.
 Do not write anything before "# Procedure: {ProcedureName}{PartSuffix}".
-Do not write anything after the Data Interactions section.
-"""
+Do not add any sections after Logic Flow. Do not add the rules given. Do not add the raw SQL input.
+""".lstrip()
 
 
 def detect_encoding(file_path):
     try:
-        with open(file_path, 'rb') as f:
+        with open(file_path, "rb") as f:
             raw = f.read(50000)
-        return chardet.detect(raw)['encoding'] or 'utf-8'
+        return chardet.detect(raw)["encoding"] or "utf-8"
     except Exception:
-        return 'latin-1'
+        return "latin-1"
 
 
 def get_dynamic_acronyms(text):
@@ -115,20 +101,21 @@ def get_dynamic_acronyms(text):
         "DECLARE", "DELETE", "DROP", "END", "EXEC", "EXISTS", "FETCH", "FOR", "FROM", "FUNCTION", "GROUP",
         "HAVING", "IF", "IN", "INSERT", "INNER", "JOIN", "LEFT", "LIKE", "ORDER", "OUTER", "PRIMARY",
         "SELECT", "SET", "TABLE", "UPDATE", "WHERE", "PROCEDURE", "PROC", "TRIGGER", "RETURN", "TRANSACTION",
-        "TOP", "INTO", "OUTPUT", "NULL", "NOT", "OR", "ON", "BY"
+        "TOP", "INTO", "OUTPUT", "NULL", "NOT", "OR", "ON", "BY", "VALUES", "MERGE", "USING", "GO",
+        "TRY", "CATCH", "ROLLBACK", "COMMIT", "DISTINCT"
     }
-    candidates = re.findall(r'\b[A-Z0-9_]{2,16}\b', text)
+    candidates = re.findall(r"\b[A-Z0-9_]{2,20}\b", text)
     unique = sorted(list(set([w for w in candidates if not w.isdigit() and w not in exclude])))
     return ", ".join(f'"{a}"' for a in unique)
 
 
 def extract_proc_name(proc_sql):
     pattern = (
-        r'(?is)\b(?:CREATE|ALTER)\s+'
-        r'(?:OR\s+ALTER\s+)?'
-        r'(?:PROC|PROCEDURE)\s+'
-        r'(?:(?:\[[^\]]+\]|\w+)\s*\.\s*)?'
-        r'\[?([A-Za-z0-9_]+)\]?'
+        r"(?is)\b(?:CREATE|ALTER)\s+"
+        r"(?:OR\s+ALTER\s+)?"
+        r"(?:PROC|PROCEDURE)\s+"
+        r"(?:(?:\[[^\]]+\]|\w+)\s*\.\s*)?"
+        r"\[?([A-Za-z0-9_]+)\]?"
     )
     match = re.search(pattern, proc_sql)
     return match.group(1) if match else "Unknown_Proc"
@@ -139,35 +126,66 @@ def sanitize_filename(name):
 
 
 def extract_parameter_block(proc_sql: str) -> str:
-    pattern = re.compile(
-        r'(?is)\b(?:CREATE|ALTER)\s+(?:OR\s+ALTER\s+)?(?:PROC|PROCEDURE)\s+'
-        r'(?:(?:\[[^\]]+\]|\w+)\s*\.\s*)?'
-        r'(?:\[[^\]]+\]|\w+)\s*'
-        r'(\((.*?)\))?\s*AS\b'
-    )
-    m = pattern.search(proc_sql)
-    if not m:
+    lines = proc_sql.replace("\r\n", "\n").replace("\r", "\n").splitlines()
+
+    start_idx = None
+    for i, line in enumerate(lines):
+        if re.search(r"(?i)\b(?:CREATE|ALTER)\s+(?:OR\s+ALTER\s+)?(?:PROC|PROCEDURE)\b", line):
+            start_idx = i
+            break
+
+    if start_idx is None:
         return "None"
-    inner = (m.group(2) or "").strip()
-    if not inner:
+
+    collected = []
+    paren_depth = 0
+    saw_proc_header = False
+
+    for i in range(start_idx, len(lines)):
+        line = lines[i].rstrip()
+
+        if not saw_proc_header:
+            saw_proc_header = True
+            continue
+
+        paren_depth += line.count("(") - line.count(")")
+
+        if paren_depth <= 0 and re.match(r"^\s*AS\b", line, flags=re.IGNORECASE):
+            break
+
+        if line.strip():
+            collected.append(line.strip())
+
+    if not collected:
         return "None"
-    lines = [ln.strip() for ln in inner.splitlines() if ln.strip()]
-    return "\n".join(lines[:MAX_CONTEXT_DECL_LINES]) if lines else "None"
+
+    param_lines = [ln for ln in collected if "@" in ln]
+    if not param_lines:
+        return "None"
+
+    return "\n".join(param_lines[:MAX_CONTEXT_DECL_LINES])
 
 
-def extract_key_declarations(proc_sql: str, limit: int = 80) -> str:
+def extract_key_declarations(proc_sql: str, limit: int = 120) -> str:
     decls = []
+
     for line in proc_sql.splitlines():
         stripped = line.strip()
 
-        m = re.match(r'(?i)^declare\s+(@\w+)', stripped)
+        m = re.match(r"(?i)^declare\s+(@\w+)", stripped)
         if m:
             decls.append(m.group(1))
             continue
 
-        m2 = re.match(r'(?i)^create\s+table\s+(#\w+)', stripped)
+        m2 = re.match(r"(?i)^create\s+table\s+(#\#?\w+)", stripped)
         if m2:
             decls.append(m2.group(1))
+            continue
+
+        m3 = re.match(r"(?i)^select\b.*\binto\s+(#\#?\w+)", stripped)
+        if m3:
+            decls.append(m3.group(1))
+            continue
 
     if not decls:
         return "None"
@@ -186,38 +204,131 @@ def extract_key_declarations(proc_sql: str, limit: int = 80) -> str:
 def extract_temp_objects(proc_sql: str) -> str:
     objs = set()
 
-    # temp tables created directly
-    for name in re.findall(r'(?i)\bcreate\s+table\s+(#\w+)', proc_sql):
+    # local/global temp tables
+    for name in re.findall(r"(?i)\bcreate\s+table\s+(#\#?\w+)", proc_sql):
         objs.add(name)
 
-    # temp tables referenced later
-    for name in re.findall(r'(?i)\b(?:from|join|into|update|table)\s+(#\w+)', proc_sql):
+    for name in re.findall(r"(?i)\bselect\b[\s\S]*?\binto\s+(#\#?\w+)", proc_sql):
+        objs.add(name)
+
+    for name in re.findall(r"(?i)\b(?:from|join|into|update|merge\s+into|delete\s+from)\s+(#\#?\w+)", proc_sql):
         objs.add(name)
 
     # table variables
-    for name in re.findall(r'(?i)\bdeclare\s+(@\w+)\s+table\b', proc_sql):
+    for name in re.findall(r"(?i)\bdeclare\s+(@\w+)\s+table\b", proc_sql):
+        objs.add(name)
+
+    for name in re.findall(r"(?i)\b(?:from|join|into|update|merge\s+into|delete\s+from)\s+(@\w+)", proc_sql):
         objs.add(name)
 
     if not objs:
         return "None"
-    return ", ".join(sorted(objs))
+
+    return ", ".join(sorted(objs, key=str.lower))
+
+
+def extract_main_table_refs(proc_sql: str, limit: int = 40) -> str:
+    refs = []
+
+    patterns = [
+        r"(?i)\bfrom\s+([@#\[\]\w\.]+)",
+        r"(?i)\bjoin\s+([@#\[\]\w\.]+)",
+        r"(?i)\binsert\s+into\s+([@#\[\]\w\.]+)",
+        r"(?i)\bupdate\s+([@#\[\]\w\.]+)",
+        r"(?i)\bdelete\s+from\s+([@#\[\]\w\.]+)",
+        r"(?i)\bmerge\s+into\s+([@#\[\]\w\.]+)",
+    ]
+
+    for pattern in patterns:
+        for m in re.finditer(pattern, proc_sql):
+            refs.append(m.group(1))
+
+    cleaned = []
+    seen = set()
+
+    for ref in refs:
+        ref = ref.strip().rstrip(",;")
+        if ref.startswith("("):
+            continue
+
+        parts = re.findall(r"\[([^\]]+)\]|([@#A-Za-z0-9_]+)", ref)
+        tokens = [a or b for a, b in parts if (a or b)]
+        if not tokens:
+            continue
+
+        if tokens[0].startswith("@") or tokens[0].startswith("#"):
+            final_name = tokens[0]
+        else:
+            final_name = tokens[-1]
+
+        key = final_name.lower()
+        if key not in seen:
+            seen.add(key)
+            cleaned.append(final_name)
+
+    if not cleaned:
+        return "None"
+
+    return ", ".join(cleaned[:limit])
 
 
 def build_global_context(proc_name: str, proc_sql: str) -> str:
     param_block = extract_parameter_block(proc_sql)
-    decl_block = extract_key_declarations(proc_sql)
     temp_objs = extract_temp_objects(proc_sql)
+    table_refs = extract_main_table_refs(proc_sql)
+
     context = (
         f"Procedure Name: {proc_name}\n\n"
         f"Parameters:\n{param_block}\n\n"
-        f"Key Declarations and Temp Objects:\n{decl_block}\n\n"
-        f"Temp/Table Objects Summary: {temp_objs}"
+        f"Temp/Table Objects: {temp_objs}\n\n"
+        f"Main Table References: {table_refs}"
     )
 
     if len(context) > MAX_CONTEXT_CHARS:
         context = context[:MAX_CONTEXT_CHARS].rstrip() + "\n\n[Context truncated due to length.]"
 
     return context
+
+
+def choose_split_index(lines, start, hard_end):
+    """
+    Prefer to split near logical SQL boundaries instead of blindly at hard_end.
+    """
+    candidates = []
+
+    search_start = max(start + 1, hard_end - 80)
+    search_end = min(len(lines), hard_end + 1)
+
+    boundary_patterns = [
+        r"(?i)^\s*IF\b",
+        r"(?i)^\s*ELSE\b",
+        r"(?i)^\s*BEGIN\b",
+        r"(?i)^\s*END\b",
+        r"(?i)^\s*WITH\b",
+        r"(?i)^\s*SELECT\b",
+        r"(?i)^\s*INSERT\b",
+        r"(?i)^\s*UPDATE\b",
+        r"(?i)^\s*DELETE\b",
+        r"(?i)^\s*MERGE\b",
+        r"(?i)^\s*CREATE\s+TABLE\b",
+        r"(?i)^\s*DECLARE\b",
+    ]
+
+    for i in range(search_start, search_end):
+        line = lines[i].strip()
+        if not line:
+            candidates.append(i)
+            continue
+
+        for pat in boundary_patterns:
+            if re.match(pat, line):
+                candidates.append(i)
+                break
+
+    if candidates:
+        return max(candidates)
+
+    return hard_end
 
 
 def split_proc_if_too_long(proc_sql: str):
@@ -237,13 +348,19 @@ def split_proc_if_too_long(proc_sql: str):
         while end < len(lines):
             next_line = lines[end]
             if current_lines and (
-                current_len + len(next_line) > MAX_SQL_CHARS_PER_PROMPT or
-                len(current_lines) >= MAX_SQL_LINES_PER_PROMPT
+                current_len + len(next_line) > MAX_SQL_CHARS_PER_PROMPT
+                or len(current_lines) >= MAX_SQL_LINES_PER_PROMPT
             ):
                 break
             current_lines.append(next_line)
             current_len += len(next_line)
             end += 1
+
+        if end < len(lines):
+            preferred_end = choose_split_index(lines, start, end - 1)
+            if preferred_end >= start:
+                current_lines = lines[start:preferred_end + 1]
+                end = preferred_end + 1
 
         chunk = "".join(current_lines).strip()
         if chunk:
@@ -252,7 +369,6 @@ def split_proc_if_too_long(proc_sql: str):
         if end >= len(lines):
             break
 
-        # With overlap=0, this cleanly moves to the next unseen line.
         start = end if CHUNK_OVERLAP_LINES <= 0 else max(end - CHUNK_OVERLAP_LINES, start + 1)
 
     return chunks
@@ -272,27 +388,27 @@ def read_procedures(file_path: str):
     current_proc = []
     in_proc = False
 
-    start_re = re.compile(r'(?i)^\s*(?:CREATE\s+(?:OR\s+ALTER\s+)?|ALTER\s+)(?:PROC|PROCEDURE)\s+')
-    go_re = re.compile(r'(?i)^\s*GO\s*$')
+    start_re = re.compile(r"(?i)^\s*(?:CREATE\s+(?:OR\s+ALTER\s+)?|ALTER\s+)(?:PROC|PROCEDURE)\s+")
+    go_re = re.compile(r"(?i)^\s*GO\s*$")
 
     for line in lines:
         if start_re.match(line):
             if in_proc and current_proc:
-                procedures.append(''.join(current_proc).strip())
+                procedures.append("".join(current_proc).strip())
             in_proc = True
             current_proc = [line]
             continue
 
         if in_proc:
             if go_re.match(line):
-                procedures.append(''.join(current_proc).strip())
+                procedures.append("".join(current_proc).strip())
                 current_proc = []
                 in_proc = False
             else:
                 current_proc.append(line)
 
     if current_proc:
-        procedures.append(''.join(current_proc).strip())
+        procedures.append("".join(current_proc).strip())
 
     return procedures
 
@@ -377,7 +493,7 @@ def main():
         acronyms = get_dynamic_acronyms(proc_code)
         safe_name = sanitize_filename(proc_name)
         parts = split_proc_if_too_long(proc_code)
-        context_block = build_global_context(proc_name, proc_code)
+        context_block = build_global_context(proc_name, proc_code) if len(parts) > 1 else ""
 
         if len(parts) == 1:
             fname = f"{i:03d}_{safe_name}.txt"
@@ -388,16 +504,19 @@ def main():
                 .replace("{SourceFilename}", source_filename)
                 .replace("{SourcePath}", source_path)
                 .replace("{ACRONYM_LIST}", acronyms)
-                .replace("{ContextBlock}", context_block)
+                .replace("{GlobalContextSection}", "")
                 .replace("{code_chunk}", parts[0])
+                .replace("{PartNumber}", "")
+                .replace("{TotalParts}", "")
             )
             out_path = os.path.join(OUTPUT_FOLDER, fname)
-            with open(out_path, 'w', encoding='utf-8') as f:
+            with open(out_path, "w", encoding="utf-8") as f:
                 f.write(final_content)
             created_files.append(out_path)
             total_created += 1
             print(f"Saved: {out_path}")
         else:
+            global_context_section = f"### GLOBAL CONTEXT\n{context_block}\n\n"
             print(f"Procedure '{proc_name}' is long; splitting into {len(parts)} parts...")
             for part_idx, part_sql in enumerate(parts, start=1):
                 fname = f"{i:03d}_{safe_name}_part{part_idx}.txt"
@@ -405,6 +524,7 @@ def main():
                 part_instruction = (
                     f"This file contains only one chunk of the full procedure. "
                     f"Document this chunk as Part {part_idx} of {len(parts)} while keeping terminology consistent with the full procedure."
+                    f"Use it only to understand earlier setup. Document only the current chunk's contribution. Do NOT repeat steps already described in earlier parts."
                 )
                 final_content = (
                     TEMPLATE.replace("{ProcedureName}", proc_name)
@@ -413,11 +533,13 @@ def main():
                     .replace("{SourceFilename}", source_filename)
                     .replace("{SourcePath}", source_path)
                     .replace("{ACRONYM_LIST}", acronyms)
-                    .replace("{ContextBlock}", context_block)
+                    .replace("{GlobalContextSection}", global_context_section)
                     .replace("{code_chunk}", part_sql)
+                    .replace("{PartNumber}", str(part_idx))
+                    .replace("{TotalParts}", str(len(parts)))
                 )
                 out_path = os.path.join(OUTPUT_FOLDER, fname)
-                with open(out_path, 'w', encoding='utf-8') as f:
+                with open(out_path, "w", encoding="utf-8") as f:
                     f.write(final_content)
                 created_files.append(out_path)
                 total_created += 1

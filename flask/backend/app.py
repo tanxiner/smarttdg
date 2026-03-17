@@ -26,9 +26,12 @@ word_to_pdf = convert_doc.word_to_pdf
 BASE_DIR = os.path.dirname(__file__)
 app = Flask(
     __name__,
-    static_folder=os.path.join(BASE_DIR, '..', 'frontend', 'build'),
-    static_url_path='/'
+    static_folder=os.path.abspath(os.path.join(BASE_DIR, "..", "frontend", "build")),
+    static_url_path="/"
 )
+print("BASE_DIR =", BASE_DIR)
+print("STATIC_FOLDER =", app.static_folder)
+print("INDEX_EXISTS =", os.path.exists(os.path.join(app.static_folder, "index.html")))
 
 UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -240,11 +243,15 @@ def analyze_zip(zip_path: str, job_id: str | None = None, model_choice: str | No
         os.path.join(prompts_base, "Utility_SQL_Documentation_Prompts"),
         os.path.join(prompts_base, "SQL_Documentation_Prompts"),
         os.path.join(prompts_base, "API_Documentation_Prompts"),
+        os.path.join(prompts_base, "HTML_Documentation_Prompts"),
+        os.path.join(prompts_base, "JS_Documentation_Prompts"),
         os.path.join(analysis_base, "Final_Documentation_Chapters"),
         os.path.join(analysis_base, "Final_Utility_Chapters"),
         os.path.join(analysis_base, "Final_Utility_SQL_Chapters"),
         os.path.join(analysis_base, "Final_SQL_Docs"),
         os.path.join(analysis_base, "Final_API_Docs"),
+        os.path.join(analysis_base, "Final_HTML_Docs"),
+        os.path.join(analysis_base, "Final_JS_Docs"),
         os.path.join(analysis_base, "Diagrams"),
         output_base,
         static_analysis_base
@@ -315,7 +322,8 @@ def analyze_zip(zip_path: str, job_id: str | None = None, model_choice: str | No
             ".cs", ".vb",
             ".aspx", ".ascx", ".master",
             ".js", ".jsx",
-            ".html", ".cshtml", ".cshtml.cs", ".razor", 
+            ".cshtml", ".cshtml.cs", ".razor", 
+            ".html", ".htm",
             ".sql"
         }
 
@@ -436,8 +444,11 @@ def analyze_zip(zip_path: str, job_id: str | None = None, model_choice: str | No
                 analysis_folders = (
                     "Final_Documentation_Chapters",
                     "Final_Utility_Chapters",
+                    "Final_Utility_SQL_Chapters",
                     "Final_SQL_Docs",
-                    "Final_API_Docs"
+                    "Final_API_Docs",
+                    "Final_HTML_Docs"
+                    "Final_JS_Docs"
                 )
 
                 while not stop_monitor.is_set():
@@ -583,7 +594,10 @@ def analyze_zip(zip_path: str, job_id: str | None = None, model_choice: str | No
                         "Page_Documentation_Prompts",
                         "Utility_Documentation_Prompts",
                         "SQL_Documentation_Prompts",
-                        "API_Documentation_Prompts"
+                        "API_Documentation_Prompts",
+                        "Utility_SQL_Documentation_Prompts",
+                        "HTML_Documentation_Prompts",
+                        "JS_Documentation_Prompts"
                     )
                     total_prompts = 0
                     for fldr in _pf:
@@ -673,7 +687,10 @@ def analyze_zip(zip_path: str, job_id: str | None = None, model_choice: str | No
                 "Final_Documentation_Chapters",
                 "Final_Utility_Chapters",
                 "Final_SQL_Docs",
-                "Final_API_Docs"
+                "Final_API_Docs",
+                "Final_Utility_SQL_Chapters",
+                "Final_HTML_Docs",
+                "Final_JS_Docs"
             )
             analysis_base = os.path.join(BASE_DIR, "analysis_output")
 
@@ -703,30 +720,33 @@ def analyze_zip(zip_path: str, job_id: str | None = None, model_choice: str | No
 
             web_count = _cnt("Final_Documentation_Chapters")
             util_count = _cnt("Final_Utility_Chapters")
+            util_sql_count = _cnt("Final_Utility_SQL_Chapters")
             sql_count = _cnt("Final_SQL_Docs")
             api_count = _cnt("Final_API_Docs")
+            html_count = _cnt("Final_HTML_Docs")
+            js_count = _cnt("Final_JS_Docs")
 
-            totals_payload = {"classes": web_count, "methods": sql_count, "others": util_count, "api": api_count}
+            totals_payload = {"classes": (web_count+html_count), "methods": sql_count, "others": (util_count+util_sql_count+js_count), "api": api_count}
             if isinstance(analysis_result, dict):
                 analysis_result.setdefault("totals", {}).update(totals_payload)
             elif isinstance(analysis_result, list):
                 analysis_result = {"analysis_list": analysis_result, "totals": totals_payload}
 
             computed_totals = {
-                "webChapters": web_count,
+                "webChapters": (web_count+html_count),
                 "sqlChapters": sql_count,
-                "utilityChapters": util_count,
+                "utilityChapters": (util_count+util_sql_count+js_count),
                 "apiChapters": api_count
             }
-            total_chapters = web_count + util_count + sql_count + api_count
+            total_chapters = web_count + util_count + sql_count + api_count + html_count + util_sql_count + js_count
 
             if job_id:
                 expected_now = _get_job(job_id).get("expected_chapters", total_chapters)
                 _update_job(
                     job_id,
-                    webChapters=web_count,
+                    webChapters=(web_count+html_count),
                     sqlChapters=sql_count,
-                    utilityChapters=util_count,
+                    utilityChapters=(util_count+util_sql_count+js_count),
                     apiChapters=api_count,
                     expected_chapters=max(expected_now, total_chapters),
                     chapters_generated=total_chapters
@@ -930,7 +950,7 @@ def download_complete_documentation():
 @app.route("/download/word_documentation")
 def download_word_documentation():
     final_dir = os.path.join(BASE_DIR, "final_output")
-    docx_path = os.path.join(final_dir, "technical_documentation.docx")
+    docx_path = os.path.join(final_dir, "Technical_Documentation.docx")
 
     if not os.path.exists(docx_path):
         return jsonify({
@@ -953,7 +973,7 @@ def download_word_documentation():
 @app.route("/download/pdf_documentation")
 def download_pdf():
     final_dir = os.path.join(BASE_DIR, "final_output")
-    pdf_path = os.path.join(final_dir, "technical_documentation.pdf")
+    pdf_path = os.path.join(final_dir, "Technical_Documentation.pdf")
 
     if not os.path.exists(pdf_path):
         return jsonify({
@@ -973,13 +993,27 @@ def download_pdf():
     )
 
 
-@app.route('/', defaults={'path': ''})
-@app.route('/<path:path>')
+# @app.route('/', defaults={'path': ''})
+# @app.route('/<path:path>')
+# def serve_spa(path):
+#     file_path = os.path.join(app.static_folder, path)
+#     if path and os.path.exists(file_path):
+#         return send_from_directory(app.static_folder, path)
+#     return send_from_directory(app.static_folder, 'index.html')
+
+@app.route("/", defaults={"path": ""})
+@app.route("/<path:path>")
 def serve_spa(path):
     file_path = os.path.join(app.static_folder, path)
+    index_path = os.path.join(app.static_folder, "index.html")
+
     if path and os.path.exists(file_path):
         return send_from_directory(app.static_folder, path)
-    return send_from_directory(app.static_folder, 'index.html')
+
+    if os.path.exists(index_path):
+        return send_from_directory(app.static_folder, "index.html")
+
+    return "Not Found", 404
 
 def clear_upload_folder():
     try:
@@ -1172,4 +1206,4 @@ def _allow_sleep() -> None:
 register_diagram_routes(app)
 
 if __name__ == "__main__":
-    app.run(debug=True, threaded=True)
+    app.run(host="0.0.0.0", port=5000, debug=False)

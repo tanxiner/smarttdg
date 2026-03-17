@@ -7,6 +7,8 @@ UTIL_FOLDER = 'Final_Utility_Chapters'
 UTIL_SQL_FOLDER = 'Final_Utility_SQL_Chapters'
 SQL_FOLDER = 'Final_SQL_Docs'
 API_FOLDER = 'Final_API_Docs'
+HTML_FOLDER = 'Final_HTML_Docs'
+JS_FOLDER = 'Final_JS_Docs'
 OUTPUT_FILENAME = 'Technical_Documentation.md'
 
 # Base paths
@@ -50,12 +52,16 @@ def parse_part_info(filename: str):
 def clean_title(raw_title):
     """
     Extracts the core title from a header text.
-    Removes 'Page:', 'Module:' and 'Procedure:' prefixes for a cleaner TOC.
+    Removes common generated prefixes for a cleaner TOC.
     """
     if not raw_title:
         return ""
     text = raw_title.strip()
-    text = re.sub(r'(?i)^(Page:|Module:|Procedure:)\s*', '', text)
+    text = re.sub(
+        r'(?i)^(Page:|Module:|Procedure:|HTML\s+Page:|JavaScript\s+File:)\s*',
+        '',
+        text
+    )
     text = re.sub(r'\s+', ' ', text)
     return text
 
@@ -96,16 +102,29 @@ def _ensure_unique_slug(slug: str) -> str:
 
 def normalize_whitespace(text):
     """
-    Normalize whitespace in markdown text to prevent extra blank lines in compiled output:
-    - Strip trailing spaces from each line.
-    - Convert whitespace-only lines into truly empty lines.
-    - Collapse 3 or more consecutive newlines into 2.
+    Normalize whitespace in markdown text while preserving markdown hard breaks:
+    - Keep lines ending with 2+ spaces intact
+    - Strip trailing spaces from other lines
+    - Convert whitespace-only lines into empty lines
+    - Collapse 3 or more consecutive newlines into 2
     """
-    lines = text.split('\n')
-    lines = [line.rstrip() for line in lines]
-    text = '\n'.join(lines)
+    out_lines = []
+
+    for line in text.split('\n'):
+        if not line.strip():
+            out_lines.append("")
+            continue
+
+        # Preserve markdown hard breaks (2+ trailing spaces)
+        if re.search(r" {2,}$", line):
+            out_lines.append(line)
+        else:
+            out_lines.append(line.rstrip())
+
+    text = '\n'.join(out_lines)
     text = re.sub(r'\n{3,}', '\n\n', text)
     return text
+
 
 def sql_sort_key(filename):
     stem = os.path.splitext(filename)[0]
@@ -145,9 +164,24 @@ def non_sql_sort_key(filename):
         rest = m.group(3).lower()
         return (1, prefix, idx, rest)
 
+    m = re.match(r'^(HTML_.+?)_(\d+)_(.+)$', stem, flags=re.IGNORECASE)
+    if m:
+        prefix = m.group(1).lower()
+        idx = int(m.group(2))
+        rest = m.group(3).lower()
+        return (2, prefix, idx, rest)
+
+    m = re.match(r'^(JS_.+?)_(\d+)_(.+)$', stem, flags=re.IGNORECASE)
+    if m:
+        prefix = m.group(1).lower()
+        idx = int(m.group(2))
+        rest = m.group(3).lower()
+        return (3, prefix, idx, rest)
+
     parts = re.split(r'(\d+)', stem.lower())
     natural = [int(p) if p.isdigit() else p for p in parts]
-    return (2, *natural)
+    return (4, *natural)
+
 
 def process_folder(folder_path, section_name, toc_lines, body_content, is_module=False):
     """
@@ -304,35 +338,42 @@ def main():
     body_content = []
 
     docs_path = find_folder(DOCS_FOLDER)
+    html_path = find_folder(HTML_FOLDER)
     util_path = find_folder(UTIL_FOLDER)
     util_sql_path = find_folder(UTIL_SQL_FOLDER)
+    js_path = find_folder(JS_FOLDER)
     sql_path = find_folder(SQL_FOLDER)
     api_path = find_folder(API_FOLDER)
+    
 
     if docs_path:
         process_folder(docs_path, "Web Pages", toc_lines, body_content, is_module=False)
     else:
         print(f"No documentation chapters found (expected folder '{DOCS_FOLDER}').")
-
+    if html_path:
+        process_folder(html_path, "HTML Pages", toc_lines, body_content, is_module=False)
+    else:
+        print(f"No HTML docs found (expected folder '{HTML_FOLDER}').")
     if util_path:
         process_folder(util_path, "Modules/Others", toc_lines, body_content, is_module=True)
     else:
         print(f"No utility/module chapters found (expected folder '{UTIL_FOLDER}').")
-
     if util_sql_path:
         process_folder(util_sql_path, "Modules/Others (SQL-Aware)", toc_lines, body_content, is_module=True)
     else:
         print(f"No SQL-aware utility/module chapters found (expected folder '{UTIL_SQL_FOLDER}').")
-
-    if sql_path:
-        process_folder(sql_path, "Database Reference (SQL)", toc_lines, body_content, is_module=False)
-    else:
-        print(f"No SQL docs found (expected folder '{SQL_FOLDER}').")
-
     if api_path:
         process_folder(api_path, "API Reference", toc_lines, body_content, is_module=False)
     else:
         print(f"No API docs found (expected folder '{API_FOLDER}').")
+    if sql_path:
+        process_folder(sql_path, "Database Reference (SQL)", toc_lines, body_content, is_module=False)
+    else:
+        print(f"No SQL docs found (expected folder '{SQL_FOLDER}').")
+    if js_path:
+        process_folder(js_path, "JavaScript Files", toc_lines, body_content, is_module=False)
+    else:
+        print(f"No JS docs found (expected folder '{JS_FOLDER}').")
 
     if not body_content:
         print("❌ No content found to write. Ensure analyzer scripts produced output in the analyzer folders.")

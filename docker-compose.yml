@@ -1,0 +1,53 @@
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: smarttdg-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+  ollama-init:
+    image: ollama/ollama:latest
+    container_name: smarttdg-ollama-init
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    entrypoint: ["/bin/sh", "-c"]
+    command: >
+      "echo 'Pulling model...';
+      ollama pull gemma3:latest;
+      echo 'Model pull complete.'"
+
+  backend:
+    build:
+      context: .
+      dockerfile: ./flask/backend/Dockerfile
+    container_name: smarttdg-backend
+    ports:
+      - "5000:5000"
+    environment:
+      OLLAMA_BASE_URL: http://ollama:11434
+      ANALYSIS_MODEL: gemma3:latest
+    depends_on:
+      ollama:
+        condition: service_healthy
+      ollama-init:
+        condition: service_completed_successfully
+    volumes:
+    - ./flask/backend/uploads:/app/uploads
+    - ./flask/backend/final_output:/app/final_output
+    - ./flask/backend/prompts_output:/app/prompts_output
+    - ./flask/backend/analysis_output:/app/analysis_output
+    - ./flask/backend/static_analysis_output:/app/static_analysis_output
+
+volumes:
+  ollama_data:
