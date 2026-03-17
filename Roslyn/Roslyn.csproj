@@ -25,5 +25,9 @@
 		<!-- JS parser for the JS analyzer -->
 		<PackageReference Include="Esprima" Version="2.1.0" />
 	</ItemGroup>
-
+	<ItemGroup>
+		<Compile Remove="Roslyn.Tests\**\*.cs" />
+		<EmbeddedResource Remove="Roslyn.Tests\**\*" />
+		<None Remove="Roslyn.Tests\**\*" />
+	</ItemGroup>
 </Project>
