@@ -280,16 +280,26 @@ def analyze_code(*file_paths: str, job_id: Optional[str] = None, progress_callba
     if proc.returncode != 0:
         raise RuntimeError(f"Analyzer failed (returncode={proc.returncode}):\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}")
 
-    try:
-        # Use simple parse first
-        parsed = json.loads(stdout)
-    except json.JSONDecodeError:
+    analysis_file = os.path.join(final_output, "all_analysis_results.json")
+
+    if os.path.exists(analysis_file):
         try:
-            # Fallback to robust cleaner
-            parsed = _clean_and_parse_json(stdout)
+            with open(analysis_file, "r", encoding="utf-8") as f:
+                parsed = json.load(f)
+        except Exception as e:
+            return {
+                "error": f"Failed to read analyzer output file: {e}",
+                "raw": stdout,
+                "stderr": stderr
+            }
+    else:
+        try:
+            parsed = json.loads(stdout)
         except json.JSONDecodeError:
-            # If all fails, return error with raw output for debugging
-            return {"error": "Invalid output from analyzer", "raw": stdout, "stderr": stderr}
+            try:
+                parsed = _clean_and_parse_json(stdout)
+            except json.JSONDecodeError:
+                return {"error": "Invalid output from analyzer", "raw": stdout, "stderr": stderr}
 
     if isinstance(parsed, dict):
         parsed["runner_stdout"] = stdout

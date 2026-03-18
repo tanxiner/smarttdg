@@ -55,7 +55,7 @@ export function HowToPage() {
               </div>
               <p className="text-gray-600 mb-3">
                 Drag and drop your ZIP file onto the upload zone or click to browse and 
-                select your file. Maximum file size is 50MB.
+                select your file. Maximum file size is 1GB.
               </p>
               <div className="bg-blue-50 p-3 rounded text-sm">
                 <strong>Supported formats:</strong> .zip files containing aspx, .ascx, 
@@ -99,10 +99,10 @@ export function HowToPage() {
             <div className="flex-1">
               <div className="flex items-center space-x-2 mb-2">
                 <Download className="h-5 w-5 text-primary" />
-                <h3 className="text-lg font-medium">Download Your Documentation</h3>
+                <h3 className="text-lg font-medium">Download Your Documentation/Diagrams</h3>
               </div>
               <p className="text-gray-600 mb-3">
-                Once processing is complete, download your documentation.
+                Once processing is complete, download your documentation/diagrams.
               </p>
               {/* <div className="bg-purple-50 p-3 rounded text-sm">
                 <strong>Sharing:</strong> HTML documentation can be hosted anywhere, and 

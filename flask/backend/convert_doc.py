@@ -10,22 +10,50 @@ import sys
 ### --- FOR PDF --- ###
 def word_to_pdf(input_docx, output_pdf=None):
     try:
+        if output_pdf is None:
+            output_pdf = os.path.splitext(input_docx)[0] + ".pdf"
+
+        output_dir = os.path.dirname(output_pdf)
+        os.makedirs(output_dir, exist_ok=True)
+
         cmd = [
-            sys.executable,
-            "-c",
-            f"from docx2pdf import convert; convert(r'{input_docx}', r'{output_pdf}')"
+            "soffice",
+            "--headless",
+            "--convert-to", "pdf",
+            "--outdir", output_dir,
+            input_docx
         ]
 
         result = subprocess.run(
             cmd,
             stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
+            errors="replace"
         )
 
-        # Ignore strange Windows exit codes but log them
+        generated_pdf = os.path.join(
+            output_dir,
+            os.path.splitext(os.path.basename(input_docx))[0] + ".pdf"
+        )
+
         if result.returncode != 0:
-            print("PDF conversion returned non-zero exit code but continuing...")
-            print(result.stderr.decode(errors="ignore"))
+            raise RuntimeError(
+                f"LibreOffice PDF conversion failed.\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
+            )
+
+        if not os.path.exists(generated_pdf):
+            raise RuntimeError(
+                f"LibreOffice finished but PDF was not created.\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
+            )
+
+        if os.path.abspath(generated_pdf) != os.path.abspath(output_pdf):
+            if os.path.exists(output_pdf):
+                os.remove(output_pdf)
+            os.replace(generated_pdf, output_pdf)
+
+        return output_pdf
 
     except Exception as e:
         print(f"PDF conversion skipped due to error: {e}")
@@ -501,8 +529,8 @@ def main():
     final_dir = os.path.join(BASE_DIR, "final_output")
 
     md_path = os.path.join(final_dir, "Technical_Documentation.md")
-    docx_path = os.path.join(final_dir, "Technical_documentation.docx")
-    pdf_path = os.path.join(final_dir, "Technical_documentation.pdf")
+    docx_path = os.path.join(final_dir, "Technical_Documentation.docx")
+    pdf_path = os.path.join(final_dir, "Technical_Documentation.pdf")
 
     if not os.path.exists(md_path):
         raise FileNotFoundError(f"Markdown file not found: {md_path}")
@@ -516,7 +544,11 @@ def main():
     print(f"Word document created: {docx_path}")
 
     word_to_pdf(docx_path, pdf_path)
-    print(f"PDF created: {pdf_path}")
+
+    if os.path.exists(pdf_path):
+        print(f"PDF created: {pdf_path}")
+    else:
+        print("PDF was not created.")
 
 if __name__ == "__main__":
     main()

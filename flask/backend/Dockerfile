@@ -8,6 +8,9 @@ RUN apt-get update && apt-get install -y \
     wget \
     nodejs \
     npm \
+    libreoffice-writer \
+    libreoffice-core \
+    libreoffice-common \
     && rm -rf /var/lib/apt/lists/*
 
 # Install .NET SDK (safe method)

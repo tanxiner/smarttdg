@@ -633,7 +633,7 @@ const DiagramViewer: React.FC = () => {
                             Upload your project files
                         </h3>
                         <p className="text-gray-600 mb-4">
-                            Drag and drop a ZIP file to generate diagrams
+                            Drag and drop a ZIP file containing your project, or click to browse
                         </p>
 
                         <input

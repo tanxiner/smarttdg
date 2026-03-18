@@ -99,7 +99,7 @@ export function HomePage({ onDocumentationReady }: HomePageProps) {
                 <section>
                     <div className="text-center mb-6">
                         <h2 className="text-2xl font-medium text-gray-900 mb-2">Diagrams Generation</h2>
-                        <p className="text-gray-600">View and generate diagrams from source code</p>
+                            <p className="text-gray-600">Upload your project ZIP file to view and generate diagrams from source code</p>
                     </div>
                     <DiagramViewer />
                 </section>
