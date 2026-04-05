@@ -6,14 +6,15 @@
       "script": "services/analyzer/diagram_generator.py",
       "phase": "diagram",
       "timeout_seconds": 60
-    }
-  ],
-  "steps": [
+    },
     {
+      "_comment": "comment_stripper is executed directly in app.py before run_analyzer(); it must not run again as a pipeline step",
       "name": "comment_stripper",
       "script": "services/analyzer/comment_stripper.py",
       "phase": "preprocess"
-    },
+    }
+  ],
+  "steps": [
     {
       "name": "ai_splitter",
       "script": "services/analyzer/ai_analysis/ai_splitter.py",

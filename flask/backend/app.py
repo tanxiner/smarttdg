@@ -18,6 +18,8 @@ import re
 import services.analyzer.analyzer_runner as analyzer_runner
 run_analyzer = analyzer_runner.analyze_code
 
+import services.analyzer.comment_stripper as comment_stripper
+
 from services.diagram_routes import register_diagram_routes
 import convert_doc
 markdown_to_word = convert_doc.markdown_to_word
@@ -492,6 +494,53 @@ def analyze_zip(zip_path: str, job_id: str | None = None, model_choice: str | No
 
             _ensure_not_canceled(job_id)
 
+            # ------------------------------------------------------------------
+            # STEP 0: Strip comments → write stripped copies to stripped_source/
+            # ------------------------------------------------------------------
+            print("[Pipeline] STEP 0: Stripping comments from source files")
+            stripped_dir = os.path.join(temp_dir, "stripped_source")
+            os.makedirs(stripped_dir, exist_ok=True)
+
+            stripped_rel_paths = []
+            strip_files_processed = 0
+            strip_lines_removed = 0
+
+            for rp in unique_rel_paths:
+                src_path = os.path.join(temp_dir, rp)
+                dst_path = os.path.join(stripped_dir, rp)
+                os.makedirs(os.path.dirname(dst_path), exist_ok=True)
+
+                ext = os.path.splitext(rp)[1].lower()
+                lang = comment_stripper.EXT_TO_LANG.get(ext)
+
+                if lang:
+                    try:
+                        cleaned = comment_stripper.strip_comments_from_file(src_path)
+                        with open(dst_path, "w", encoding="utf-8") as _fh:
+                            _fh.write(cleaned)
+                        try:
+                            with open(src_path, encoding="utf-8", errors="replace") as _cf:
+                                orig_lines = sum(1 for _ in _cf)
+                        except Exception:
+                            orig_lines = 0
+                        strip_lines_removed += max(0, orig_lines - len(cleaned.splitlines()))
+                        strip_files_processed += 1
+                    except Exception as _exc:
+                        print(f"[Pipeline] Warning: comment stripping failed for {rp}: {_exc}. Using original.")
+                        shutil.copy2(src_path, dst_path)
+                else:
+                    shutil.copy2(src_path, dst_path)
+
+                stripped_rel_paths.append(os.path.join("stripped_source", rp))
+
+            print(
+                f"[Pipeline] STEP 0 COMPLETE: Stripped {strip_files_processed} files, "
+                f"~{strip_lines_removed} comment lines removed"
+            )
+            # Use stripped copies for all downstream steps (analyzer + pipeline)
+            unique_rel_paths = [p.replace("\\", "/") for p in stripped_rel_paths]
+
+            # ------------------------------------------------------------------
             _update_job(job_id, progress=20, step="running_static_analyzer") if job_id else None
             print("[Pipeline] STEP 1: Running static analyzer (Roslyn)")
 

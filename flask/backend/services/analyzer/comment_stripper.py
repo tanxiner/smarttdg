@@ -403,6 +403,30 @@ def strip_comments(source: str, lang: str) -> str:
     return fn(source)
 
 
+def strip_comments_from_file(file_path: str) -> str:
+    """
+    Read the file at *file_path*, strip comments based on its extension, and
+    return the cleaned content as a string.
+
+    Files with unsupported extensions are returned unchanged.
+    Encoding falls back from UTF-8 to latin-1 on decode errors.
+    """
+    ext = os.path.splitext(file_path)[1].lower()
+    lang = EXT_TO_LANG.get(ext)
+
+    try:
+        with open(file_path, "r", encoding="utf-8") as fh:
+            content = fh.read()
+    except UnicodeDecodeError:
+        with open(file_path, "r", encoding="latin-1") as fh:
+            content = fh.read()
+
+    if lang is None:
+        return content
+
+    return strip_comments(content, lang)
+
+
 # ---------------------------------------------------------------------------
 # File processing
 # ---------------------------------------------------------------------------
