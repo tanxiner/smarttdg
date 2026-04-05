@@ -365,7 +365,7 @@ def main():
 
     llm = Ollama(
         model=MODEL_NAME,
-        base_url=OLLAMA_BASE_URL,
+        #base_url=OLLAMA_BASE_URL,
         temperature=0.1,
         num_ctx=8192,
         num_predict=4096,

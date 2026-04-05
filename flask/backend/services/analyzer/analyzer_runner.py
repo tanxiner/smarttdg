@@ -168,6 +168,11 @@ def analyze_code(*file_paths: str, job_id: Optional[str] = None, progress_callba
     "--",
 ] + args
 
+    # cmd = [
+    #     "dotnet",
+    #     os.path.join(analyzer_project_dir, "bin", "Release", "net6.0", "Roslyn.dll"),
+    # ] + args
+
     env = os.environ.copy()
     final_output = os.path.abspath(os.path.join(this_dir, "..", "..", "static_analysis_output"))
     os.makedirs(final_output, exist_ok=True)

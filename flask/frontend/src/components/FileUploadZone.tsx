@@ -216,7 +216,7 @@ export function FileUploadZone({
                         return;
                     }
 
-                    if (st.result) {
+                    if (st.step === "done" && st.result) {
                         clearPollTimer();
                         setProcessingProgress(100);
                         setProcessingStep("Done — preparing results...");
@@ -348,6 +348,9 @@ export function FileUploadZone({
             setError("Network error during upload.");
             setIsProcessing(false);
             setIsCanceling(false);
+            setCurrentJobId(null);
+            activeJobIdRef.current = null;
+            clearPersistedSession();
         };
 
         xhr.onreadystatechange = () => {
@@ -418,6 +421,9 @@ export function FileUploadZone({
                 setError(msg);
                 setIsProcessing(false);
                 setIsCanceling(false);
+                setCurrentJobId(null);
+                activeJobIdRef.current = null;
+                clearPersistedSession();
             }
         };
 

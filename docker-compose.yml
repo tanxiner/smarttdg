@@ -23,14 +23,14 @@ services:
       OLLAMA_HOST: http://ollama:11434
     entrypoint: ["/bin/sh", "-c"]
     command: >
-      "echo 'Pulling model...';
+      "echo 'Pulling models...';
       ollama pull gemma3:latest;
+      ollama pull qwen3:latest;
+      ollama pull gpt-oss:latest;
       echo 'Model pull complete.'"
 
   backend:
-    build:
-      context: .
-      dockerfile: ./flask/backend/Dockerfile
+    image: yourdockerhubname/smarttdg-backend:latest
     container_name: smarttdg-backend
     ports:
       - "5000:5000"
@@ -43,11 +43,16 @@ services:
       ollama-init:
         condition: service_completed_successfully
     volumes:
-    - ./flask/backend/uploads:/app/uploads
-    - ./flask/backend/final_output:/app/final_output
-    - ./flask/backend/prompts_output:/app/prompts_output
-    - ./flask/backend/analysis_output:/app/analysis_output
-    - ./flask/backend/static_analysis_output:/app/static_analysis_output
+      - smarttdg_uploads:/app/flask/backend/uploads
+      - smarttdg_final_output:/app/flask/backend/final_output
+      - smarttdg_prompts_output:/app/flask/backend/prompts_output
+      - smarttdg_analysis_output:/app/flask/backend/analysis_output
+      - smarttdg_static_analysis_output:/app/flask/backend/static_analysis_output
 
 volumes:
   ollama_data:
+  smarttdg_uploads:
+  smarttdg_final_output:
+  smarttdg_prompts_output:
+  smarttdg_analysis_output:
+  smarttdg_static_analysis_output:

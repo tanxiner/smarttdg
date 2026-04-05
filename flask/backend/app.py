@@ -415,7 +415,7 @@ def analyze_zip(zip_path: str, job_id: str | None = None, model_choice: str | No
                 "foldersVisited": len(dirs),
                 "results": []
             }
-            _update_job(job_id, progress=100, step="done", result=result) if job_id else None
+            _update_job(job_id, progress=95, step="analyzer_finished", result=result) if job_id else None
             return result
 
         rel_paths = [str(p.relative_to(temp_dir)) for p in files_to_analyze]
@@ -447,7 +447,7 @@ def analyze_zip(zip_path: str, job_id: str | None = None, model_choice: str | No
                     "Final_Utility_SQL_Chapters",
                     "Final_SQL_Docs",
                     "Final_API_Docs",
-                    "Final_HTML_Docs"
+                    "Final_HTML_Docs",
                     "Final_JS_Docs"
                 )
 
@@ -788,7 +788,7 @@ def analyze_zip(zip_path: str, job_id: str | None = None, model_choice: str | No
         }
 
         if job_id:
-            _update_job(job_id, progress=100, step="done", result=final)
+            _update_job(job_id, progress=95, step="analyzer_finished", result=final)
 
         return final
 
@@ -818,9 +818,9 @@ def analyze_zip(zip_path: str, job_id: str | None = None, model_choice: str | No
         if job_id:
             st = _get_job(job_id)
             final_step = st.get("step", "")
-            if final_step not in ("canceled", "cancel_requested", "error", "done"):
-                if st.get("result") is not None:
-                    _update_job(job_id, progress=100, step="done")
+            # if final_step not in ("canceled", "cancel_requested", "error", "done"):
+            #     if st.get("result") is not None:
+            #         _update_job(job_id, progress=100, step="done")
 
 
 @app.route("/analyze", methods=["POST"])
@@ -1102,6 +1102,26 @@ def analyze_async():
                     res.setdefault("analysis", {}).setdefault("documentationSizeMB", round(sz / 1024 / 1024, 2))
             except Exception:
                 pass
+
+            if res.get("analysisOutput") is not None:
+                res["analysis"] = res.get("analysisOutput")
+                if isinstance(res["analysisOutput"], list):
+                    res["results"] = res["analysisOutput"]
+
+            if "computedTotals" in res:
+                ct = res["computedTotals"]
+                analysis_dict = res.setdefault("analysis", {})
+                totals = analysis_dict.setdefault("totals", {})
+                totals.setdefault("classes", ct.get("webChapters", 0))
+                totals.setdefault("methods", ct.get("sqlChapters", 0))
+                totals.setdefault("others", ct.get("utilityChapters", 0))
+                totals.setdefault("api", ct.get("apiChapters", 0))
+
+                res.setdefault("totals", {})
+                res["totals"].setdefault("webChapters", ct.get("webChapters", 0))
+                res["totals"].setdefault("sqlChapters", ct.get("sqlChapters", 0))
+                res["totals"].setdefault("utilityChapters", ct.get("utilityChapters", 0))
+                res["totals"].setdefault("apiChapters", ct.get("apiChapters", 0))
 
             res.update({
                 "zipFilename": filename,

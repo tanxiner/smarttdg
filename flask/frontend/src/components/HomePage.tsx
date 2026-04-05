@@ -16,17 +16,8 @@ export function HomePage({ onDocumentationReady }: HomePageProps) {
 
     const MODELS = [
         "gemma3:latest",
-        "smarttdg-gemma:latest",
-        "llama3.2:latest",
         "qwen3:latest",
-        "qwen3-coder:latest",
-        "mistral:latest",
-        "deepseek-r1:8b",
         "gpt-oss:latest",
-        "deepseek-coder-v2:latest",
-        "phi3:latest",
-        "dolphin3:latest",
-        "starcoder2:latest",
     ].sort();
 
     return (

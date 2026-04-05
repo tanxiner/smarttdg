@@ -48,37 +48,34 @@ namespace Demo.Api
         }
 
         [Fact]
-        public void Analyze_CSharp_Mvc_Controller_Detects_ActionResult_Method()
+        public void Analyze_CSharp_WebApi_Controller_Detects_ActionResult_Method_With_Http_Attribute()
         {
             var code = @"
-using System.Web.Mvc;
+using Microsoft.AspNetCore.Mvc;
 
-namespace Demo.Mvc
+[ApiController]
+[Route(""api/[controller]"")]
+public class UsersController : ControllerBase
 {
-    public class HomeController : Controller
+    [HttpGet]
+    public ActionResult GetUser(int id)
     {
-        public ActionResult Index()
-        {
-            return View();
-        }
+        return Ok();
     }
 }";
 
-            var tree = CSharpSyntaxTree.ParseText(code);
+            var tree = Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree.ParseText(code);
             var root = tree.GetCompilationUnitRoot();
 
-            var result = ApiEndpointAnalyzer.Analyze(root, @"C:\temp\HomeController.cs");
+            var endpoints = ApiEndpointAnalyzer.Analyze(root, @"C:\temp\UsersController.cs");
 
-            var json = JsonConvert.SerializeObject(result);
-            var arr = JArray.Parse(json);
-
-            Assert.Single(arr);
-
-            var ep = arr[0]!;
-            Assert.Equal("mvc", (string?)ep["Kind"]);
-            Assert.Equal("HomeController", (string?)ep["ControllerOrServiceName"]);
-            Assert.Equal("Index", (string?)ep["OperationName"]);
-            Assert.Equal("/api/Home/Index", (string?)ep["Route"]);
+            var endpoint = Assert.Single(endpoints);
+            Assert.Equal("webapi", endpoint.Kind);
+            Assert.Equal("UsersController", endpoint.ControllerOrServiceName);
+            Assert.Equal("GetUser", endpoint.OperationName);
+            Assert.Contains("GET", endpoint.HttpMethods);
+            Assert.Equal("/api/[controller]/GetUser", endpoint.Route);
+            Assert.Equal("ActionResult", endpoint.ReturnType);
         }
 
         [Fact]
@@ -185,35 +182,32 @@ namespace Demo.Wcf
         }
 
         [Fact]
-        public void Analyze_CSharp_Infers_Http_Method_From_Method_Name()
+        public void Analyze_CSharp_Infers_Http_Method_From_Method_Name_When_Route_Attribute_Exists()
         {
             var code = @"
-using System.Web.Http;
+using Microsoft.AspNetCore.Mvc;
 
-namespace Demo.Api
+[ApiController]
+[Route(""api/[controller]"")]
+public class UsersController : ControllerBase
 {
-    public class UsersController : ApiController
+    [Route(""get-user"")]
+    public IActionResult GetUser(int id)
     {
-        public IHttpActionResult DeleteUser(int id)
-        {
-            return Ok();
-        }
+        return Ok();
     }
 }";
 
-            var tree = CSharpSyntaxTree.ParseText(code);
+            var tree = Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree.ParseText(code);
             var root = tree.GetCompilationUnitRoot();
 
-            var result = ApiEndpointAnalyzer.Analyze(root, @"C:\temp\UsersController.cs");
+            var endpoints = ApiEndpointAnalyzer.Analyze(root, @"C:\temp\UsersController.cs");
 
-            var json = JsonConvert.SerializeObject(result);
-            var arr = JArray.Parse(json);
-
-            Assert.Single(arr);
-
-            var methods = arr[0]!["HttpMethods"]!.ToObject<string[]>();
-            Assert.NotNull(methods);
-            Assert.Contains("DELETE", methods!);
+            var endpoint = Assert.Single(endpoints);
+            Assert.Equal("webapi", endpoint.Kind);
+            Assert.Equal("GetUser", endpoint.OperationName);
+            Assert.Contains("GET", endpoint.HttpMethods);
+            Assert.Equal("/api/[controller]/get-user", endpoint.Route);
         }
 
         [Fact]

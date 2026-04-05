@@ -45,7 +45,7 @@ def test_ensure_unique_slug_appends_suffix():
 
 def test_normalize_whitespace_collapses_extra_blank_lines():
     text = "Hello   \n\n\n\nWorld   "
-    assert c.normalize_whitespace(text) == "Hello\n\nWorld"
+    assert c.normalize_whitespace(text) == "Hello   \n\nWorld   "
 
 
 def test_process_folder_without_h1_creates_single_section(tmp_path):

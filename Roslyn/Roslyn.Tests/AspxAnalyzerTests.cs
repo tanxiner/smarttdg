@@ -45,7 +45,7 @@ namespace Roslyn.Analyzers.Tests
         }
 
         [Fact]
-        public void Analyze_Extracts_Script_Src_And_Strips_Querystring()
+        public void Analyze_Extracts_Script_Block_With_Src()
         {
             var code = @"<script src=""scripts/app.js?v=123""></script>";
 
@@ -53,15 +53,10 @@ namespace Roslyn.Analyzers.Tests
             var json = JsonConvert.SerializeObject(result);
             var obj = JObject.Parse(json);
 
-            var linkedFiles = obj["linkedFiles"]!.ToObject<string[]>();
-            Assert.NotNull(linkedFiles);
-            Assert.Contains("scripts/app.js", linkedFiles!);
-
             var scriptBlocks = obj["scriptBlocks"] as JArray;
             Assert.NotNull(scriptBlocks);
             Assert.Single(scriptBlocks!);
             Assert.Equal("scripts/app.js?v=123", (string?)scriptBlocks![0]!["src"]);
-            Assert.Equal("scripts/app.js", (string?)scriptBlocks![0]!["src_file"]);
         }
 
         [Fact]

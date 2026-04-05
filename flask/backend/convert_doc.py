@@ -8,52 +8,76 @@ import subprocess
 import sys
 
 ### --- FOR PDF --- ###
+# def word_to_pdf(input_docx, output_pdf=None):
+#     try:
+#         if output_pdf is None:
+#             output_pdf = os.path.splitext(input_docx)[0] + ".pdf"
+
+#         output_dir = os.path.dirname(output_pdf)
+#         os.makedirs(output_dir, exist_ok=True)
+
+#         cmd = [
+#             "soffice",
+#             "--headless",
+#             "--convert-to", "pdf",
+#             "--outdir", output_dir,
+#             input_docx
+#         ]
+
+#         result = subprocess.run(
+#             cmd,
+#             stdout=subprocess.PIPE,
+#             stderr=subprocess.PIPE,
+#             text=True,
+#             encoding="utf-8",
+#             errors="replace"
+#         )
+
+#         generated_pdf = os.path.join(
+#             output_dir,
+#             os.path.splitext(os.path.basename(input_docx))[0] + ".pdf"
+#         )
+
+#         if result.returncode != 0:
+#             raise RuntimeError(
+#                 f"LibreOffice PDF conversion failed.\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
+#             )
+
+#         if not os.path.exists(generated_pdf):
+#             raise RuntimeError(
+#                 f"LibreOffice finished but PDF was not created.\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
+#             )
+
+#         if os.path.abspath(generated_pdf) != os.path.abspath(output_pdf):
+#             if os.path.exists(output_pdf):
+#                 os.remove(output_pdf)
+#             os.replace(generated_pdf, output_pdf)
+
+#         return output_pdf
+
+#     except Exception as e:
+#         print(f"PDF conversion skipped due to error: {e}")
+
+
+
 def word_to_pdf(input_docx, output_pdf=None):
     try:
-        if output_pdf is None:
-            output_pdf = os.path.splitext(input_docx)[0] + ".pdf"
-
-        output_dir = os.path.dirname(output_pdf)
-        os.makedirs(output_dir, exist_ok=True)
-
         cmd = [
-            "soffice",
-            "--headless",
-            "--convert-to", "pdf",
-            "--outdir", output_dir,
-            input_docx
+            sys.executable,
+            "-c",
+            f"from docx2pdf import convert; convert(r'{input_docx}', r'{output_pdf}')"
         ]
 
         result = subprocess.run(
             cmd,
             stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            encoding="utf-8",
-            errors="replace"
+            stderr=subprocess.PIPE
         )
 
-        generated_pdf = os.path.join(
-            output_dir,
-            os.path.splitext(os.path.basename(input_docx))[0] + ".pdf"
-        )
-
+        # Ignore strange Windows exit codes but log them
         if result.returncode != 0:
-            raise RuntimeError(
-                f"LibreOffice PDF conversion failed.\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
-            )
-
-        if not os.path.exists(generated_pdf):
-            raise RuntimeError(
-                f"LibreOffice finished but PDF was not created.\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
-            )
-
-        if os.path.abspath(generated_pdf) != os.path.abspath(output_pdf):
-            if os.path.exists(output_pdf):
-                os.remove(output_pdf)
-            os.replace(generated_pdf, output_pdf)
-
-        return output_pdf
+            print("PDF conversion returned non-zero exit code but continuing...")
+            print(result.stderr.decode(errors="ignore"))
 
     except Exception as e:
         print(f"PDF conversion skipped due to error: {e}")

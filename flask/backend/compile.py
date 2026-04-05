@@ -83,10 +83,6 @@ def make_slug(section_name, base_name, idx, title):
 
 
 def _ensure_unique_slug(slug: str) -> str:
-    """
-    Ensure the slug is unique across this process run by appending a numeric suffix
-    when a collision is detected. Records used slugs in _USED_SLUGS.
-    """
     if slug not in _USED_SLUGS:
         _USED_SLUGS.add(slug)
         return slug

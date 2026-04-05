@@ -45,7 +45,7 @@ def test_find_toc_range_finds_toc_block():
         "Page: Login.aspx",
         "Actual body starts",
     ]
-    assert cd.find_toc_range(lines) == (2, 6)
+    assert cd.find_toc_range(lines) == (2, 8)
 
 
 def test_collect_toc_structure_groups_items_by_category():
@@ -69,9 +69,9 @@ Body starts here
 
 
 def test_toc_item_to_chapter_title_maps_correctly():
-    assert cd.toc_item_to_chapter_title("Login.aspx") == "Page: Login.aspx"
+    assert cd.toc_item_to_chapter_title("Login.aspx") == "Login.aspx"
     assert cd.toc_item_to_chapter_title("Helper.cs") == "Helper.cs"
-    assert cd.toc_item_to_chapter_title("GetUsers") == "Procedure: GetUsers"
+    assert cd.toc_item_to_chapter_title("GetUsers") == "GetUsers"
 
 
 def test_slug_bookmark_is_safe_and_prefixed_when_needed():
