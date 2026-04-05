@@ -10,6 +10,11 @@
   ],
   "steps": [
     {
+      "name": "comment_stripper",
+      "script": "services/analyzer/comment_stripper.py",
+      "phase": "preprocess"
+    },
+    {
       "name": "ai_splitter",
       "script": "services/analyzer/ai_analysis/ai_splitter.py",
       "phase": "splitter"
