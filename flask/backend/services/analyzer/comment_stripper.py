@@ -156,7 +156,7 @@ def strip_cstyle(source: str) -> str:
             for idx, _ in enumerate(inner_lines):
                 if idx == 0:
                     # first segment: inject URLs on the same output line
-                    if urls and idx == 0:
+                    if urls:
                         line_buf.append(_urls_line(urls))
                     # emit everything up to and including this logical line end
                     # (we do NOT know yet whether there's a \n – handled by the
@@ -437,12 +437,12 @@ def process_file(filepath: str, lang: str) -> dict:
             with open(filepath, "r", encoding="latin-1") as fh:
                 content = fh.read()
 
-        original_lines = content.count('\n') + (1 if content else 0)
+        original_lines = len(content.splitlines())
         stats["original_lines"] = original_lines
 
         cleaned = strip_comments(content, lang)
 
-        stripped_lines = cleaned.count('\n') + (1 if cleaned else 0)
+        stripped_lines = len(cleaned.splitlines())
         stats["stripped_lines"] = stripped_lines
         stats["urls_preserved"] = len(_URL_RE.findall(cleaned))
 
