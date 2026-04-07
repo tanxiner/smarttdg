@@ -16,6 +16,9 @@ export function HomePage({ onDocumentationReady }: HomePageProps) {
 
     const MODELS = [
         "gemma3:latest",
+        "gemma3n:latest",
+        "gemma4:e2b",
+        "gemma4:latest",
         "qwen3:latest",
         "gpt-oss:latest",
     ].sort();
