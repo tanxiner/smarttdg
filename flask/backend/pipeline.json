@@ -51,13 +51,6 @@
       "phase": "analysis"
     },
     {
-      "name": "architecture_analyzer",
-      "script": "services/analyzer/architecture_analyzer.py",
-      "phase": "analysis",
-      "timeout_seconds": 300,
-      "non_blocking": true
-    },
-    {
       "name": "compile",
       "script": "compile.py",
       "phase": "compile",
